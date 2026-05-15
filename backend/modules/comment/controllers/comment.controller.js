@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import Comment from '../../../models/Comment.model.js';
 import Reel from '../../../models/Reel.model.js';
+import Ad from '../../../models/Ad.model.js';
 import User from '../../../models/User.model.js';
 import Follow from '../../../models/Follow.model.js';
 import Like from '../../../models/Like.model.js';
@@ -115,49 +116,45 @@ export const createComment = asyncHandler(async (req, res) => {
     });
   }
 
-  // Check if reel exists
-  const reel = await Reel.findById(reelId).populate('user', 'commentPrivacy');
-  if (!reel) {
+  // Check if content exists
+  let content = await Reel.findById(reelId).populate('user', 'commentPrivacy');
+  let isAd = false;
+  
+  if (!content) {
+    content = await Ad.findById(reelId);
+    isAd = true;
+  }
+
+  if (!content) {
     return res.status(404).json({
       success: false,
-      message: 'Reel not found'
+      message: 'Content not found'
     });
   }
 
-  // Check if comments are allowed (legacy boolean flag)
-  if (!reel.allowComments) {
+  // Check if comments are allowed (only for reels, ads allow by default for now)
+  if (!isAd && !content.allowComments) {
     return res.status(403).json({
       success: false,
       message: 'Comments are not allowed on this reel'
     });
   }
 
-  // Check comment privacy settings of the reel owner
-  const reelOwner = reel.user;
+  // Check comment privacy settings (only for reels/user ads)
+  const contentOwner = content.user;
   
-  if (reelOwner && reelOwner._id.toString() !== req.user._id.toString()) {
-    const privacy = reelOwner.commentPrivacy || 'everyone';
-    console.log(`[Comment Privacy] Owner: ${reelOwner._id}, Privacy: ${privacy}, Requester: ${req.user._id}`);
-
+  if (!isAd && contentOwner && contentOwner._id.toString() !== req.user._id.toString()) {
+    const privacy = contentOwner.commentPrivacy || 'everyone';
     if (privacy === 'no_one') {
-      return res.status(403).json({
-        success: false,
-        message: 'Comments are turned off for this video'
-      });
+      return res.status(403).json({ success: false, message: 'Comments are turned off' });
     }
-
     if (privacy === 'friends') {
-      // Friends means mutual followers
       const [followA, followB] = await Promise.all([
-        Follow.findOne({ follower: req.user._id, following: reelOwner._id, status: 'accepted' }),
-        Follow.findOne({ follower: reelOwner._id, following: req.user._id, status: 'accepted' })
+        Follow.findOne({ follower: req.user._id, following: contentOwner._id, status: 'accepted' }),
+        Follow.findOne({ follower: contentOwner._id, following: req.user._id, status: 'accepted' })
       ]);
-
       if (!followA || !followB) {
-        return res.status(403).json({
-          success: false,
-          message: 'Only mutual followers (friends) can comment on this video'
-        });
+        return res.status(403).json({ success: false, message: 'Only mutual followers can comment' });
       }
     }
   }
@@ -166,23 +163,15 @@ export const createComment = asyncHandler(async (req, res) => {
   if (parentCommentId) {
     const parentComment = await Comment.findById(parentCommentId);
     if (!parentComment) {
-      return res.status(404).json({
-        success: false,
-        message: 'Parent comment not found'
-      });
-    }
-    if (parentComment.reel.toString() !== reelId) {
-      return res.status(400).json({
-        success: false,
-        message: 'Parent comment does not belong to this reel'
-      });
+      return res.status(404).json({ success: false, message: 'Parent comment not found' });
     }
   }
 
   // Create comment
   const comment = await Comment.create({
     user: req.user._id,
-    reel: reelId,
+    reel: !isAd ? reelId : undefined,
+    ad: isAd ? reelId : undefined,
     text: text.trim(),
     parentComment: parentCommentId || null
   });
@@ -229,29 +218,29 @@ export const getReelComments = asyncHandler(async (req, res) => {
   const skip = (page - 1) * limit;
   const sortBy = req.query.sortBy || 'recent'; // 'recent' or 'popular'
 
-  // Check if reel exists
-  const reel = await Reel.findById(reelId).populate('user', 'commentPrivacy');
-  if (!reel) {
+  // Check if content exists
+  let content = await Reel.findById(reelId).populate('user', 'commentPrivacy');
+  let isAd = false;
+  if (!content) {
+    content = await Ad.findById(reelId);
+    isAd = true;
+  }
+
+  if (!content) {
     return res.status(404).json({
       success: false,
-      message: 'Reel not found'
+      message: 'Content not found'
     });
   }
 
-  // Check if comments are turned off via privacy settings
-  const reelOwner = reel.user;
-  if (reelOwner && reelOwner.commentPrivacy === 'no_one') {
+  // Check if comments are turned off via privacy settings (only for reels/user ads)
+  if (!isAd && content.user && content.user.commentPrivacy === 'no_one') {
     return res.status(200).json({
       success: true,
       comments: [],
       commentsDisabled: true,
       message: 'Comments are turned off',
-      pagination: {
-        currentPage: page,
-        totalPages: 0,
-        totalComments: 0,
-        hasMore: false
-      }
+      pagination: { currentPage: page, totalPages: 0, totalComments: 0, hasMore: false }
     });
   }
 
@@ -263,12 +252,19 @@ export const getReelComments = asyncHandler(async (req, res) => {
     sortCriteria = { isPinned: -1, createdAt: -1 };
   }
 
-  // Get top-level comments (no parent)
-  const comments = await Comment.find({
-    reel: reelId,
+  const query = {
     parentComment: null,
     isDeleted: false
-  })
+  };
+
+  if (isAd) {
+    query.ad = reelId;
+  } else {
+    query.reel = reelId;
+  }
+
+  // Get top-level comments (no parent)
+  const comments = await Comment.find(query)
     .sort(sortCriteria)
     .skip(skip)
     .limit(limit)
@@ -276,11 +272,7 @@ export const getReelComments = asyncHandler(async (req, res) => {
     .lean();
 
   // Get total count
-  const totalComments = await Comment.countDocuments({
-    reel: reelId,
-    parentComment: null,
-    isDeleted: false
-  });
+  const totalComments = await Comment.countDocuments(query);
 
   // Enrich with follow status and like status (Instagram-like)
   const enrichedComments = await populateCommentWithUserDetails(

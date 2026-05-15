@@ -1,0 +1,373 @@
+import React, { useState, useRef, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { BiChevronLeft, BiCloudUpload, BiX, BiMap, BiLink, BiMusic } from 'react-icons/bi';
+import { useTheme } from '../../../../context/ThemeContext';
+import adService from '../../../../services/adService';
+
+const INDIAN_STATES = [
+  "Andaman and Nicobar Islands", "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chandigarh", "Chhattisgarh", "Dadra and Nagar Haveli and Daman and Diu", "Delhi", "Goa", "Gujarat", "Haryana", "Himachal Pradesh", "Jammu and Kashmir", "Jharkhand", "Karnataka", "Kerala", "Ladakh", "Lakshadweep", "Madhya Pradesh", "Maharashtra", "Manipur", "Meghalaya", "Mizoram", "Nagaland", "Odisha", "Puducherry", "Punjab", "Rajasthan", "Sikkim", "Tamil Nadu", "Telangana", "Tripura", "Uttar Pradesh", "Uttarakhand", "West Bengal"
+];
+
+const CreateAdPage = () => {
+  const navigate = useNavigate();
+  const { isDarkMode } = useTheme();
+  const fileInputRef = useRef(null);
+  
+  const [loading, setLoading] = useState(false);
+  const [media, setMedia] = useState(null);
+  const [mediaPreview, setMediaPreview] = useState('');
+  const [mediaType, setMediaType] = useState('');
+  const [caption, setCaption] = useState('');
+  const [link, setLink] = useState('');
+  const [adType, setAdType] = useState('shop'); // 'chat' or 'shop'
+  const [whatsappNumber, setWhatsappNumber] = useState('');
+  const [welcomeMessage, setWelcomeMessage] = useState('');
+  const [musicName, setMusicName] = useState('');
+  const [musicFile, setMusicFile] = useState(null);
+  const [selectedStates, setSelectedStates] = useState([]);
+  const [searchState, setSearchState] = useState('');
+  const [isMapLoaded, setIsMapLoaded] = useState(false);
+
+  // Google Maps API Key from env
+  const GOOGLE_MAP_API_KEY = import.meta.env.VITE_GOOGLE_MAP_API_KEY;
+
+  useEffect(() => {
+    const scriptId = 'google-maps-script';
+    let existingScript = document.getElementById(scriptId);
+
+    const handleLoad = () => {
+      if (window.google && window.google.maps) {
+        setIsMapLoaded(true);
+      }
+    };
+
+    if (window.google && window.google.maps) {
+      setIsMapLoaded(true);
+      return;
+    }
+
+    if (existingScript) {
+      existingScript.addEventListener('load', handleLoad);
+    } else {
+      const script = document.createElement('script');
+      script.id = scriptId;
+      script.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAP_API_KEY}&libraries=places`;
+      script.async = true;
+      script.defer = true;
+      script.onload = handleLoad;
+      document.head.appendChild(script);
+      existingScript = script;
+    }
+
+    return () => {
+      if (existingScript) {
+        existingScript.removeEventListener('load', handleLoad);
+      }
+    };
+  }, [GOOGLE_MAP_API_KEY]);
+
+  const handleFileSelect = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      setMedia(file);
+      const type = file.type.startsWith('video') ? 'video' : 'image';
+      setMediaType(type);
+      
+      const reader = new FileReader();
+      reader.onload = () => setMediaPreview(reader.result);
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const toggleState = (state) => {
+    if (selectedStates.includes(state)) {
+      setSelectedStates(selectedStates.filter(s => s !== state));
+    } else {
+      setSelectedStates([...selectedStates, state]);
+    }
+  };
+
+  const handleSubmit = async () => {
+    // Basic validation
+    if (!media) return alert('Please upload a video or photo for your advertisement');
+    if (!caption.trim()) return alert('Please enter a caption for your ad');
+    
+    // Ad type specific validation
+    if (adType === 'shop') {
+      if (!link.trim()) return alert('Please enter the Shop Link (URL)');
+    } else if (adType === 'chat') {
+      if (!whatsappNumber.trim()) return alert('Please enter the WhatsApp number');
+      if (!welcomeMessage.trim()) return alert('Please enter the pre-filled welcome message');
+    }
+
+    // Geographic targeting validation
+    if (selectedStates.length === 0) {
+      return alert('Please select at least one target state in India. Your ad will only show in these states.');
+    }
+
+    setLoading(true);
+    try {
+      const formData = new FormData();
+      formData.append('media', media);
+      formData.append('caption', caption);
+      formData.append('link', link);
+      formData.append('adType', adType);
+      formData.append('whatsappNumber', whatsappNumber);
+      formData.append('welcomeMessage', welcomeMessage);
+      formData.append('musicName', musicName);
+      if (musicFile) {
+        formData.append('musicFile', musicFile);
+      }
+      formData.append('targetStates', JSON.stringify(selectedStates));
+
+      const res = await adService.createAd(formData);
+      if (res.success) {
+        alert('Advertisement created successfully!');
+        navigate('/settings/ads-manager');
+      }
+    } catch (error) {
+      console.error('Failed to create ad:', error);
+      alert('Failed to create advertisement. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const filteredStates = INDIAN_STATES.filter(state => 
+    state.toLowerCase().includes(searchState.toLowerCase())
+  );
+
+  return (
+    <div className="page-container theme-surface-page flex flex-col min-h-screen">
+      {/* Header */}
+      <div className="flex items-center justify-between px-4 pt-6 pb-4 shrink-0 relative border-b theme-panel-divider">
+        <button 
+          onClick={() => navigate(-1)}
+          className="theme-icon-button w-10 h-10 rounded-full flex items-center justify-center z-10"
+        >
+          <BiChevronLeft size={24} className="theme-text-primary" />
+        </button>
+        <h2 className="theme-text-primary text-[17px] font-bold absolute left-0 right-0 text-center">Create Advertisement</h2>
+        <button 
+          onClick={handleSubmit}
+          disabled={loading || !media}
+          className={`z-10 text-[15px] font-bold ${loading || !media ? 'text-gray-400' : 'text-[#FE2C55]'}`}
+        >
+          {loading ? 'Creating...' : 'Create'}
+        </button>
+      </div>
+
+      <div className="scrollable flex-1 px-4 pb-10">
+        <div className="flex flex-col gap-6 mt-6">
+          {/* Media Upload */}
+          <div 
+            onClick={() => fileInputRef.current.click()}
+            className="relative aspect-[3/4] rounded-[24px] border-2 border-dashed theme-panel-divider bg-black/5 flex flex-col items-center justify-center cursor-pointer overflow-hidden group"
+          >
+            {mediaPreview ? (
+              <>
+                {mediaType === 'video' ? (
+                  <video src={mediaPreview} className="w-full h-full object-cover" />
+                ) : (
+                  <img src={mediaPreview} className="w-full h-full object-cover" alt="" />
+                )}
+                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                  <span className="text-white font-bold bg-black/50 px-4 py-2 rounded-full text-[13px]">Change Media</span>
+                </div>
+              </>
+            ) : (
+              <>
+                <BiCloudUpload size={48} className="theme-text-muted mb-2" />
+                <p className="theme-text-primary font-bold text-[15px]">Upload Video or Photo</p>
+                <p className="theme-text-muted text-[12px] mt-1">Recommended: 1080x1920 (9:16)</p>
+              </>
+            )}
+            <input 
+              ref={fileInputRef}
+              type="file" 
+              accept="video/*,image/*" 
+              className="hidden" 
+              onChange={handleFileSelect} 
+            />
+          </div>
+
+          {/* Form Fields */}
+          <div className="flex flex-col gap-4">
+            {/* Ad Type Toggle */}
+            <div className="theme-panel-card p-1 rounded-[24px] flex gap-1">
+              <button 
+                onClick={() => setAdType('shop')}
+                className={`flex-1 py-3 rounded-[20px] font-bold text-[14px] transition-all ${adType === 'shop' ? 'bg-[#FE2C55] text-white shadow-lg' : 'theme-text-primary hover:bg-black/5'}`}
+              >
+                Shop (Link)
+              </button>
+              <button 
+                onClick={() => setAdType('chat')}
+                className={`flex-1 py-3 rounded-[20px] font-bold text-[14px] transition-all ${adType === 'chat' ? 'bg-[#FE2C55] text-white shadow-lg' : 'theme-text-primary hover:bg-black/5'}`}
+              >
+                Chat (WhatsApp)
+              </button>
+            </div>
+
+            <div className="theme-panel-card p-4 rounded-[20px]">
+              <label className="theme-text-muted text-[11px] font-bold uppercase tracking-wider mb-1 block">
+                Caption <span className="text-red-500">*</span>
+              </label>
+              <textarea 
+                value={caption}
+                onChange={(e) => setCaption(e.target.value)}
+                placeholder="Write a catchy caption for your ad..."
+                className="w-full bg-transparent theme-text-primary text-[15px] outline-none resize-none min-h-[80px]"
+              />
+            </div>
+
+            {/* Optional Music Section */}
+            <div className="theme-panel-card p-4 rounded-[20px]">
+              <div className="flex items-center gap-3 mb-3">
+                <BiMusic size={20} className="theme-text-muted" />
+                <h4 className="theme-text-primary font-bold text-[15px]">Background Music (Optional)</h4>
+              </div>
+              <div className="flex flex-col gap-4">
+                <div>
+                  <label className="theme-text-muted text-[11px] font-bold uppercase tracking-wider mb-1 block">Music Name</label>
+                  <input 
+                    type="text"
+                    value={musicName}
+                    onChange={(e) => setMusicName(e.target.value)}
+                    placeholder="e.g. Chill Summer Lo-fi"
+                    className="w-full bg-transparent theme-text-primary text-[14px] outline-none border-b theme-panel-divider pb-1"
+                  />
+                </div>
+                <div>
+                  <label className="theme-text-muted text-[11px] font-bold uppercase tracking-wider mb-1 block">Audio File</label>
+                  <div className="flex items-center gap-3">
+                    <input 
+                      type="file"
+                      accept="audio/*"
+                      id="music-upload"
+                      className="hidden"
+                      onChange={(e) => setMusicFile(e.target.files[0])}
+                    />
+                    <label 
+                      htmlFor="music-upload"
+                      className="bg-black/5 dark:bg-white/5 theme-text-primary px-4 py-2 rounded-xl text-[12px] font-bold cursor-pointer hover:bg-black/10 transition-colors"
+                    >
+                      {musicFile ? 'Change Audio' : 'Upload Audio'}
+                    </label>
+                    {musicFile && (
+                      <span className="theme-text-muted text-[11px] truncate flex-1">
+                        {musicFile.name}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {adType === 'shop' ? (
+              <div className="theme-panel-card p-4 rounded-[20px] flex items-center gap-3 animate-slide-in">
+                <BiLink size={20} className="theme-text-muted" />
+                <div className="flex-1">
+                  <label className="theme-text-muted text-[11px] font-bold uppercase tracking-wider mb-0.5 block">
+                    Shop Link (URL) <span className="text-red-500">*</span>
+                  </label>
+                  <input 
+                    type="url"
+                    value={link}
+                    onChange={(e) => setLink(e.target.value)}
+                    placeholder="https://example.com/shop"
+                    className="w-full bg-transparent theme-text-primary text-[15px] outline-none"
+                  />
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-4 animate-slide-in">
+                <div className="theme-panel-card p-4 rounded-[20px] flex items-center gap-3">
+                  <div className="w-6 h-6 bg-green-500 rounded-full flex items-center justify-center">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="white">
+                      <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
+                    </svg>
+                  </div>
+                  <div className="flex-1">
+                    <label className="theme-text-muted text-[11px] font-bold uppercase tracking-wider mb-0.5 block">
+                      WhatsApp Number <span className="text-red-500">*</span>
+                    </label>
+                    <input 
+                      type="tel"
+                      value={whatsappNumber}
+                      onChange={(e) => setWhatsappNumber(e.target.value)}
+                      placeholder="Enter Whatsapp Number"
+                      className="w-full bg-transparent theme-text-primary text-[15px] outline-none"
+                    />
+                  </div>
+                </div>
+                <div className="theme-panel-card p-4 rounded-[20px]">
+                  <label className="theme-text-muted text-[11px] font-bold uppercase tracking-wider mb-1 block">
+                    Pre-filled Welcome Message <span className="text-red-500">*</span>
+                  </label>
+                  <textarea 
+                    value={welcomeMessage}
+                    onChange={(e) => setWelcomeMessage(e.target.value)}
+                    placeholder="e.g. Hello! I'm interested in your product..."
+                    className="w-full bg-transparent theme-text-primary text-[15px] outline-none resize-none min-h-[60px]"
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Targeting Section */}
+            <div className="theme-panel-card p-4 rounded-[20px]">
+              <div className="flex items-center gap-3 mb-4">
+                <BiMap size={20} className="text-[#FE2C55]" />
+                <div>
+                  <h3 className="theme-text-primary text-[15px] font-bold">Target Locations <span className="text-red-500">*</span></h3>
+                  <p className="theme-text-muted text-[12px]">Your ad will show to users in these states.</p>
+                </div>
+              </div>
+
+              {/* State Search and Chips */}
+              <div className="flex flex-wrap gap-2 mb-4">
+                {selectedStates.map(state => (
+                  <div key={state} className="bg-[#FE2C55]/10 text-[#FE2C55] px-3 py-1.5 rounded-full flex items-center gap-1 text-[13px] font-bold">
+                    {state}
+                    <button onClick={() => toggleState(state)}><BiX size={16} /></button>
+                  </div>
+                ))}
+                {selectedStates.length === 0 && <p className="text-[13px] theme-text-muted italic">No states selected</p>}
+              </div>
+
+              <div className="relative">
+                <input 
+                  type="text"
+                  value={searchState}
+                  onChange={(e) => setSearchState(e.target.value)}
+                  placeholder="Search states in India..."
+                  className="w-full theme-panel-divider border rounded-xl px-4 py-3 bg-black/5 theme-text-primary text-[14px] outline-none"
+                />
+                
+                {searchState && (
+                  <div className="absolute top-full left-0 right-0 mt-2 max-h-[200px] overflow-y-auto z-20 theme-panel-card rounded-xl shadow-xl border theme-panel-divider">
+                    {filteredStates.map(state => (
+                      <div 
+                        key={state}
+                        onClick={() => {
+                          toggleState(state);
+                          setSearchState('');
+                        }}
+                        className={`p-3 text-[14px] cursor-pointer hover:bg-black/5 ${selectedStates.includes(state) ? 'text-[#FE2C55] font-bold' : 'theme-text-primary'}`}
+                      >
+                        {state}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default CreateAdPage;

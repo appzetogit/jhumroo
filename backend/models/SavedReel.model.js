@@ -11,7 +11,11 @@ const savedReelSchema = new mongoose.Schema(
     reel: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Reel',
-      required: true,
+      index: true
+    },
+    ad: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Ad',
       index: true
     },
     collection: {
@@ -26,24 +30,37 @@ const savedReelSchema = new mongoose.Schema(
 );
 
 // Compound index to prevent duplicate saves
-savedReelSchema.index({ user: 1, reel: 1 }, { unique: true });
+savedReelSchema.index(
+  { user: 1, reel: 1 }, 
+  { unique: true, partialFilterExpression: { reel: { $exists: true, $ne: null } } }
+);
+savedReelSchema.index(
+  { user: 1, ad: 1 }, 
+  { unique: true, partialFilterExpression: { ad: { $exists: true, $ne: null } } }
+);
 savedReelSchema.index({ user: 1, collection: 1, createdAt: -1 });
 
-// Update reel saves count
+// Update stats count
 savedReelSchema.post('save', async function (doc) {
-  const Reel = mongoose.model('Reel');
-  await Reel.findByIdAndUpdate(doc.reel, {
-    $inc: { 'stats.savesCount': 1 }
-  });
+  if (doc.reel) {
+    const Reel = mongoose.model('Reel');
+    await Reel.findByIdAndUpdate(doc.reel, { $inc: { 'stats.savesCount': 1 } });
+  } else if (doc.ad) {
+    const Ad = mongoose.model('Ad');
+    await Ad.findByIdAndUpdate(doc.ad, { $inc: { 'stats.savesCount': 1 } });
+  }
 });
 
-// Update saves count on unsave
+// Update counts on unsave
 savedReelSchema.post('findOneAndDelete', async function (doc) {
   if (doc) {
-    const Reel = mongoose.model('Reel');
-    await Reel.findByIdAndUpdate(doc.reel, {
-      $inc: { 'stats.savesCount': -1 }
-    });
+    if (doc.reel) {
+      const Reel = mongoose.model('Reel');
+      await Reel.findByIdAndUpdate(doc.reel, { $inc: { 'stats.savesCount': -1 } });
+    } else if (doc.ad) {
+      const Ad = mongoose.model('Ad');
+      await Ad.findByIdAndUpdate(doc.ad, { $inc: { 'stats.savesCount': -1 } });
+    }
   }
 });
 

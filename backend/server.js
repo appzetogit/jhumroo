@@ -23,6 +23,7 @@ import notificationRoutes from './modules/notification/routes/notification.route
 import problemReportRoutes from './modules/problemReport/problemReport.routes.js';
 import supportRoutes from './modules/support/support.routes.js';
 import staticPageRoutes from './modules/staticPage/staticPage.routes.js';
+import adRoutes from './modules/ad/routes/ad.routes.js';
 
 // Import Admin Routes
 import adminAuthRoutes from './modules/admin/routes/auth.routes.js';
@@ -84,6 +85,7 @@ app.use('/api/problem-reports', problemReportRoutes);
 app.use('/api/support-requests', supportRoutes);
 app.use('/api/static-pages', staticPageRoutes);
 app.use('/api/interests', adminInterestRoutes);
+app.use('/api/ads', adRoutes);
 
 // Admin API Routes
 app.use('/api/admin/auth', adminAuthRoutes);

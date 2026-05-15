@@ -29,6 +29,8 @@ import AdminAds from './pages/AdminAds';
 import AdminInterests from './pages/AdminInterests';
 import AdminProfile from './pages/AdminProfile';
 import AdminUserDetails from './pages/AdminUserDetails';
+import AdminCreateAd from './pages/AdminCreateAd';
+import AdminUserAds from './pages/AdminUserAds';
 import { useAdminConfig } from '../../context/AdminConfigContext';
 import { useNavigate } from 'react-router-dom';
 import adminAuthService from '../../services/adminAuthService';
@@ -67,6 +69,7 @@ const NAV_ITEMS = [
   { id: 'support-requests', label: 'Support Requests', icon: BiSupport, path: '/admin/support-requests' },
   { id: 'static-pages', label: 'Terms & Policy', icon: BiFile, path: '/admin/terms-and-policy' },
   { id: 'notifications', label: 'Notifications', icon: BiBell, path: '/admin/notifications' },
+  { id: 'user-ads', label: 'User Ads Manager', icon: BiGroup, path: '/admin/user-ads' },
   { id: 'ads', label: 'Advertisements', icon: BiRocket, path: '/admin/ads' },
   { id: 'interests', label: 'Interests', icon: BiBookmark, path: '/admin/interests' },
 ];
@@ -173,7 +176,10 @@ const AdminLayout = () => {
             <Route path="support-requests" element={<AdminSupportRequests />} />
             <Route path="terms-and-policy" element={<AdminTermsAndPolicy />} />
             <Route path="notifications" element={<AdminNotifications />} />
+            <Route path="user-ads" element={<AdminUserAds />} />
             <Route path="ads" element={<AdminAds />} />
+            <Route path="ads/create" element={<AdminCreateAd />} />
+            <Route path="ads/edit/:adId" element={<AdminCreateAd />} />
             <Route path="interests" element={<AdminInterests />} />
             <Route path="profile" element={<AdminProfile />} />
           </Routes>

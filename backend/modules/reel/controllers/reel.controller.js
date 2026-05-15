@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import Reel from '../../../models/Reel.model.js';
+import Ad from '../../../models/Ad.model.js';
 import Like from '../../../models/Like.model.js';
 import SavedReel from '../../../models/SavedReel.model.js';
 import Comment from '../../../models/Comment.model.js';
@@ -261,6 +262,7 @@ export const createReel = asyncHandler(async (req, res) => {
  * @route   GET /api/reels/feed
  * @access  Public
  */
+
 export const getFeedReels = asyncHandler(async (req, res) => {
   const page = parseInt(req.query.page) || 1;
   const limit = parseInt(req.query.limit) || 10;
@@ -293,22 +295,78 @@ export const getFeedReels = asyncHandler(async (req, res) => {
     .limit(limit)
     .populate('user', 'username fullName profilePicture isVerified downloadPrivacy')
     .populate('music.audioId')
-    .lean(); // Use lean() to get plain JavaScript objects
+    .lean();
 
-  // Add liked and saved status if user is authenticated
+  // Fetch and inject ads if user is authenticated
   if (req.user) {
-    const reelIds = reels.map(r => r._id);
-    const [likes, saves] = await Promise.all([
+    const userState = req.user.state;
+    const adQuery = { isActive: true };
+    if (userState) {
+      adQuery.$or = [
+        { targetStates: { $size: 0 } },
+        { targetStates: userState }
+      ];
+    }
+
+    const ads = await Ad.find(adQuery)
+      .populate('user', 'username profilePicture isVerified')
+      .limit(2)
+      .lean();
+
+    if (ads.length > 0) {
+      ads.forEach((ad, index) => {
+        const formattedAd = {
+          ...ad,
+          _id: ad._id.toString(),
+          isAd: true,
+          onModel: ad.onModel || 'User',
+          video: {
+            url: ad.media.url,
+            type: ad.media.type,
+            thumbnail: ad.media.thumbnail || ad.media.url
+          },
+          stats: {
+            likesCount: ad.stats?.likesCount || 0,
+            viewsCount: ad.stats?.viewsCount || 0,
+            commentsCount: ad.stats?.commentsCount || 0,
+            sharesCount: ad.stats?.sharesCount || 0,
+            savesCount: ad.stats?.savesCount || 0
+          }
+        };
+        // Inject ad at positions (e.g., 3rd and 7th)
+        const insertIndex = index === 0 ? 3 : 7;
+        if (reels.length >= insertIndex) {
+          reels.splice(insertIndex, 0, formattedAd);
+        } else if (reels.length > 0 && index === 0) {
+          reels.push(formattedAd);
+        }
+      });
+    }
+
+    // Add liked and saved status
+    const reelIds = reels.filter(r => !r.isAd).map(r => r._id);
+    const adIds = reels.filter(r => r.isAd).map(r => r._id);
+
+    const [likes, adLikes, saves, adSaves] = await Promise.all([
       Like.find({ user: req.user._id, reel: { $in: reelIds } }),
-      SavedReel.find({ user: req.user._id, reel: { $in: reelIds } })
+      Like.find({ user: req.user._id, ad: { $in: adIds } }),
+      SavedReel.find({ user: req.user._id, reel: { $in: reelIds } }),
+      SavedReel.find({ user: req.user._id, ad: { $in: adIds } })
     ]);
     
     const likedReelIds = new Set(likes.map(l => l.reel.toString()));
+    const likedAdIds = new Set(adLikes.map(l => l.ad.toString()));
     const savedReelIds = new Set(saves.map(s => s.reel.toString()));
-
-    for (const reel of reels) {
-      reel.isLiked = likedReelIds.has(reel._id.toString());
-      reel.isSaved = savedReelIds.has(reel._id.toString());
+    const savedAdIds = new Set(adSaves.map(s => s.ad.toString()));
+ 
+    for (const item of reels) {
+      if (item.isAd) {
+        item.isLiked = likedAdIds.has(item._id.toString());
+        item.isSaved = savedAdIds.has(item._id.toString());
+      } else {
+        item.isLiked = likedReelIds.has(item._id.toString());
+        item.isSaved = savedReelIds.has(item._id.toString());
+      }
     }
   }
 
@@ -318,7 +376,7 @@ export const getFeedReels = asyncHandler(async (req, res) => {
     pagination: {
       page,
       limit,
-      hasMore: reels.length === limit
+      hasMore: reels.length >= limit
     }
   });
 });
@@ -480,95 +538,116 @@ export const deleteReel = asyncHandler(async (req, res) => {
  * @access  Private
  */
 export const toggleLike = asyncHandler(async (req, res) => {
-  const { id: reelId } = req.params;
+  const { id: contentId } = req.params;
   const userId = req.user._id;
 
-  if (!mongoose.Types.ObjectId.isValid(reelId)) {
-    return res.status(400).json({ success: false, message: 'Invalid Reel ID' });
+  if (!mongoose.Types.ObjectId.isValid(contentId)) {
+    return res.status(400).json({ success: false, message: 'Invalid ID' });
   }
 
-  const rId = new mongoose.Types.ObjectId(reelId);
+  const cId = new mongoose.Types.ObjectId(contentId);
   const uId = new mongoose.Types.ObjectId(userId);
 
-  // 1. Find the reel to get the owner
-  const reel = await Reel.findById(rId);
-  if (!reel) {
-    return res.status(404).json({ success: false, message: 'Reel not found' });
+  // 1. Find the content (Reel or Ad)
+  let content = await Reel.findById(cId);
+  let isAd = false;
+  
+  if (!content) {
+    content = await Ad.findById(cId);
+    isAd = true;
   }
 
-  // 2. Check if like already exists
-  const existingLike = await Like.findOne({ user: uId, reel: rId });
+  if (!content) {
+    return res.status(404).json({ success: false, message: 'Content not found' });
+  }
 
+  // 2. Try to find and remove an existing like (Atomic operation)
+  const query = isAd ? { user: uId, ad: cId } : { user: uId, reel: cId };
+  const existingLike = await Like.findOneAndDelete(query);
+  
   if (existingLike) {
     // ─── UNLIKE FLOW ───
-    await Like.deleteOne({ _id: existingLike._id });
+    let updatedContent;
+    if (isAd) {
+      updatedContent = await Ad.findByIdAndUpdate(
+        cId,
+        { $inc: { 'stats.likesCount': -1 } },
+        { new: true }
+      );
+    } else {
+      updatedContent = await Reel.findByIdAndUpdate(
+        cId,
+        { $inc: { 'stats.likesCount': -1 } },
+        { new: true }
+      );
 
-    // 3. Update Reel stats - Use atomic $inc for guaranteed persistence
-    const updatedReel = await Reel.findByIdAndUpdate(
-      rId,
-      { $inc: { 'stats.likesCount': -1 } },
-      { new: true, runValidators: true }
-    );
-
-    // 4. Update owner's total likes count
-    if (reel.user) {
-      await User.updateOne(
-        { _id: reel.user },
-        { $inc: { 'stats.likesCount': -1 } }
-      ).catch(err => console.error('[toggleLike] User stats update failed:', err));
+      // Update owner's total likes count for reels
+      if (content.user) {
+        await User.updateOne(
+          { _id: content.user },
+          { $inc: { 'stats.likesCount': -1 } }
+        ).catch(err => console.error('[toggleLike] User stats update failed:', err));
+      }
     }
 
     return res.status(200).json({
       success: true,
       isLiked: false,
-      likesCount: Math.max(0, updatedReel?.stats?.likesCount || 0)
+      likesCount: Math.max(0, updatedContent?.stats?.likesCount || 0)
     });
   } else {
     // ─── LIKE FLOW ───
     try {
-      await Like.create({ user: uId, reel: rId });
+      await Like.create(isAd ? { user: uId, ad: cId } : { user: uId, reel: cId });
     } catch (err) {
       if (err.code === 11000) {
-        const currentReel = await Reel.findById(rId);
         return res.status(200).json({
           success: true,
           isLiked: true,
-          likesCount: currentReel?.stats?.likesCount || 0
+          likesCount: content.stats?.likesCount || 0
         });
       }
       throw err;
     }
 
-    // 3. Update Reel stats - Use atomic $inc for guaranteed persistence
-    const updatedReel = await Reel.findByIdAndUpdate(
-      rId,
-      { $inc: { 'stats.likesCount': 1 } },
-      { new: true, runValidators: true }
-    );
+    let updatedContent;
+    if (isAd) {
+      updatedContent = await Ad.findByIdAndUpdate(
+        cId,
+        { $inc: { 'stats.likesCount': 1 } },
+        { new: true }
+      );
+    } else {
+      updatedContent = await Reel.findByIdAndUpdate(
+        cId,
+        { $inc: { 'stats.likesCount': 1 } },
+        { new: true }
+      );
 
-    // 4. Update owner's total likes count
-    if (reel.user) {
-      await User.updateOne(
-        { _id: reel.user },
-        { $inc: { 'stats.likesCount': 1 } }
-      ).catch(err => console.error('[toggleLike] User stats update failed:', err));
+      // Update owner's total likes count for reels
+      if (content.user) {
+        await User.updateOne(
+          { _id: content.user },
+          { $inc: { 'stats.likesCount': 1 } }
+        ).catch(err => console.error('[toggleLike] User stats update failed:', err));
 
-      // Create notification for owner (if not liking own reel)
-      if (reel.user.toString() !== uId.toString()) {
-        createNotification({
-          recipient: reel.user,
-          sender: uId,
-          type: 'like',
-          reel: rId,
-          message: `${req.user.username} liked your reel`
-        }).catch(err => console.error('[toggleLike] Notification failed:', err));
+        // Create notification for owner (if not liking own reel)
+        if (content.user.toString() !== uId.toString()) {
+          createNotification({
+            recipient: content.user,
+            sender: uId,
+            type: 'like',
+            reel: cId,
+            message: `${req.user.username} liked your reel`
+          }).catch(err => console.error('[toggleLike] Notification failed:', err));
+        }
       }
     }
 
     return res.status(200).json({
       success: true,
       isLiked: true,
-      likesCount: updatedReel?.stats?.likesCount || 0
+      likesCount: updatedContent?.stats?.likesCount || 0
     });
   }
 });
@@ -576,46 +655,55 @@ export const toggleLike = asyncHandler(async (req, res) => {
 /**
  * @desc    Save/Unsave reel
  * @route   POST /api/reels/:id/save
- * @access  Private
  */
 export const toggleSave = asyncHandler(async (req, res) => {
-  const reel = await Reel.findById(req.params.id);
-
-  if (!reel) {
-    return res.status(404).json({
-      success: false,
-      message: 'Reel not found'
-    });
-  }
-
+  const { id: contentId } = req.params;
+  const userId = req.user._id;
   const { collection = 'All Videos' } = req.body;
 
-  // Check if already saved
-  const existingSave = await SavedReel.findOne({
-    user: req.user._id,
-    reel: reel._id
-  });
+  if (!mongoose.Types.ObjectId.isValid(contentId)) {
+    return res.status(400).json({ success: false, message: 'Invalid ID' });
+  }
+
+  const cId = new mongoose.Types.ObjectId(contentId);
+
+  // 1. Find the content (Reel or Ad)
+  let content = await Reel.findById(cId);
+  let isAd = false;
+  if (!content) {
+    content = await Ad.findById(cId);
+    isAd = true;
+  }
+
+  if (!content) {
+    return res.status(404).json({ success: false, message: 'Content not found' });
+  }
+
+  // 2. Check if already saved
+  const query = isAd ? { user: userId, ad: cId } : { user: userId, reel: cId };
+  const existingSave = await SavedReel.findOne(query);
 
   if (existingSave) {
-    // Unsave
-    await existingSave.deleteOne();
+    // ─── UNSAVE FLOW ───
+    await SavedReel.findOneAndDelete({ _id: existingSave._id });
     
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
-      message: 'Reel unsaved',
+      message: 'Unsaved successfully',
       isSaved: false
     });
   } else {
-    // Save
+    // ─── SAVE FLOW ───
     await SavedReel.create({
-      user: req.user._id,
-      reel: reel._id,
+      user: userId,
+      reel: !isAd ? cId : undefined,
+      ad: isAd ? cId : undefined,
       collection
     });
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
-      message: 'Reel saved',
+      message: 'Saved successfully',
       isSaved: true
     });
   }

@@ -2,6 +2,7 @@ import React, { useRef, useState, useEffect } from 'react';
 import VideoOverlay from './VideoOverlay';
 import AddToFavoritesModal from '../modals/AddToFavoritesModal';
 import reelService from '../../../../services/reelService';
+import adService from '../../../../services/adService';
 
 const VideoCard = ({ videoData, isActive }) => {
   const [playing, setPlaying] = useState(false);
@@ -82,7 +83,11 @@ const VideoCard = ({ videoData, isActive }) => {
               // Record view after 3 seconds of active play
               viewTimer = setTimeout(async () => {
                  try {
-                    await reelService.recordView(reelId);
+                    if (localVideoData.isAd) {
+                       await adService.trackView(reelId);
+                    } else {
+                       await reelService.recordView(reelId);
+                    }
                  } catch (err) {
                     console.error("Error recording view:", err);
                  }
@@ -208,7 +213,19 @@ const VideoCard = ({ videoData, isActive }) => {
     }
   };
 
-  const handleLikeClick = async () => {
+  const isLikingRef = useRef(false);
+  const lastLikeClickRef = useRef(0);
+
+  const handleLikeClick = async (e) => {
+    if (e && e.stopPropagation) e.stopPropagation();
+    
+    const now = Date.now();
+    if (now - lastLikeClickRef.current < 300) return;
+    lastLikeClickRef.current = now;
+
+    if (isLikingRef.current) return;
+    isLikingRef.current = true;
+
     const wasLiked = isLiked;
     const prevCount = likesCount;
     
@@ -243,14 +260,17 @@ const VideoCard = ({ videoData, isActive }) => {
       }
     } catch (err) {
       console.error("[Like] Error:", err);
-      // Rollback
+      // Rollback individual states
       setIsLiked(wasLiked);
       setLikesCount(prevCount);
+      // Rollback localVideoData
       setLocalVideoData(prev => ({
         ...prev,
         isLiked: wasLiked,
         stats: { ...(prev.stats || {}), likesCount: prevCount }
       }));
+    } finally {
+      isLikingRef.current = false;
     }
   };
 
@@ -396,16 +416,24 @@ const VideoCard = ({ videoData, isActive }) => {
 
   return (
     <div className="h-full w-full relative snap-start bg-black flex justify-center items-center overflow-hidden">
-      <video
-        ref={videoRef}
-        className="w-full h-full object-cover bg-black"
-        loop
-        playsInline
-        preload="auto"
-        muted={!isActive}
-        src={localVideoData.video?.url || localVideoData.url}
-        poster={localVideoData.video?.thumbnail || localVideoData.poster}
-      ></video>
+      {localVideoData.video?.type === 'image' || localVideoData.media?.type === 'image' ? (
+        <img
+          src={localVideoData.video?.url || localVideoData.url}
+          className="w-full h-full object-cover bg-black"
+          alt=""
+        />
+      ) : (
+        <video
+          ref={videoRef}
+          className="w-full h-full object-cover bg-black"
+          loop
+          playsInline
+          preload="auto"
+          muted={!isActive}
+          src={localVideoData.video?.url || localVideoData.url}
+          poster={localVideoData.video?.thumbnail || localVideoData.poster}
+        ></video>
+      )}
 
       {/* Hidden audio element for library music (only for non-processed reels) */}
       {localVideoData.music && (localVideoData.music.url || localVideoData.music.audioUrl) && localVideoData.status !== 'completed' && (

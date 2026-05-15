@@ -1,5 +1,6 @@
 import jwt from 'jsonwebtoken';
 import User from '../models/User.model.js';
+import Admin from '../models/Admin.model.js';
 
 /**
  * Protect routes - verify JWT token
@@ -24,8 +25,26 @@ export const protect = async (req, res, next) => {
       // Verify token
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-      // Get user from token
+      // Prioritize Admin check if token claims admin status
+      if (decoded.isAdmin) {
+        const admin = await Admin.findById(decoded.id).select('-refreshTokens');
+        if (admin) {
+          req.admin = admin;
+          req.user = admin; // For compatibility with generic controllers
+          
+          if (!admin.isActive) {
+            return res.status(403).json({
+              success: false,
+              message: 'Admin account is disabled'
+            });
+          }
+          return next();
+        }
+      }
+
+      // Get user from token if not an admin or admin check failed
       req.user = await User.findById(decoded.id).select('-otp -deviceTokens');
+
 
       if (!req.user) {
         return res.status(401).json({

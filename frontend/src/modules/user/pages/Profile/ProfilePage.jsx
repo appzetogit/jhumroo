@@ -63,7 +63,7 @@ const ProfilePage = () => {
   const { isDarkMode } = useTheme();
   const { username: profileUsername } = useParams();
   const navigate = useNavigate();
-  const { user: currentUser } = useAuth();
+  const { user: currentUser, updateUser } = useAuth();
   const { config } = useAppContent();
 
   const [activeTab, setActiveTab] = useState('videos');
@@ -310,6 +310,19 @@ const ProfilePage = () => {
       const res = await userService.blockUser(profile._id);
       if (res.success) {
         setIsBlocked(res.isBlocked);
+        
+        // Update global user state for consistency
+        if (currentUser && updateUser) {
+          const updatedBlockedUsers = res.isBlocked
+            ? [...(currentUser.blockedUsers || []), profile._id]
+            : (currentUser.blockedUsers || []).filter(id => id !== profile._id);
+          
+          updateUser({
+            ...currentUser,
+            blockedUsers: updatedBlockedUsers
+          });
+        }
+
         if (res.isBlocked) {
           setIsFollowing(false);
           setFollowStatus(null);
@@ -442,6 +455,13 @@ const ProfilePage = () => {
                   Share profile
                 </button>
               </>
+            ) : isBlocked ? (
+              <button
+                onClick={handleBlockToggle}
+                className="flex-1 h-[44px] bg-[#FE2C55] text-white text-[15px] font-bold rounded-lg active:scale-95 transition-all shadow-lg shadow-pink-100"
+              >
+                Unblock
+              </button>
             ) : (
               <>
                 {incomingFollowStatus === 'pending' ? (
@@ -562,7 +582,15 @@ const ProfilePage = () => {
 
         {/* Video Grid Section */}
         <div className="grid grid-cols-3 gap-[1px] bg-gray-50">
-          {isPrivateAndLocked ? (
+          {isBlocked ? (
+            <div className="col-span-3 flex flex-col items-center justify-center py-24 gap-2 text-gray-400">
+              <div className="w-16 h-16 rounded-full border-2 border-gray-100 flex items-center justify-center mb-2">
+                <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </div>
+              <p className="text-[16px] font-bold text-black mb-0.5">You blocked this user</p>
+              <p className="text-[13px] text-gray-400">Unblock to see their content.</p>
+            </div>
+          ) : isPrivateAndLocked ? (
             <div className="col-span-3 flex flex-col items-center justify-center py-24 gap-2 text-gray-400">
               <div className="w-16 h-16 rounded-full border-2 border-gray-100 flex items-center justify-center mb-2">
                 <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>

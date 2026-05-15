@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { Upload } from "@aws-sdk/lib-storage";
 import fs from 'fs';
@@ -149,5 +149,18 @@ export const downloadFromS3 = async (key, localPath) => {
  * Delete a file from S3
  */
 export const deleteFromS3 = async (key) => {
-  // Implementation for deletion if needed
+  if (!key) return;
+  const command = new DeleteObjectCommand({
+    Bucket: process.env.AWS_BUCKET_NAME,
+    Key: key,
+  });
+
+  try {
+    await s3Client.send(command);
+    console.log(`Successfully deleted object from S3: ${key}`);
+    return true;
+  } catch (err) {
+    console.error("S3 Delete Error:", err);
+    return false;
+  }
 };

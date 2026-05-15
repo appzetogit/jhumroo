@@ -588,7 +588,24 @@
   gap: 20px;
   box-shadow: 2px 0 16px rgba(0, 0, 0, 0.04);
   backdrop-filter: blur(8px);
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--admin-border) transparent;
 }
+
+.admin-sidebar::-webkit-scrollbar {
+  width: 4px;
+}
+
+.admin-sidebar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.admin-sidebar::-webkit-scrollbar-thumb {
+  background: var(--admin-border);
+  border-radius: 10px;
+}
+
 
 .admin-brand {
   display: flex;

@@ -1,19 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
-  BiRocket, 
-  BiBarChartSquare, 
-  BiTrendingUp, 
-  BiDollarCircle, 
-  BiBullseye,
-  BiTrash,
-  BiCheckCircle,
-  BiXCircle,
-  BiStats,
-  BiLink,
-  BiTargetLock,
-  BiUser,
-  BiCalendar,
+  BiBullseye, 
+  BiTrash, 
+  BiCheckCircle, 
+  BiXCircle, 
+  BiStats, 
+  BiLink, 
+  BiTargetLock, 
+  BiUser, 
+  BiCalendar, 
   BiRefresh,
   BiPlus,
   BiHeart,
@@ -23,7 +19,7 @@ import {
 import adService from '../../../services/adService';
 import CommentsSheet from '../../user/components/modals/CommentsSheet';
 
-const AdminAds = () => {
+const AdminUserAds = () => {
   const navigate = useNavigate();
   const [ads, setAds] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -40,7 +36,7 @@ const AdminAds = () => {
   const fetchAds = async () => {
     try {
       setLoading(true);
-      const res = await adService.getAllAdsAdmin();
+      const res = await adService.getUserAdsAdmin();
       if (res.success) {
         setAds(res.ads);
         
@@ -56,8 +52,8 @@ const AdminAds = () => {
           totalClicks
         });
       }
-    } catch (err) {
-      console.error("Failed to fetch ads:", err);
+    } catch (error) {
+      console.error('Failed to fetch user ads:', error);
     } finally {
       setLoading(false);
     }
@@ -71,95 +67,94 @@ const AdminAds = () => {
     try {
       const res = await adService.toggleAdStatus(adId);
       if (res.success) {
-        setAds(ads.map(ad => ad._id === adId ? { ...ad, isActive: !ad.isActive } : ad));
+        fetchAds(); // Refresh
       }
-    } catch (err) {
-      console.error("Error toggling status:", err);
+    } catch (error) {
+      alert('Failed to update status');
     }
   };
 
   const handleDeleteAd = async (adId) => {
-    if (window.confirm('Are you sure you want to delete this advertisement? This action cannot be undone.')) {
-      try {
-        const res = await adService.deleteAd(adId);
-        if (res.success) {
-          setAds(ads.filter(ad => ad._id !== adId));
-        }
-      } catch (err) {
-        console.error("Error deleting ad:", err);
+    if (!window.confirm('Are you sure you want to delete this user advertisement?')) return;
+    try {
+      const res = await adService.deleteAd(adId);
+      if (res.success) {
+        setAds(ads.filter(a => a._id !== adId));
+        fetchAds();
       }
+    } catch (error) {
+      alert('Failed to delete ad');
     }
   };
 
   return (
     <div className="admin-page p-6 bg-[#FAFAFA] dark:bg-[#0A0A0A] min-h-screen">
-      <div className="admin-page-header flex justify-between items-center mb-8">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
         <div>
-          <h1 className="text-[28px] font-black text-[#1A1A1A] dark:text-white">Ads Management</h1>
-          <p className="text-[#666] dark:text-[#AAA] text-[14px]">Monitor and manage all sponsored content across the platform.</p>
+          <h1 className="text-[28px] font-black text-[#1A1A1A] dark:text-white flex items-center gap-3">
+            <BiUser className="text-[#FE2C55]" />
+            User Ads Manager
+          </h1>
+          <p className="text-[#666] dark:text-[#AAA] text-[15px]">Monitor and manage advertisements posted by community users.</p>
         </div>
         <div className="flex items-center gap-3">
           <button 
-            onClick={() => navigate('/admin/ads/create')}
-            className="flex items-center gap-2 bg-[#FE2C55] text-white px-6 py-2.5 rounded-xl font-bold hover:bg-[#E2264D] transition-all shadow-lg shadow-[#FE2C55]/20"
-          >
-            <BiPlus size={20} />
-            Create Advertisement
-          </button>
-          <button 
             onClick={fetchAds}
-            className="bg-white dark:bg-[#1A1A1A] border border-[#EEE] dark:border-[#333] p-2 rounded-xl text-[#1A1A1A] dark:text-white hover:bg-[#F5F5F5] transition-all"
+            className="p-3 rounded-2xl bg-white dark:bg-[#1A1A1A] border border-[#EEE] dark:border-[#333] hover:bg-[#F5F5F5] transition-all shadow-sm"
           >
-            <BiRefresh size={24} className={loading ? "animate-spin" : ""} />
+            <BiRefresh size={22} className={loading ? 'animate-spin' : ''} />
           </button>
         </div>
       </div>
 
-      {/* Analytics Overview */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
-        <StatCard label="Total Ads" value={stats.totalAds} icon={<BiRocket size={24} />} accent="#8b5cf6" />
-        <StatCard label="Active Now" value={stats.activeAds} icon={<BiCheckCircle size={24} />} accent="#10b981" />
-        <StatCard label="Total Impressions" value={stats.totalViews} icon={<BiBullseye size={24} />} accent="#3b82f6" />
-        <StatCard label="Total Clicks" value={stats.totalClicks} icon={<BiTrendingUp size={24} />} accent="#FE2C55" />
+      {/* Stats Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
+        <StatCard label="Total User Ads" value={stats.totalAds} icon={<BiBullseye size={24} />} accent="#FE2C55" />
+        <StatCard label="Active User Ads" value={stats.activeAds} icon={<BiCheckCircle size={24} />} accent="#10b981" />
+        <StatCard label="Total Impressions" value={stats.totalViews} icon={<BiStats size={24} />} accent="#3b82f6" />
+        <StatCard label="Total Clicks" value={stats.totalClicks} icon={<BiLink size={24} />} accent="#f59e0b" />
       </div>
 
-      {/* Ads List */}
-      <div className="flex flex-col gap-6">
-        <h2 className="text-[18px] font-bold text-[#1A1A1A] dark:text-white flex items-center gap-2">
-          <BiBarChartSquare className="text-[#FE2C55]" />
-          All Advertisements
-        </h2>
-        
-        {loading ? (
-          <div className="flex justify-center py-20">
-            <div className="w-8 h-8 border-4 border-[#FE2C55] border-t-transparent rounded-full animate-spin"></div>
-          </div>
-        ) : ads.length === 0 ? (
-          <div className="bg-white dark:bg-[#111] rounded-[24px] p-12 text-center border border-[#EEE] dark:border-[#222]">
-            <p className="text-[#666]">No advertisements found.</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 gap-4">
-            {ads.map(ad => (
-              <AdRow 
-                key={ad._id} 
-                ad={ad} 
-                onToggle={() => handleToggleStatus(ad._id)}
-                onDelete={() => handleDeleteAd(ad._id)}
-                onEdit={() => navigate(`/admin/ads/edit/${ad._id}`)}
-                onViewComments={() => {
-                  setSelectedAd(ad);
-                  setIsCommentsOpen(true);
-                }}
-              />
-            ))}
-          </div>
-        )}
+      <div className="mb-6 flex items-center gap-2">
+        <div className="w-2 h-8 bg-[#FE2C55] rounded-full"></div>
+        <h2 className="text-[20px] font-black text-[#1A1A1A] dark:text-white">Community Advertisements</h2>
       </div>
 
+      {loading ? (
+        <div className="flex flex-col items-center justify-center py-20 gap-4">
+          <div className="w-12 h-12 border-4 border-[#FE2C55] border-t-transparent rounded-full animate-spin"></div>
+          <p className="text-[#666] font-medium animate-pulse">Loading community ads...</p>
+        </div>
+      ) : ads.length === 0 ? (
+        <div className="bg-white dark:bg-[#111] rounded-[32px] p-20 border border-dashed border-[#DDD] dark:border-[#333] text-center">
+          <div className="w-20 h-20 bg-[#F5F5F5] dark:bg-[#1A1A1A] rounded-full flex items-center justify-center mx-auto mb-6">
+            <BiBullseye size={40} className="text-[#CCC]" />
+          </div>
+          <h3 className="text-[20px] font-bold text-[#1A1A1A] dark:text-white mb-2">No user ads found</h3>
+          <p className="text-[#666] dark:text-[#AAA]">There are currently no advertisements posted by community users.</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-4">
+          {ads.map(ad => (
+            <AdRow 
+              key={ad._id} 
+              ad={ad} 
+              onToggle={() => handleToggleStatus(ad._id)}
+              onDelete={() => handleDeleteAd(ad._id)}
+              onEdit={() => navigate(`/admin/ads/edit/${ad._id}`)}
+              onViewComments={() => {
+                setSelectedAd(ad);
+                setIsCommentsOpen(true);
+              }}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* Comments Sheet Modal */}
       {selectedAd && (
         <CommentsSheet 
-          isOpen={isCommentsOpen}
+          isOpen={isCommentsOpen} 
           onClose={() => {
             setIsCommentsOpen(false);
             setSelectedAd(null);
@@ -209,6 +204,20 @@ const AdRow = ({ ad, onToggle, onDelete, onEdit, onViewComments }) => (
           {ad.adType}
         </span>
       </div>
+
+      {/* User Info (Show for User Ads) */}
+      {ad.user && (
+        <div className="flex items-center gap-2 mb-2 bg-[#F8F8F8] dark:bg-[#1A1A1A] w-fit px-3 py-1 rounded-full border border-[#EEE] dark:border-[#222]">
+          <div className="w-5 h-5 rounded-full overflow-hidden border border-[#DDD] dark:border-[#333]">
+            <img 
+              src={ad.user.profilePicture?.url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${ad.user.username}`} 
+              className="w-full h-full object-cover" 
+              alt="avatar" 
+            />
+          </div>
+          <span className="text-[12px] font-bold text-[#FE2C55]">@{ad.user.username}</span>
+        </div>
+      )}
       
       <div className="flex flex-wrap items-center gap-4 text-[#666] dark:text-[#999] text-[12px]">
         <div className="flex items-center gap-1.5">
@@ -239,21 +248,21 @@ const AdRow = ({ ad, onToggle, onDelete, onEdit, onViewComments }) => (
         <p className="text-[#999] text-[10px] uppercase font-bold tracking-wider">Clicks</p>
       </div>
       <div className="text-center">
-        <p className="text-[#FE2C55] font-bold text-[16px] flex items-center justify-center gap-1">
-          <BiHeart size={14} />
-          {ad.stats?.likesCount || 0}
-        </p>
+        <p className="text-[#1A1A1A] dark:text-white font-bold text-[16px]">{ad.stats?.likesCount || 0}</p>
         <p className="text-[#999] text-[10px] uppercase font-bold tracking-wider">Likes</p>
       </div>
-      <div className="text-center cursor-pointer hover:bg-gray-50 dark:hover:bg-white/5 p-1 rounded-lg transition-colors" onClick={onViewComments}>
-        <p className="text-[#3b82f6] font-bold text-[16px] flex items-center justify-center gap-1">
-          <BiCommentDetail size={14} />
-          {ad.stats?.commentsCount || 0}
-        </p>
+      <div 
+        onClick={onViewComments}
+        className="text-center cursor-pointer hover:bg-black/5 p-1 rounded-lg transition-all"
+      >
+        <div className="flex items-center gap-1 justify-center">
+          <BiCommentDetail className="text-[#3b82f6]" />
+          <p className="text-[#1A1A1A] dark:text-white font-bold text-[16px]">{ad.stats?.commentsCount || 0}</p>
+        </div>
         <p className="text-[#999] text-[10px] uppercase font-bold tracking-wider">Comments</p>
       </div>
-      <div className="text-center">
-        <p className="text-[#FE2C55] font-bold text-[16px]">
+      <div className="text-center min-w-[60px]">
+        <p className="text-[#FE2C55] font-black text-[16px]">
           {ad.stats?.viewsCount > 0 ? ((ad.stats.clicksCount / ad.stats.viewsCount) * 100).toFixed(1) : 0}%
         </p>
         <p className="text-[#999] text-[10px] uppercase font-bold tracking-wider">CTR</p>
@@ -274,15 +283,15 @@ const AdRow = ({ ad, onToggle, onDelete, onEdit, onViewComments }) => (
         className={`p-2.5 rounded-xl transition-all ${
           ad.isActive 
             ? 'bg-[#10b981]/10 text-[#10b981] hover:bg-[#10b981]/20' 
-            : 'bg-[#666]/10 text-[#666] hover:bg-[#666]/20'
+            : 'bg-[#EF4444]/10 text-[#EF4444] hover:bg-[#EF4444]/20'
         }`}
-        title={ad.isActive ? 'Deactivate Ad' : 'Activate Ad'}
+        title={ad.isActive ? 'Deactivate' : 'Activate'}
       >
         {ad.isActive ? <BiCheckCircle size={20} /> : <BiXCircle size={20} />}
       </button>
       <button 
         onClick={onDelete}
-        className="p-2.5 rounded-xl bg-[#EF4444]/10 text-[#EF4444] hover:bg-[#EF4444]/20 transition-all"
+        className="p-2.5 rounded-xl bg-[#FE2C55]/10 text-[#FE2C55] hover:bg-[#FE2C55]/20 transition-all"
         title="Delete Ad"
       >
         <BiTrash size={20} />
@@ -291,4 +300,4 @@ const AdRow = ({ ad, onToggle, onDelete, onEdit, onViewComments }) => (
   </div>
 );
 
-export default AdminAds;
+export default AdminUserAds;

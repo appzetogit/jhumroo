@@ -114,6 +114,41 @@ export const uploadImages = multer({
   fileFilter: imageFilter
 }).array('images', 10);
 
+// Ad media upload (videos and images)
+const adFilter = (req, file, cb) => {
+  const isVideo = file.mimetype.startsWith('video/');
+  const isImage = file.mimetype.startsWith('image/');
+  const isAudio = file.mimetype.startsWith('audio/');
+
+  const allowedExtensions = /mp4|mov|avi|mkv|webm|jpeg|jpg|png|gif|webp|mp3|wav|m4a|aac|ogg|mpeg/;
+  const extname = allowedExtensions.test(path.extname(file.originalname).toLowerCase());
+
+  if ((isVideo || isImage || isAudio) && extname) {
+    return cb(null, true);
+  } else {
+    cb(new Error('Only video, image, and audio files are allowed'));
+  }
+};
+
+export const uploadAdMedia = multer({
+  storage: storage,
+  limits: {
+    fileSize: 100 * 1024 * 1024
+  },
+  fileFilter: adFilter
+}).single('media');
+
+export const uploadAdWithMusic = multer({
+  storage: storage,
+  limits: {
+    fileSize: 100 * 1024 * 1024
+  },
+  fileFilter: adFilter
+}).fields([
+  { name: 'media', maxCount: 1 },
+  { name: 'musicFile', maxCount: 1 }
+]);
+
 // Handle multer errors
 export const handleMulterError = (err, req, res, next) => {
   if (err instanceof multer.MulterError) {

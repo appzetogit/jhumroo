@@ -30,6 +30,9 @@ import HelpArticlesPage from './modules/user/pages/Settings/HelpArticlesPage';
 import HelpArticleDetailPage from './modules/user/pages/Settings/HelpArticleDetailPage';
 import SupportPage from './modules/user/pages/Settings/SupportPage';
 import { TermsAndConditionPage, PrivacyPolicyPage } from './modules/user/pages/Settings/StaticContentPages';
+import AdsManagerPage from './modules/user/pages/Settings/AdsManagerPage';
+import CreateAdPage from './modules/user/pages/Settings/CreateAdPage';
+import AdAnalyticsPage from './modules/user/pages/Settings/AdAnalyticsPage';
 import Splash from './modules/user/components/common/Splash';
 import AuthPage from './modules/user/pages/Auth/AuthPage';
 import OnboardingPage from './modules/user/pages/Auth/components/OnboardingPage';
@@ -114,6 +117,9 @@ const MainLayout = ({ onLogout }) => {
         <Route path="/settings/security/password" element={<PasswordPage />} />
         <Route path="/settings/security/two-step-verification" element={<TwoStepVerificationPage />} />
         <Route path="/settings/push-notifications" element={<PushNotificationsPage />} />
+        <Route path="/settings/ads-manager" element={<AdsManagerPage />} />
+        <Route path="/settings/ads-manager/create" element={<CreateAdPage />} />
+        <Route path="/settings/ads-manager/analytics/:id" element={<AdAnalyticsPage />} />
         <Route path="/settings/language" element={<LanguagePage />} />
         <Route path="/settings/help-center" element={<HelpCenterPage />} />
         <Route path="/settings/support" element={<SupportPage />} />

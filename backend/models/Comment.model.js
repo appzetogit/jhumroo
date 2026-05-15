@@ -11,7 +11,11 @@ const commentSchema = new mongoose.Schema(
     reel: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Reel',
-      required: true,
+      index: true
+    },
+    ad: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Ad',
       index: true
     },
     text: {
@@ -110,13 +114,20 @@ commentSchema.pre('save', async function (next) {
 commentSchema.index({ reel: 1, createdAt: -1 });
 commentSchema.index({ parentComment: 1, createdAt: -1 });
 
-// Update reel comment count & replies count
+// Update reel/ad comment count & replies count
 commentSchema.post('save', async function (doc) {
   if (!doc.parentComment) {
-    const Reel = mongoose.model('Reel');
-    await Reel.findByIdAndUpdate(doc.reel, {
-      $inc: { 'stats.commentsCount': 1 }
-    });
+    if (doc.reel) {
+      const Reel = mongoose.model('Reel');
+      await Reel.findByIdAndUpdate(doc.reel, {
+        $inc: { 'stats.commentsCount': 1 }
+      });
+    } else if (doc.ad) {
+      const Ad = mongoose.model('Ad');
+      await Ad.findByIdAndUpdate(doc.ad, {
+        $inc: { 'stats.commentsCount': 1 }
+      });
+    }
   } else {
     // Update parent comment reply count
     await mongoose.model('Comment').findByIdAndUpdate(doc.parentComment, {
@@ -129,10 +140,17 @@ commentSchema.post('save', async function (doc) {
 commentSchema.post('findOneAndUpdate', async function (doc) {
   if (doc && doc.isDeleted) {
     if (!doc.parentComment) {
-      const Reel = mongoose.model('Reel');
-      await Reel.findByIdAndUpdate(doc.reel, {
-        $inc: { 'stats.commentsCount': -1 }
-      });
+      if (doc.reel) {
+        const Reel = mongoose.model('Reel');
+        await Reel.findByIdAndUpdate(doc.reel, {
+          $inc: { 'stats.commentsCount': -1 }
+        });
+      } else if (doc.ad) {
+        const Ad = mongoose.model('Ad');
+        await Ad.findByIdAndUpdate(doc.ad, {
+          $inc: { 'stats.commentsCount': -1 }
+        });
+      }
     } else {
       await mongoose.model('Comment').findByIdAndUpdate(doc.parentComment, {
         $inc: { repliesCount: -1 }
