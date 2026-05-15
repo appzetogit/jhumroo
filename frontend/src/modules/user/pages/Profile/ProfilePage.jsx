@@ -1,12 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { BiMenu, BiUserPlus, BiBookmark, BiHeart, BiArrowBack, BiBell } from 'react-icons/bi';
+import { BiMenu, BiUserPlus, BiBookmark, BiHeart, BiArrowBack, BiBell, BiDotsVerticalRounded, BiX } from 'react-icons/bi';
 import { BsGrid3X3 } from 'react-icons/bs';
 import { useTheme } from '../../../../context/ThemeContext';
 import { useAppContent } from '../../../../hooks/useAppContent';
 import { useAuth } from '../../../../context/AuthContext';
 import userService from '../../../../services/userService';
 import followService from '../../../../services/followService';
+import ProfileMoreOptionsSheet from '../../components/modals/ProfileMoreOptionsSheet';
+import ReportSheet from '../../components/modals/ReportSheet';
+import ReportUserSheet from '../../components/modals/ReportUserSheet';
 
 const VideoGrid = ({ videos, onVideoClick }) => {
   if (!videos || !videos.length) {
@@ -76,6 +79,9 @@ const ProfilePage = () => {
   const [showSuggested, setShowSuggested] = useState(false);
   const [randomSuggestions, setRandomSuggestions] = useState([]);
   const [incomingFollowStatus, setIncomingFollowStatus] = useState(null);
+  const [showOptions, setShowOptions] = useState(false);
+  const [showReport, setShowReport] = useState(false);
+  const [isBlocked, setIsBlocked] = useState(false);
 
   const displayUsername = profileUsername || currentUser?.username || 'user';
   const isOwnProfile = !profileUsername || 
@@ -103,6 +109,7 @@ const ProfilePage = () => {
         setFollowStatus(profileRes.user.followStatus);
         setIsFollower(profileRes.user.isFollower);
         setIncomingFollowStatus(profileRes.user.incomingFollowStatus);
+        setIsBlocked(currentUser?.blockedUsers?.includes(profileRes.user._id));
       }
 
       const reelsRes = await userService.getUserReels(displayUsername);
@@ -298,6 +305,28 @@ const ProfilePage = () => {
     return 'Follow';
   };
 
+  const handleBlockToggle = async () => {
+    try {
+      const res = await userService.blockUser(profile._id);
+      if (res.success) {
+        setIsBlocked(res.isBlocked);
+        if (res.isBlocked) {
+          setIsFollowing(false);
+          setFollowStatus(null);
+          setIsFollower(false);
+        }
+        setShowOptions(false);
+      }
+    } catch (error) {
+      console.error('Block action failed:', error);
+    }
+  };
+
+  const handleReportUser = () => {
+    setShowOptions(false);
+    setShowReport(true);
+  };
+
   return (
     <div className="page-container bg-white flex flex-col">
       {/* Header */}
@@ -347,10 +376,10 @@ const ProfilePage = () => {
             </svg>
           </button>
           <button 
-            onClick={() => navigate('/settings')}
+            onClick={() => isOwnProfile ? navigate('/settings') : setShowOptions(true)}
             className="text-black active:opacity-60 transition-opacity"
           >
-            <BiMenu size={28} />
+            {isOwnProfile ? <BiMenu size={28} /> : <BiDotsVerticalRounded size={28} />}
           </button>
         </div>
       </div>
@@ -574,6 +603,30 @@ const ProfilePage = () => {
           )}
         </div>
       </div>
+
+      <ProfileMoreOptionsSheet 
+        isOpen={showOptions}
+        onClose={() => setShowOptions(false)}
+        profile={profile}
+        isBlocked={isBlocked}
+        onBlockToggle={handleBlockToggle}
+        onReportClick={handleReportUser}
+        onShareClick={() => {
+          handleShareProfile();
+          setShowOptions(false);
+        }}
+        onMessageClick={() => {
+          handleOpenChat();
+          setShowOptions(false);
+        }}
+      />
+
+      {/* Report Sheet for Users */}
+      <ReportUserSheet 
+        isOpen={showReport} 
+        onClose={() => setShowReport(false)} 
+        userId={profile?._id}
+      />
     </div>
   );
 };

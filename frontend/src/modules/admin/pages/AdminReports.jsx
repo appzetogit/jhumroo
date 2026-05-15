@@ -1,23 +1,26 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { BiFlag, BiShow, BiTrash, BiUserX, BiCheckCircle, BiXCircle, BiRefresh, BiX } from 'react-icons/bi';
 import adminReportService from '../../../services/adminReportService';
 
 const AdminReports = () => {
+  const navigate = useNavigate();
   const [reports, setReports] = useState([]);
   const [loading, setLoading] = useState(true);
   const [pagination, setPagination] = useState({});
   const [page, setPage] = useState(1);
   const [selectedReport, setSelectedReport] = useState(null);
   const [showVideoModal, setShowVideoModal] = useState(false);
+  const [activeTab, setActiveTab] = useState('All'); // 'All', 'Reel', or 'User'
 
   useEffect(() => {
     fetchReports();
-  }, [page]);
+  }, [page, activeTab]);
 
   const fetchReports = async () => {
     setLoading(true);
     try {
-      const response = await adminReportService.getReports(page);
+      const response = await adminReportService.getReports(page, 20, activeTab);
       if (response.success) {
         setReports(response.reports);
         setPagination(response.pagination);
@@ -86,6 +89,27 @@ const AdminReports = () => {
     }
   };
 
+  const formatReportDate = (dateString) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', { 
+      day: '2-digit', 
+      month: 'short', 
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+
+  const handleTabChange = (tab) => {
+    setActiveTab(tab);
+    setPage(1); // Reset to first page when changing tabs
+  };
+
+  // Safety filter in case backend returns mixed results during transition
+  const filteredReports = activeTab === 'All' 
+    ? (reports || []) 
+    : (reports || []).filter(r => r.reportType === activeTab);
+
   return (
     <div className="admin-page animate-fade-in">
       <div className="admin-page-header">
@@ -105,30 +129,63 @@ const AdminReports = () => {
         </div>
       </div>
 
+      <div className="flex gap-2 mb-6">
+        <button 
+          className={`px-6 py-2.5 rounded-xl text-sm font-bold transition-all ${
+            activeTab === 'All' 
+              ? 'bg-[#FE2C55] text-white shadow-lg shadow-[#FE2C55]/20' 
+              : 'bg-white text-[#161823] border border-admin-border hover:bg-gray-50'
+          }`}
+          onClick={() => handleTabChange('All')}
+        >
+          All Reports
+        </button>
+        <button 
+          className={`px-6 py-2.5 rounded-xl text-sm font-bold transition-all ${
+            activeTab === 'Reel' 
+              ? 'bg-[#FE2C55] text-white shadow-lg shadow-[#FE2C55]/20' 
+              : 'bg-white text-[#161823] border border-admin-border hover:bg-gray-50'
+          }`}
+          onClick={() => handleTabChange('Reel')}
+        >
+          Reel Reports
+        </button>
+        <button 
+          className={`px-6 py-2.5 rounded-xl text-sm font-bold transition-all ${
+            activeTab === 'User' 
+              ? 'bg-[#FE2C55] text-white shadow-lg shadow-[#FE2C55]/20' 
+              : 'bg-white text-[#161823] border border-admin-border hover:bg-gray-50'
+          }`}
+          onClick={() => handleTabChange('User')}
+        >
+          Account Reports
+        </button>
+      </div>
+
       <div className="admin-card">
         {loading ? (
           <div className="p-12 text-center">
             <div className="admin-spinner" />
             <p className="mt-4 text-gray-500">Loading reports...</p>
           </div>
-        ) : reports.length === 0 ? (
+        ) : filteredReports.length === 0 ? (
           <div className="p-12 text-center text-gray-500">
             <BiFlag size={48} className="mx-auto mb-4 opacity-20" />
-            <p>No reports found</p>
+            <p>No {activeTab.toLowerCase()} reports found</p>
           </div>
         ) : (
           <div className="admin-table">
-            <div className="admin-table-head admin-table-head--reports">
+            <div className={`admin-table-head admin-table-head--reports ${activeTab === 'User' ? 'no-status' : ''}`}>
               <span>Reporter</span>
               <span>Reason & Info</span>
-              <span>Reel Creator</span>
-              <span>Content</span>
-              <span>Status</span>
+              <span>Reported Target</span>
+              <span>Content / Profile</span>
+              {activeTab !== 'User' && <span>Status</span>}
               <span className="text-right">Actions</span>
             </div>
             
-            {reports.map((report) => (
-              <div key={report._id} className="admin-table-row admin-table-row--reports">
+            {filteredReports.map((report) => (
+              <div key={report._id} className={`admin-table-row admin-table-row--reports ${activeTab === 'User' ? 'no-status' : ''}`}>
                 {/* Reporter */}
                 <div className="admin-user-cell">
                   <div className="admin-avatar">
@@ -147,85 +204,131 @@ const AdminReports = () => {
                 <div>
                   <div className="flex flex-col">
                     <span className="font-bold text-[13px] text-admin-strong">{getReasonLabel(report.reason)}</span>
+                    <span className="text-[10px] text-admin-muted font-medium mt-0.5">
+                      {formatReportDate(report.createdAt)}
+                    </span>
                     {report.description && (
-                      <p className="text-[11px] text-gray-500 mt-0.5 line-clamp-1" title={report.description}>
+                      <p className="text-[11px] text-gray-500 mt-1 line-clamp-1 border-l-2 border-admin-primary/20 pl-1.5" title={report.description}>
                         {report.description}
                       </p>
                     )}
                   </div>
                 </div>
 
-                {/* Reel Creator */}
+                {/* Reported Target (Creator or User) */}
                 <div className="admin-user-cell">
-                  <div className="admin-avatar">
-                    <img 
-                      src={report.reportedItem?.user?.profilePicture?.url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${report.reportedItem?.user?.username}`} 
-                      alt="" 
-                    />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="admin-user-name truncate">@{report.reportedItem?.user?.username}</p>
-                    {report.reportedItem?.user?.isBanned && (
-                      <span className="text-[9px] bg-red-100 text-red-600 px-1 rounded font-bold">BANNED</span>
-                    )}
-                  </div>
+                  {report.reportType === 'User' ? (
+                    // Target is the User profile directly
+                    <>
+                      <div className="admin-avatar">
+                        <img 
+                          src={report.reportedItem?.profilePicture?.url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${report.reportedItem?.username || 'user'}`} 
+                          alt="" 
+                        />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="admin-user-name truncate">@{report.reportedItem?.username || 'unknown'}</p>
+                        {report.reportedItem?.isBanned && (
+                          <span className="text-[9px] bg-red-100 text-red-600 px-1 rounded font-bold">BANNED</span>
+                        )}
+                        <span className="text-[10px] text-gray-400 block">Account</span>
+                      </div>
+                    </>
+                  ) : (
+                    // Target is a Reel, so we need the Reel's creator
+                    <>
+                      <div className="admin-avatar">
+                        <img 
+                          src={report.reportedItem?.user?.profilePicture?.url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${report.reportedItem?.user?.username || 'user'}`} 
+                          alt="" 
+                        />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="admin-user-name truncate">@{report.reportedItem?.user?.username || 'unknown'}</p>
+                        {report.reportedItem?.user?.isBanned && (
+                          <span className="text-[9px] bg-red-100 text-red-600 px-1 rounded font-bold">BANNED</span>
+                        )}
+                        <span className="text-[10px] text-gray-400 block">Reel Creator</span>
+                      </div>
+                    </>
+                  )}
                 </div>
 
-                {/* Reported Reel */}
+                {/* Content / Profile Link */}
                 <div>
-                  {report.reportedItem ? (
+                  {report.reportType === 'Reel' ? (
+                    report.reportedItem ? (
+                      <button 
+                        className="flex items-center gap-1.5 text-admin-primary hover:underline text-[13px] font-bold"
+                        onClick={() => {
+                          setSelectedReport(report);
+                          setShowVideoModal(true);
+                        }}
+                      >
+                        <BiShow size={16} />
+                        View Reel
+                      </button>
+                    ) : (
+                      <span className="text-xs text-gray-400 italic">Deleted</span>
+                    )
+                  ) : (
                     <button 
                       className="flex items-center gap-1.5 text-admin-primary hover:underline text-[13px] font-bold"
-                      onClick={() => {
-                        setSelectedReport(report);
-                        setShowVideoModal(true);
-                      }}
+                      onClick={() => navigate(`/admin/users/${report.reportedItem?._id}`)}
                     >
                       <BiShow size={16} />
-                      View Reel
+                      View Profile
                     </button>
-                  ) : (
-                    <span className="text-xs text-gray-400 italic">Deleted</span>
                   )}
                 </div>
 
                 {/* Status */}
-                <div>
-                  <span className={`admin-status-pill ${
-                    report.status === 'pending' ? 'status-open' : 
-                    report.status === 'resolved' ? 'status-resolved' : 'status-investigating'
-                  }`}>
-                    {report.status}
-                  </span>
-                </div>
+                {activeTab !== 'User' && (
+                  <div>
+                    <span className={`admin-status-pill ${
+                      report.status === 'pending' ? 'status-open' : 
+                      report.status === 'resolved' ? 'status-resolved' : 'status-investigating'
+                    }`}>
+                      {report.status}
+                    </span>
+                  </div>
+                )}
 
                 {/* Actions */}
                 <div className="flex items-center justify-end gap-2">
                   {report.status === 'pending' ? (
                     <>
-                      <button 
-                        className="admin-icon-btn success" 
-                        style={{ color: '#10b981' }}
-                        title="Resolve / Dismiss"
-                        onClick={() => handleDismissReport(report._id)}
-                      >
-                        <BiCheckCircle size={16} />
-                      </button>
-                      <button 
-                        className="admin-icon-btn" 
-                        style={{ color: '#ef4444' }}
-                        title="Remove Reel"
-                        disabled={!report.reportedItem}
-                        onClick={() => handleRemoveReel(report.reportedItem?._id, report._id)}
-                      >
-                        <BiTrash size={16} />
-                      </button>
+                      {report.reportType === 'Reel' && (
+                        <>
+                          <button 
+                            className="admin-icon-btn success" 
+                            style={{ color: '#10b981' }}
+                            title="Resolve / Dismiss"
+                            onClick={() => handleDismissReport(report._id)}
+                          >
+                            <BiCheckCircle size={16} />
+                          </button>
+                          <button 
+                            className="admin-icon-btn" 
+                            style={{ color: '#ef4444' }}
+                            title="Remove Reel"
+                            disabled={!report.reportedItem}
+                            onClick={() => handleRemoveReel(report.reportedItem?._id, report._id)}
+                          >
+                            <BiTrash size={16} />
+                          </button>
+                        </>
+                      )}
+                      
                       <button 
                         className="admin-icon-btn" 
                         style={{ color: '#f59e0b' }}
                         title="Ban User"
-                        disabled={!report.reportedItem?.user}
-                        onClick={() => handleBanUser(report.reportedItem?.user?._id, report._id)}
+                        disabled={report.reportType === 'Reel' ? !report.reportedItem?.user : !report.reportedItem}
+                        onClick={() => {
+                          const targetId = report.reportType === 'Reel' ? report.reportedItem?.user?._id : report.reportedItem?._id;
+                          handleBanUser(targetId, report._id);
+                        }}
                       >
                         <BiUserX size={18} />
                       </button>
@@ -335,6 +438,9 @@ const AdminReports = () => {
           grid-template-columns: 1.8fr 1.5fr 1.5fr 1.2fr 1fr 1fr;
           align-items: center;
           gap: 20px;
+        }
+        .admin-table-head--reports.no-status, .admin-table-row--reports.no-status {
+          grid-template-columns: 1.8fr 1.5fr 1.5fr 1.2fr 1fr;
         }
         .admin-table-head {
           padding: 12px 0;

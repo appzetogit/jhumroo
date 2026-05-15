@@ -3,6 +3,7 @@ import Reel from '../../../models/Reel.model.js';
 import Follow from '../../../models/Follow.model.js';
 import Like from '../../../models/Like.model.js';
 import SavedReel from '../../../models/SavedReel.model.js';
+import Report from '../../../models/Report.model.js';
 import { asyncHandler } from '../../../middleware/errorHandler.js';
 import { uploadImage, deleteFile } from '../../../config/cloudinary.js';
 import { getFileUrl } from '../../../utils/s3.js';
@@ -521,3 +522,98 @@ export const getMentionSuggestions = asyncHandler(async (req, res) => {
     users: suggestions
   });
 });
+
+/**
+ * @desc    Block/Unblock a user
+ * @route   POST /api/users/:id/block
+ * @access  Private
+ */
+export const toggleBlockUser = asyncHandler(async (req, res) => {
+  const { id: targetUserId } = req.params;
+  const user = req.user;
+
+  if (targetUserId === user._id.toString()) {
+    return res.status(400).json({
+      success: false,
+      message: 'You cannot block yourself'
+    });
+  }
+
+  const isBlocked = user.blockedUsers.includes(targetUserId);
+
+  if (isBlocked) {
+    // Unblock
+    user.blockedUsers = user.blockedUsers.filter(id => id.toString() !== targetUserId);
+    await user.save();
+    
+    res.status(200).json({
+      success: true,
+      message: 'User unblocked successfully',
+      isBlocked: false
+    });
+  } else {
+    // Block
+    user.blockedUsers.push(targetUserId);
+    await user.save();
+
+    // Remove follow relationship if exists
+    await Follow.deleteMany({
+      $or: [
+        { follower: user._id, following: targetUserId },
+        { follower: targetUserId, following: user._id }
+      ]
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'User blocked successfully',
+      isBlocked: true
+    });
+  }
+});
+
+/**
+ * @desc    Report a user
+ * @route   POST /api/users/:id/report
+ * @access  Private
+ */
+export const reportUser = asyncHandler(async (req, res) => {
+  const { reason, description } = req.body;
+  const { id: targetUserId } = req.params;
+
+  const targetUser = await User.findById(targetUserId);
+  if (!targetUser) {
+    return res.status(404).json({
+      success: false,
+      message: 'User not found'
+    });
+  }
+
+  // Limit: 10 reports per day (includes all report types to prevent spam)
+  const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const reportsInLast24Hours = await Report.countDocuments({
+    reportedBy: req.user._id,
+    createdAt: { $gte: oneDayAgo }
+  });
+
+  if (reportsInLast24Hours >= 10) {
+    return res.status(429).json({
+      success: false,
+      message: 'You have exceeded the daily report limit (10 per day). Please try again later.'
+    });
+  }
+
+  await Report.create({
+    reportedBy: req.user._id,
+    reportType: 'User',
+    reportedItem: targetUserId,
+    reason,
+    description
+  });
+
+  res.status(201).json({
+    success: true,
+    message: 'Thank you for reporting. We will review it shortly.'
+  });
+});
+

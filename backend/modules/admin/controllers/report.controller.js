@@ -12,21 +12,21 @@ export const getReports = asyncHandler(async (req, res) => {
   const page = parseInt(req.query.page) || 1;
   const limit = parseInt(req.query.limit) || 20;
   const skip = (page - 1) * limit;
+  const { type } = req.query;
 
-  const reports = await Report.find()
+  const query = {};
+  if (type && ['Reel', 'User', 'Comment'].includes(type)) {
+    query.reportType = type;
+  }
+
+  const reports = await Report.find(query)
     .populate('reportedBy', 'username fullName profilePicture')
-    .populate({
-      path: 'reportedItem',
-      populate: {
-        path: 'user',
-        select: 'username fullName profilePicture isBanned'
-      }
-    })
+    .populate('reportedItem')
     .sort({ createdAt: -1 })
     .skip(skip)
     .limit(limit);
 
-  const total = await Report.countDocuments();
+  const total = await Report.countDocuments(query);
 
   res.status(200).json({
     success: true,

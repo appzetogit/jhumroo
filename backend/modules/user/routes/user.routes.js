@@ -9,7 +9,9 @@ import {
   searchUsers,
   getSuggestedUsers,
   updateFCMToken,
-  getMentionSuggestions
+  getMentionSuggestions,
+  toggleBlockUser,
+  reportUser
 } from '../controllers/user.controller.js';
 import {
   getPreferences,
@@ -44,5 +46,9 @@ router.get('/me/preferences', protect, getPreferences);
 router.put('/me/preferences', protect, updatePreferences);
 router.post('/me/preferences/interested', protect, markInterested);
 router.post('/me/preferences/not-interested', protect, markNotInterested);
+
+// Block and Report routes
+router.post('/:id/block', protect, toggleBlockUser);
+router.post('/:id/report', protect, reportUser);
 
 export default router;

@@ -47,6 +47,14 @@ const adminUserService = {
     } catch (error) {
       throw error;
     }
+  },
+  
+  getUserReels: async (id, params) => {
+    try {
+      return await api.get(`/admin/users/${id}/reels`, { params });
+    } catch (error) {
+      throw error;
+    }
   }
 };
 

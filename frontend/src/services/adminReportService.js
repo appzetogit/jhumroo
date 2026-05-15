@@ -1,8 +1,10 @@
 import api from './api';
 
 const adminReportService = {
-  getReports: async (page = 1, limit = 20) => {
-    return await api.get(`/admin/reports?page=${page}&limit=${limit}`);
+  getReports: async (page = 1, limit = 20, type = '') => {
+    let url = `/admin/reports?page=${page}&limit=${limit}`;
+    if (type) url += `&type=${type}`;
+    return await api.get(url);
   },
 
   updateReportStatus: async (reportId, data) => {

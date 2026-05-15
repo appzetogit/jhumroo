@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { BiCheckCircle, BiEdit, BiTrash, BiBlock, BiRefresh } from 'react-icons/bi';
+import { useNavigate } from 'react-router-dom';
+import { BiCheckCircle, BiEdit, BiTrash, BiBlock, BiRefresh, BiShow } from 'react-icons/bi';
 import adminUserService from '../../../services/adminUserService';
 
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
 const AdminUsers = () => {
+  const navigate = useNavigate();
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -226,6 +228,14 @@ const AdminUsers = () => {
                     <BiCheckCircle size={18} />
                   </span>
                   <div style={{ display: 'flex', gap: '8px' }}>
+                    <button 
+                      type="button" 
+                      onClick={() => navigate(`/admin/users/${user._id}`)} 
+                      className="admin-icon-btn" 
+                      title="View Profile Details"
+                    >
+                      <BiShow size={18} />
+                    </button>
                     <button 
                       type="button" 
                       onClick={() => handleToggleBan(user._id)} 

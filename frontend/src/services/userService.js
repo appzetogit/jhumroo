@@ -281,6 +281,36 @@ const userService = {
       throw error;
     }
   },
+  
+  /**
+   * Block or unblock a user
+   * @param {string} userId - User ID to block/unblock
+   * @returns {Promise} Response
+   */
+  blockUser: async (userId) => {
+    try {
+      const response = await api.post(`/users/${userId}/block`);
+      return response;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  /**
+   * Report a user
+   * @param {string} userId - User ID to report
+   * @param {string} reason - Reason for report
+   * @param {string} description - Optional description
+   * @returns {Promise} Response
+   */
+  reportUser: async (userId, reason, description) => {
+    try {
+      const response = await api.post(`/users/${userId}/report`, { reason, description });
+      return response;
+    } catch (error) {
+      throw error;
+    }
+  },
 };
 
 export default userService;

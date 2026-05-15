@@ -28,6 +28,7 @@ import AdminNotifications from './pages/AdminNotifications';
 import AdminAds from './pages/AdminAds';
 import AdminInterests from './pages/AdminInterests';
 import AdminProfile from './pages/AdminProfile';
+import AdminUserDetails from './pages/AdminUserDetails';
 import { useAdminConfig } from '../../context/AdminConfigContext';
 import { useNavigate } from 'react-router-dom';
 import adminAuthService from '../../services/adminAuthService';
@@ -164,6 +165,7 @@ const AdminLayout = () => {
             <Route path="/" element={<Navigate to="dashboard" replace />} />
             <Route path="dashboard" element={<AdminDashboard />} />
             <Route path="users" element={<AdminUsers />} />
+            <Route path="users/:userId" element={<AdminUserDetails />} />
             <Route path="reels" element={<AdminReels />} />
             <Route path="audio" element={<AdminAudio />} />
             <Route path="reports" element={<AdminReports />} />
