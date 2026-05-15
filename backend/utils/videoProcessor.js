@@ -121,7 +121,20 @@ export const processReelWithAudio = async (videoId, rawKey, music) => {
         .on('error', reject);
     });
 
-    // 5. Upload final results to S3
+    // 5. Get duration using ffprobe
+    console.log(`[Processor:${videoId}] Probing for duration...`);
+    const duration = await new Promise((resolve, reject) => {
+      ffmpeg.ffprobe(outputLocalPath, (err, metadata) => {
+        if (err) {
+          console.warn(`[Processor:${videoId}] ffprobe failed:`, err.message);
+          resolve(0); // Fallback to 0 if probe fails
+        } else {
+          resolve(metadata.format.duration || 0);
+        }
+      });
+    });
+
+    // 6. Upload final results to S3
     console.log(`[Processor:${videoId}] Uploading processed files to S3...`);
     
     // We upload to a dedicated processed folder
@@ -136,7 +149,8 @@ export const processReelWithAudio = async (videoId, rawKey, music) => {
       videoUrl: videoUpload.url,
       videoKey: videoUpload.key,
       thumbnailUrl: thumbUpload.url,
-      thumbnailKey: thumbUpload.key
+      thumbnailKey: thumbUpload.key,
+      duration: duration
     };
 
   } catch (err) {

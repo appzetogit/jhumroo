@@ -77,7 +77,7 @@ export const sendOTP = asyncHandler(async (req, res) => {
  * @access  Public
  */
 export const verifyOTP = asyncHandler(async (req, res) => {
-  const { phoneNumber, otp } = req.body;
+  const { phoneNumber, otp, fcmTokenMobile, fcmToken } = req.body;
 
   // Find user
   const user = await User.findOne({ phoneNumber });
@@ -96,6 +96,10 @@ export const verifyOTP = asyncHandler(async (req, res) => {
       message: 'Invalid or expired OTP'
     });
   }
+
+  // Store FCM tokens if provided
+  if (fcmTokenMobile) user.fcmTokenMobile = fcmTokenMobile;
+  if (fcmToken) user.fcmToken = fcmToken;
 
   // Clear OTP and update last login
   user.clearOTP();
@@ -151,7 +155,7 @@ export const refreshToken = asyncHandler(async (req, res) => {
  * @access  Private
  */
 export const completeProfile = asyncHandler(async (req, res) => {
-  const { username, fullName, email, dateOfBirth } = req.body;
+  const { username, fullName, email, country, state, dateOfBirth } = req.body;
 
   // Check if username is already taken
   if (username) {
@@ -172,6 +176,8 @@ export const completeProfile = asyncHandler(async (req, res) => {
   // Update user profile fields
   if (fullName) req.user.fullName = fullName;
   if (email) req.user.email = email;
+  if (country) req.user.country = country;
+  if (state) req.user.state = state;
   if (dateOfBirth) req.user.dateOfBirth = dateOfBirth;
   
   // Set isVerified if profile completed
@@ -251,6 +257,7 @@ export const updateInterests = asyncHandler(async (req, res) => {
   }
 
   req.user.interests = interests;
+  req.user.isOnboarded = true;
   await req.user.save();
 
   res.status(200).json({

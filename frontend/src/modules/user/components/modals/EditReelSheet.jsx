@@ -7,7 +7,6 @@ const EditReelSheet = ({ isOpen, onClose, reelData, onUpdate }) => {
   const { isDarkMode } = useTheme();
   const [caption, setCaption] = useState('');
   const [allowComments, setAllowComments] = useState(true);
-  const [allowDuet, setAllowDuet] = useState(true);
   const [allowDownload, setAllowDownload] = useState(true);
   const [audience, setAudience] = useState('everyone');
   const [loading, setLoading] = useState(false);
@@ -20,7 +19,6 @@ const EditReelSheet = ({ isOpen, onClose, reelData, onUpdate }) => {
     if (reelData) {
       setCaption(reelData.caption || '');
       setAllowComments(reelData.allowComments !== false);
-      setAllowDuet(reelData.allowDuet !== false);
       setAllowDownload(reelData.allowDownload !== false);
       setAudience(reelData.audience || 'everyone');
       setThumbnailPreview(reelData.video?.thumbnail || reelData.poster);
@@ -48,7 +46,6 @@ const EditReelSheet = ({ isOpen, onClose, reelData, onUpdate }) => {
         const formData = new FormData();
         formData.append('caption', caption);
         formData.append('allowComments', allowComments);
-        formData.append('allowDuet', allowDuet);
         formData.append('allowDownload', allowDownload);
         formData.append('audience', audience);
         formData.append('thumbnail', thumbnailFile);
@@ -58,7 +55,6 @@ const EditReelSheet = ({ isOpen, onClose, reelData, onUpdate }) => {
         response = await reelService.updateReel(reelId, {
           caption,
           allowComments,
-          allowDuet,
           allowDownload,
           audience
         });
@@ -190,7 +186,6 @@ const EditReelSheet = ({ isOpen, onClose, reelData, onUpdate }) => {
           <div className="flex flex-col">
             <label className={`text-[12px] font-bold uppercase tracking-wider mb-2 block ${isDarkMode ? 'text-white/30' : 'text-black/30'}`}>Permissions</label>
             <Toggle label="Allow comments" value={allowComments} onChange={setAllowComments} />
-            <Toggle label="Allow Duet/Remix" value={allowDuet} onChange={setAllowDuet} />
             <Toggle label="Allow downloads" value={allowDownload} onChange={setAllowDownload} />
           </div>
         </div>

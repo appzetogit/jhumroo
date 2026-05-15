@@ -34,7 +34,7 @@ export const getAllReels = asyncHandler(async (req, res) => {
   // Filter reported content
   if (reported === 'true') {
     const reportedReelIds = await Report.distinct('reportedItem', {
-      reportType: 'reel',
+      reportType: 'Reel',
       status: { $in: ['pending', 'under_review'] }
     });
     query._id = { $in: reportedReelIds };
@@ -85,7 +85,7 @@ export const getReelById = asyncHandler(async (req, res) => {
   const [likesCount, commentsCount, reports] = await Promise.all([
     Like.countDocuments({ reel: reel._id }),
     Comment.countDocuments({ reel: reel._id }),
-    Report.find({ reportType: 'reel', reportedItem: reel._id })
+    Report.find({ reportType: 'Reel', reportedItem: reel._id })
       .populate('reportedBy', 'username fullName')
       .sort({ createdAt: -1 })
   ]);
@@ -143,7 +143,7 @@ export const deleteReel = asyncHandler(async (req, res) => {
     Like.deleteMany({ reel: reel._id }),
     Comment.deleteMany({ reel: reel._id }),
     Report.updateMany(
-      { reportType: 'reel', reportedItem: reel._id },
+      { reportType: 'Reel', reportedItem: reel._id },
       { status: 'resolved', actionTaken: 'content_removed' }
     )
   ]);
@@ -190,7 +190,7 @@ export const getAllComments = asyncHandler(async (req, res) => {
 
   if (reported === 'true') {
     const reportedCommentIds = await Report.distinct('reportedItem', {
-      reportType: 'comment',
+      reportType: 'Comment',
       status: { $in: ['pending', 'under_review'] }
     });
     query._id = { $in: reportedCommentIds };
@@ -237,7 +237,7 @@ export const deleteComment = asyncHandler(async (req, res) => {
 
   // Update reports
   await Report.updateMany(
-    { reportType: 'comment', reportedItem: comment._id },
+    { reportType: 'Comment', reportedItem: comment._id },
     { status: 'resolved', actionTaken: 'content_removed' }
   );
 
@@ -254,6 +254,72 @@ export const deleteComment = asyncHandler(async (req, res) => {
   res.status(200).json({
     success: true,
     message: 'Comment deleted successfully'
+  });
+});
+
+/**
+ * @desc    Sync durations for all reels (Fix missing metadata)
+ * @route   POST /api/admin/content/reels/sync-durations
+ * @access  Private/Admin
+ */
+import ffmpeg from 'fluent-ffmpeg';
+export const syncAllDurations = asyncHandler(async (req, res) => {
+  const reels = await Reel.find({ 
+    $or: [
+      { 'video.duration': 0 }, 
+      { 'video.duration': { $exists: false } },
+      { 'video.duration': null }
+    ] 
+  });
+  
+  console.log(`[Admin] Syncing durations for ${reels.length} reels`);
+  let updatedCount = 0;
+  const results = [];
+  const cdnDomain = process.env.CLOUDFRONT_DOMAIN;
+
+  for (const reel of reels) {
+    try {
+      let videoUrl = reel.video?.url;
+      
+      // If it's a relative path or S3 key, construct full URL
+      if (videoUrl && !videoUrl.startsWith('http')) {
+        if (cdnDomain) {
+          videoUrl = `https://${cdnDomain}/${reel.video.publicId}`;
+        }
+      }
+
+      let duration = 0;
+      if (videoUrl) {
+        duration = await new Promise((resolve) => {
+          ffmpeg.ffprobe(videoUrl, (err, metadata) => {
+            if (err) resolve(0);
+            else resolve(metadata.format.duration || 0);
+          });
+        });
+      }
+
+      // Fallback to music duration if video duration is still 0
+      if (!duration || duration === 0) {
+        duration = reel.music?.duration || 0;
+      }
+
+      if (duration > 0) {
+        await Reel.updateOne(
+          { _id: reel._id },
+          { $set: { 'video.duration': Math.round(duration) } }
+        );
+        updatedCount++;
+        results.push({ id: reel._id, duration: Math.round(duration) });
+      }
+    } catch (err) {
+      console.error(`Failed to sync duration for reel ${reel._id}:`, err.message);
+    }
+  }
+
+  res.status(200).json({
+    success: true,
+    message: `Successfully updated durations for ${updatedCount} reels`,
+    results
   });
 });
 

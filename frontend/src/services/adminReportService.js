@@ -2,23 +2,19 @@ import api from './api';
 
 const adminReportService = {
   getReports: async (page = 1, limit = 20) => {
-    const response = await api.get(`/admin/reports?page=${page}&limit=${limit}`);
-    return response.data;
+    return await api.get(`/admin/reports?page=${page}&limit=${limit}`);
   },
 
   updateReportStatus: async (reportId, data) => {
-    const response = await api.put(`/admin/reports/${reportId}`, data);
-    return response.data;
+    return await api.put(`/admin/reports/${reportId}`, data);
   },
 
   removeReel: async (reelId, reportId) => {
-    const response = await api.post(`/admin/reports/remove-reel/${reelId}`, { reportId });
-    return response.data;
+    return await api.post(`/admin/reports/remove-reel/${reelId}`, { reportId });
   },
 
   banUser: async (userId, reportId, reason) => {
-    const response = await api.post(`/admin/reports/ban-user/${userId}`, { reportId, reason });
-    return response.data;
+    return await api.post(`/admin/reports/ban-user/${userId}`, { reportId, reason });
   }
 };
 

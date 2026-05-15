@@ -31,17 +31,19 @@ const authService = {
    * @param {string} otp - OTP code
    * @returns {Promise} Response with user data and token
    */
-  verifyOTP: async (phoneNumber, otp) => {
+  verifyOTP: async (phoneNumber, otp, fcmTokenMobile = '', fcmToken = '') => {
     try {
       const response = await api.post('/auth/verify-otp', {
         phoneNumber,
         otp,
+        fcmTokenMobile,
+        fcmToken,
       });
       
       // Store token and user data
       if (response.success && response.token) {
-        localStorage.setItem('jhumroo_token', response.token);
-        localStorage.setItem('jhumroo_user', JSON.stringify(response.user));
+        sessionStorage.setItem('jhumroo_token', response.token);
+        sessionStorage.setItem('jhumroo_user', JSON.stringify(response.user));
       }
       
       return response;
@@ -61,7 +63,7 @@ const authService = {
       
       // Update stored user data
       if (response.success && response.user) {
-        localStorage.setItem('jhumroo_user', JSON.stringify(response.user));
+        sessionStorage.setItem('jhumroo_user', JSON.stringify(response.user));
       }
       
       return response;
@@ -94,7 +96,7 @@ const authService = {
       
       // Update stored user data
       if (response.success && response.user) {
-        localStorage.setItem('jhumroo_user', JSON.stringify(response.user));
+        sessionStorage.setItem('jhumroo_user', JSON.stringify(response.user));
       }
       
       return response;
@@ -112,14 +114,14 @@ const authService = {
       const response = await api.post('/auth/logout');
       
       // Clear stored data
-      localStorage.removeItem('jhumroo_token');
-      localStorage.removeItem('jhumroo_user');
+      sessionStorage.removeItem('jhumroo_token');
+      sessionStorage.removeItem('jhumroo_user');
       
       return response;
     } catch (error) {
       // Clear stored data even if API call fails
-      localStorage.removeItem('jhumroo_token');
-      localStorage.removeItem('jhumroo_user');
+      sessionStorage.removeItem('jhumroo_token');
+      sessionStorage.removeItem('jhumroo_user');
       throw error;
     }
   },
@@ -129,7 +131,7 @@ const authService = {
    * @returns {string|null} Auth token
    */
   getToken: () => {
-    return localStorage.getItem('jhumroo_token');
+    return sessionStorage.getItem('jhumroo_token');
   },
 
   /**
@@ -137,7 +139,7 @@ const authService = {
    * @returns {Object|null} User data
    */
   getUser: () => {
-    const user = localStorage.getItem('jhumroo_user');
+    const user = sessionStorage.getItem('jhumroo_user');
     return user ? JSON.parse(user) : null;
   },
 
@@ -149,8 +151,8 @@ const authService = {
     try {
       const response = await api.post('/auth/refresh-token');
       if (response.success && response.token) {
-        localStorage.setItem('jhumroo_token', response.token);
-        localStorage.setItem('jhumroo_user', JSON.stringify(response.user));
+        sessionStorage.setItem('jhumroo_token', response.token);
+        sessionStorage.setItem('jhumroo_user', JSON.stringify(response.user));
       }
       return response;
     } catch (error) {
@@ -167,7 +169,7 @@ const authService = {
     try {
       const response = await api.post('/auth/interests', { interests });
       if (response.success && response.user) {
-        localStorage.setItem('jhumroo_user', JSON.stringify(response.user));
+        sessionStorage.setItem('jhumroo_user', JSON.stringify(response.user));
       }
       return response;
     } catch (error) {
@@ -180,7 +182,7 @@ const authService = {
    * @returns {boolean} Authentication status
    */
   isAuthenticated: () => {
-    return !!localStorage.getItem('jhumroo_token');
+    return !!sessionStorage.getItem('jhumroo_token');
   },
 };
 

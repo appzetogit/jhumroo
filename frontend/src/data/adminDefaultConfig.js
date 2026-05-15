@@ -78,8 +78,8 @@ const DEFAULT_SETTINGS_SECTIONS = [
     items: [
       { icon: 'bell', label: 'Push notifications', route: '/settings/push-notifications' },
       { icon: 'moon', label: 'Dark mode', isToggle: true },
-      { icon: 'globe', label: 'Language', route: '/settings/language' },
       { icon: 'help', label: 'Help Center', route: '/settings/help-center' },
+      { icon: 'help', label: 'Support', route: '/settings/support' },
       { icon: 'file', label: 'Terms & Condition', route: '/settings/terms-and-condition' },
       { icon: 'shield', label: 'Privacy Policy', route: '/settings/privacy-policy' },
     ],
@@ -114,20 +114,6 @@ const DEFAULT_PUSH_SECTIONS = [
       { label: 'Mentions & tags', default: true },
     ],
   },
-  {
-    title: 'Messages',
-    items: [
-      { label: 'Direct messages', default: true },
-      { label: 'Message reactions', default: true },
-    ],
-  },
-  {
-    title: 'Recommendations',
-    items: [
-      { label: 'Suggested accounts', default: false },
-      { label: 'Suggested content', default: true },
-    ],
-  },
 ];
 
 const DEFAULT_PRIVACY_SECTIONS = [
@@ -142,8 +128,6 @@ const DEFAULT_PRIVACY_SECTIONS = [
   {
     title: 'Safety',
     items: [
-      { icon: 'duet', label: 'Duet', value: 'duet', route: '/settings/privacy/duet' },
-      { icon: 'stitch', label: 'Stitch', value: 'stitch', route: '/settings/privacy/stitch' },
       { icon: 'downloads', label: 'Downloads', value: 'downloads', route: '/settings/privacy/downloads' },
       { icon: 'blocked', label: 'Blocked accounts', route: '/settings/privacy/blocked-accounts' },
       { icon: 'lock', label: 'Private account', isToggle: true },

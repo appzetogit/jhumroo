@@ -2,6 +2,7 @@ import Message from '../../../models/Message.model.js';
 import Conversation from '../../../models/Conversation.model.js';
 import User from '../../../models/User.model.js';
 import Reel from '../../../models/Reel.model.js';
+import Follow from '../../../models/Follow.model.js';
 import { asyncHandler } from '../../../middleware/errorHandler.js';
 import { uploadImage, uploadVideo, deleteFile } from '../../../config/cloudinary.js';
 import { getIO } from '../../../config/socket.js';
@@ -17,13 +18,13 @@ export const getConversations = asyncHandler(async (req, res) => {
 
   const conversations = await Conversation.find({
     participants: userId,
-    isActive: true
+    isActive: true,
+    deletedBy: { $ne: userId }
   })
     .populate('participants', 'username fullName profilePicture isVerified')
     .populate('lastMessage.sender', 'username')
     .sort({ 'lastMessage.timestamp': -1 });
 
-  // Add unread count and format response
   const formattedConversations = conversations.map(conv => {
     const otherParticipant = conv.participants.find(
       p => p._id.toString() !== userId.toString()
@@ -34,8 +35,17 @@ export const getConversations = asyncHandler(async (req, res) => {
       participant: otherParticipant,
       lastMessage: conv.lastMessage,
       unreadCount: conv.getUnreadCount(userId),
+      isPinned: conv.pinnedBy?.includes(userId) || false,
+      isMuted: conv.mutedBy?.includes(userId) || false,
       updatedAt: conv.updatedAt
     };
+  });
+
+  // Sort pinned first
+  formattedConversations.sort((a, b) => {
+    if (a.isPinned && !b.isPinned) return -1;
+    if (!a.isPinned && b.isPinned) return 1;
+    return 0;
   });
 
   res.status(200).json({
@@ -68,6 +78,29 @@ export const getOrCreateConversation = asyncHandler(async (req, res) => {
       success: false,
       message: 'User not found'
     });
+  }
+
+  // Privacy Check
+  if (targetUser.messagePrivacy === 'no_one') {
+    return res.status(403).json({
+      success: false,
+      message: 'Direct messages not allowed by this user'
+    });
+  }
+
+  if (targetUser.messagePrivacy === 'friends') {
+    // Check if mutual followers (Friends)
+    const [isFollowing, isFollower] = await Promise.all([
+      Follow.findOne({ follower: currentUserId, following: userId, status: 'accepted' }),
+      Follow.findOne({ follower: userId, following: currentUserId, status: 'accepted' })
+    ]);
+
+    if (!isFollowing || !isFollower) {
+      return res.status(403).json({
+        success: false,
+        message: 'Only mutual followers can message this user'
+      });
+    }
   }
 
   // Find or create conversation
@@ -180,9 +213,35 @@ export const sendMessage = asyncHandler(async (req, res) => {
   }
 
   // Get receiver ID
-  const receiver = conversation.participants.find(
+  const receiverParticipant = conversation.participants.find(
     p => p._id.toString() !== senderId.toString()
   );
+
+  // Fetch full receiver user data for privacy check
+  const receiver = await User.findById(receiverParticipant._id || receiverParticipant);
+  if (!receiver) {
+    return res.status(404).json({ success: false, message: 'Receiver not found' });
+  }
+
+  // Privacy Check
+  if (receiver.messagePrivacy === 'no_one') {
+    return res.status(403).json({ success: false, message: 'Direct messages not allowed by this user' });
+  }
+
+  if (receiver.messagePrivacy === 'friends') {
+    // Check if mutual followers (Friends)
+    const [isFollowing, isFollower] = await Promise.all([
+      Follow.findOne({ follower: senderId, following: receiver._id, status: 'accepted' }),
+      Follow.findOne({ follower: receiver._id, following: senderId, status: 'accepted' })
+    ]);
+
+    if (!isFollowing || !isFollower) {
+      return res.status(403).json({
+        success: false,
+        message: 'Only mutual followers can message this user'
+      });
+    }
+  }
 
   // Create message content based on type
   const content = {};
@@ -456,8 +515,8 @@ export const unsendMessage = asyncHandler(async (req, res) => {
 });
 
 /**
- * @desc    Delete conversation
- * @route   DELETE /api/messages/conversation/:conversationId
+ * @desc    Soft delete conversation for user
+ * @route   DELETE /api/messages/conversations/:conversationId
  * @access  Private
  */
 export const deleteConversation = asyncHandler(async (req, res) => {
@@ -476,15 +535,20 @@ export const deleteConversation = asyncHandler(async (req, res) => {
     });
   }
 
-  // Delete all messages for this user
+  // Add user to deletedBy in conversation document
+  if (!conversation.deletedBy.includes(userId)) {
+    conversation.deletedBy.push(userId);
+    await conversation.save();
+  }
+
+  // Also mark all existing messages as deleted for this user
   await Message.updateMany(
     {
       conversation: conversationId,
       $or: [{ sender: userId }, { receiver: userId }]
     },
     {
-      $addToSet: { deletedBy: userId },
-      $set: { isDeleted: true }
+      $addToSet: { deletedBy: userId }
     }
   );
 
@@ -492,4 +556,140 @@ export const deleteConversation = asyncHandler(async (req, res) => {
     success: true,
     message: 'Conversation deleted'
   });
+});
+
+/**
+ * @desc    Pin a message
+ * @route   PUT /api/messages/:messageId/pin
+ * @access  Private
+ */
+export const pinMessage = asyncHandler(async (req, res) => {
+  const { messageId } = req.params;
+  const userId = req.user._id;
+
+  const message = await Message.findOne({
+    _id: messageId,
+    $or: [{ sender: userId }, { receiver: userId }]
+  });
+
+  if (!message) {
+    return res.status(404).json({
+      success: false,
+      message: 'Message not found'
+    });
+  }
+
+  message.isPinned = true;
+  await message.save();
+
+  // Emit socket event
+  const io = getIO();
+  const otherParticipant = message.sender.toString() === userId.toString() ? message.receiver : message.sender;
+  io.to(otherParticipant.toString()).emit('message_pinned', {
+    messageId: message._id,
+    conversationId: message.conversation,
+    isPinned: true
+  });
+
+  res.status(200).json({
+    success: true,
+    message: 'Message pinned'
+  });
+});
+
+/**
+ * @desc    Unpin a message
+ * @route   PUT /api/messages/:messageId/unpin
+ * @access  Private
+ */
+export const unpinMessage = asyncHandler(async (req, res) => {
+  const { messageId } = req.params;
+  const userId = req.user._id;
+
+  const message = await Message.findOne({
+    _id: messageId,
+    $or: [{ sender: userId }, { receiver: userId }]
+  });
+
+  if (!message) {
+    return res.status(404).json({
+      success: false,
+      message: 'Message not found'
+    });
+  }
+
+  message.isPinned = false;
+  await message.save();
+
+  // Emit socket event
+  const io = getIO();
+  const otherParticipant = message.sender.toString() === userId.toString() ? message.receiver : message.sender;
+  io.to(otherParticipant.toString()).emit('message_pinned', {
+    messageId: message._id,
+    conversationId: message.conversation,
+    isPinned: false
+  });
+
+  res.status(200).json({
+    success: true,
+    message: 'Message unpinned'
+  });
+});
+
+/**
+ * @desc    Toggle pin conversation
+ * @route   PUT /api/messages/conversations/:conversationId/pin
+ * @access  Private
+ */
+export const togglePinConversation = asyncHandler(async (req, res) => {
+  const { conversationId } = req.params;
+  const userId = req.user._id;
+
+  const conversation = await Conversation.findOne({
+    _id: conversationId,
+    participants: userId
+  });
+
+  if (!conversation) {
+    return res.status(404).json({ success: false, message: 'Conversation not found' });
+  }
+
+  const isPinned = conversation.pinnedBy.includes(userId);
+  if (isPinned) {
+    conversation.pinnedBy = conversation.pinnedBy.filter(id => id.toString() !== userId.toString());
+  } else {
+    conversation.pinnedBy.push(userId);
+  }
+
+  await conversation.save();
+  res.status(200).json({ success: true, isPinned: !isPinned });
+});
+
+/**
+ * @desc    Toggle mute conversation
+ * @route   PUT /api/messages/conversations/:conversationId/mute
+ * @access  Private
+ */
+export const toggleMuteConversation = asyncHandler(async (req, res) => {
+  const { conversationId } = req.params;
+  const userId = req.user._id;
+
+  const conversation = await Conversation.findOne({
+    _id: conversationId,
+    participants: userId
+  });
+
+  if (!conversation) {
+    return res.status(404).json({ success: false, message: 'Conversation not found' });
+  }
+
+  const isMuted = conversation.mutedBy.includes(userId);
+  if (isMuted) {
+    conversation.mutedBy = conversation.mutedBy.filter(id => id.toString() !== userId.toString());
+  } else {
+    conversation.mutedBy.push(userId);
+  }
+
+  await conversation.save();
+  res.status(200).json({ success: true, isMuted: !isMuted });
 });

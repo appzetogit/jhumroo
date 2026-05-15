@@ -93,14 +93,6 @@ const reelSchema = new mongoose.Schema(
       type: Boolean,
       default: true
     },
-    allowDuet: {
-      type: Boolean,
-      default: true
-    },
-    allowStitch: {
-      type: Boolean,
-      default: true
-    },
     allowDownload: {
       type: Boolean,
       default: true
@@ -296,8 +288,34 @@ reelSchema.methods.extractMentions = async function () {
   if (matches) {
     const usernames = matches.map(mention => mention.slice(1).toLowerCase());
     const User = mongoose.model('User');
-    const users = await User.find({ username: { $in: usernames } }).select('_id');
-    this.mentions = users.map(user => user._id);
+    const Follow = mongoose.model('Follow');
+    
+    // Find all potential users being mentioned
+    const users = await User.find({ username: { $in: usernames } }).select('_id mentionPrivacy');
+    
+    const validMentions = [];
+    for (const targetUser of users) {
+      const privacy = targetUser.mentionPrivacy || 'everyone';
+      
+      if (privacy === 'everyone') {
+        validMentions.push(targetUser._id);
+      } else if (privacy === 'friends') {
+        // Friends means mutual followers
+        const [followA, followB] = await Promise.all([
+          Follow.findOne({ follower: this.user, following: targetUser._id, status: 'accepted' }),
+          Follow.findOne({ follower: targetUser._id, following: this.user, status: 'accepted' })
+        ]);
+        
+        if (followA && followB) {
+          validMentions.push(targetUser._id);
+        }
+      }
+      // If 'no_one', we don't add to validMentions
+    }
+    
+    this.mentions = validMentions;
+  } else {
+    this.mentions = [];
   }
 };
 

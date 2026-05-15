@@ -111,7 +111,9 @@ const FollowersPage = () => {
         if (suggestedRes.success) setSuggested(suggestedRes.users);
       }
     } catch (error) {
-      console.error('Failed to fetch data:', error);
+      if (!error?.isPrivate) {
+        console.error('Failed to fetch data:', error);
+      }
     } finally {
       setLoading(false);
     }

@@ -11,7 +11,6 @@ const EditProfilePage = () => {
     const [fullName, setFullName] = useState(currentUser?.fullName || '');
     const [username, setUsername] = useState(currentUser?.username || '');
     const [bio, setBio] = useState(currentUser?.bio || '');
-    const [interests, setInterests] = useState(currentUser?.interests?.join(', ') || '');
     const [loading, setLoading] = useState(false);
     const [uploading, setUploading] = useState(false);
 
@@ -21,8 +20,7 @@ const EditProfilePage = () => {
             const response = await userService.updateProfile({
                 fullName,
                 username,
-                bio,
-                interests: interests.split(',').map(i => i.trim()).filter(i => i !== '')
+                bio
             });
             if (response.success) {
                 updateUser(response.user);
@@ -155,17 +153,27 @@ const EditProfilePage = () => {
                     </div>
 
                     <div className="flex flex-col gap-2">
-                        <label className="text-white/40 text-[12px] font-bold uppercase tracking-widest ml-1">Interests</label>
-                        <div className="bg-[#242424] rounded-[14px] p-4 border border-white/5 focus-within:border-white/20 transition-all">
-                            <input 
-                                type="text" 
-                                value={interests} 
-                                onChange={(e) => setInterests(e.target.value)}
-                                placeholder="Cooking, Travel, Music..."
-                                className="bg-transparent text-white text-[15px] w-full outline-none font-medium" 
-                            />
+                        <div className="flex items-center justify-between ml-1">
+                            <label className="text-white/40 text-[12px] font-bold uppercase tracking-widest">Interests</label>
+                            <button 
+                                type="button"
+                                onClick={() => navigate('/settings/interests')}
+                                className="text-[#FE2C55] text-[13px] font-bold active:opacity-60 transition-opacity"
+                            >
+                                Edit
+                            </button>
                         </div>
-                        <p className="text-white/30 text-[11px] ml-1">Separate interests with commas.</p>
+                        <div 
+                            className="bg-[#242424] rounded-[18px] p-4 border border-white/5 cursor-pointer active:bg-white/[0.02] transition-colors"
+                            onClick={() => navigate('/settings/interests')}
+                        >
+                            <p className="text-white text-[15px] font-medium leading-relaxed">
+                                {currentUser?.interests && currentUser.interests.length > 0 
+                                    ? currentUser.interests.join(', ') 
+                                    : 'Pick your favorite topics...'}
+                            </p>
+                        </div>
+                        <p className="text-white/30 text-[11px] ml-1">Your interests help us personalize your feed.</p>
                     </div>
                 </div>
             </div>

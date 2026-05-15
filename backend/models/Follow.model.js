@@ -34,30 +34,47 @@ followSchema.index({ follower: 1, following: 1 }, { unique: true });
 followSchema.index({ following: 1, createdAt: -1 });
 followSchema.index({ follower: 1, createdAt: -1 });
 
-// Prevent users from following themselves
-followSchema.pre('save', function (next) {
-  if (this.follower.equals(this.following)) {
-    next(new Error('Users cannot follow themselves'));
-  } else {
-    next();
+// Update user stats on follow
+followSchema.post('save', async function (doc) {
+  // Only update stats if status is 'accepted'
+  if (doc.status !== 'accepted') return;
+  
+  // We need to know if this was a new follow or a transition from pending to accepted
+  // However, post('save') doesn't have access to what changed.
+  // A better way is to use a flag set in pre('save')
+  if (this._shouldUpdateStats) {
+    const User = mongoose.model('User');
+    
+    // Increment follower count for the user being followed
+    await User.findByIdAndUpdate(doc.following, {
+      $inc: { 'stats.followersCount': 1 }
+    });
+    
+    // Increment following count for the follower
+    await User.findByIdAndUpdate(doc.follower, {
+      $inc: { 'stats.followingCount': 1 }
+    });
+    
+    // Reset flag
+    this._shouldUpdateStats = false;
   }
 });
 
-// Update user stats on follow
-followSchema.post('save', async function (doc) {
-  if (doc.status !== 'accepted') return;
+// Track status changes in pre-save
+followSchema.pre('save', function (next) {
+  if (this.follower.equals(this.following)) {
+    return next(new Error('Users cannot follow themselves'));
+  }
+
+  // If new document and status is accepted, or if status changed to accepted
+  if ((this.isNew && this.status === 'accepted') || 
+      (!this.isNew && this.isModified('status') && this.status === 'accepted')) {
+    this._shouldUpdateStats = true;
+  } else {
+    this._shouldUpdateStats = false;
+  }
   
-  const User = mongoose.model('User');
-  
-  // Increment follower count for the user being followed
-  await User.findByIdAndUpdate(doc.following, {
-    $inc: { 'stats.followersCount': 1 }
-  });
-  
-  // Increment following count for the follower
-  await User.findByIdAndUpdate(doc.follower, {
-    $inc: { 'stats.followingCount': 1 }
-  });
+  next();
 });
 
 // Update user stats on unfollow

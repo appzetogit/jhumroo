@@ -71,6 +71,13 @@ const adminContentService = {
     } catch (error) {
       throw error;
     }
+  },
+  syncDurations: async () => {
+    try {
+      return await api.post('/admin/content/reels/sync-durations');
+    } catch (error) {
+      throw error;
+    }
   }
 };
 

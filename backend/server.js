@@ -4,6 +4,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import compression from 'compression';
 import morgan from 'morgan';
+import cookieParser from 'cookie-parser';
 import dotenv from 'dotenv';
 import connectDB from './config/database.js';
 import { errorHandler } from './middleware/errorHandler.js';
@@ -18,6 +19,10 @@ import followRoutes from './modules/follow/routes/follow.routes.js';
 import commentRoutes from './modules/comment/routes/comment.routes.js';
 import messageRoutes from './modules/message/routes/message.routes.js';
 import audioRoutes from './modules/audio/routes/audio.routes.js';
+import notificationRoutes from './modules/notification/routes/notification.routes.js';
+import problemReportRoutes from './modules/problemReport/problemReport.routes.js';
+import supportRoutes from './modules/support/support.routes.js';
+import staticPageRoutes from './modules/staticPage/staticPage.routes.js';
 
 // Import Admin Routes
 import adminAuthRoutes from './modules/admin/routes/auth.routes.js';
@@ -26,6 +31,7 @@ import adminContentRoutes from './modules/admin/routes/content.routes.js';
 import adminAnalyticsRoutes from './modules/admin/routes/analytics.routes.js';
 import adminAdminsRoutes from './modules/admin/routes/admins.routes.js';
 import adminReportRoutes from './modules/admin/routes/report.routes.js';
+import adminInterestRoutes from './modules/admin/routes/interest.routes.js';
 
 // Load environment variables
 dotenv.config();
@@ -50,6 +56,7 @@ app.use(cors({
 app.use(compression()); // Compress responses
 app.use(express.json({ limit: '50mb' })); // Parse JSON bodies
 app.use(express.urlencoded({ extended: true, limit: '50mb' })); // Parse URL-encoded bodies
+app.use(cookieParser()); // Parse cookies
 app.use(morgan(process.env.NODE_ENV === 'development' ? 'dev' : 'combined')); // Logging
 
 // Rate limiting
@@ -72,6 +79,11 @@ app.use('/api/follows', followRoutes);
 app.use('/api', commentRoutes);
 app.use('/api/messages', messageRoutes);
 app.use('/api/audios', audioRoutes);
+app.use('/api/notifications', notificationRoutes);
+app.use('/api/problem-reports', problemReportRoutes);
+app.use('/api/support-requests', supportRoutes);
+app.use('/api/static-pages', staticPageRoutes);
+app.use('/api/interests', adminInterestRoutes);
 
 // Admin API Routes
 app.use('/api/admin/auth', adminAuthRoutes);
@@ -80,6 +92,10 @@ app.use('/api/admin/content', adminContentRoutes);
 app.use('/api/admin/analytics', adminAnalyticsRoutes);
 app.use('/api/admin/admins', adminAdminsRoutes);
 app.use('/api/admin/reports', adminReportRoutes);
+app.use('/api/admin/problem-reports', problemReportRoutes);
+app.use('/api/admin/support-requests', supportRoutes);
+app.use('/api/admin/static-pages', staticPageRoutes);
+app.use('/api/admin/interests', adminInterestRoutes);
 
 // 404 handler
 app.use('*', (req, res) => {

@@ -141,6 +141,70 @@ const messageService = {
       throw error;
     }
   },
+  
+  /**
+   * Pin message
+   * @param {string} messageId - Message ID
+   * @returns {Promise} Response
+   */
+  pinMessage: async (messageId) => {
+    try {
+      const response = await api.put(`/messages/${messageId}/pin`);
+      return response;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  /**
+   * Unpin message
+   * @param {string} messageId - Message ID
+   * @returns {Promise} Response
+   */
+  unpinMessage: async (messageId) => {
+    try {
+      const response = await api.put(`/messages/${messageId}/unpin`);
+      return response;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  /**
+   * Toggle pin conversation
+   */
+  togglePinConversation: async (conversationId) => {
+    try {
+      const response = await api.put(`/messages/conversation/${conversationId}/pin`);
+      return response;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  /**
+   * Toggle mute conversation
+   */
+  toggleMuteConversation: async (conversationId) => {
+    try {
+      const response = await api.put(`/messages/conversation/${conversationId}/mute`);
+      return response;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  /**
+   * Delete conversation for current user
+   */
+  deleteConversation: async (conversationId) => {
+    try {
+      const response = await api.delete(`/messages/conversation/${conversationId}`);
+      return response;
+    } catch (error) {
+      throw error;
+    }
+  },
 };
 
 export default messageService;

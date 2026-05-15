@@ -24,14 +24,34 @@ const PrivacyPage = () => {
       blocked: BiListUl,
       lock: BiLock,
     };
+    const formatPrivacyValue = (val) => {
+      if (!val) return val;
+      if (typeof val !== 'string') return val;
+      if (val === 'no_one') return 'No one';
+      return val.charAt(0).toUpperCase() + val.slice(1);
+    };
+
     const privacySections = (config?.settings?.privacySections || []).map((section) => ({
       ...section,
       items: (section.items || []).map((item) => {
         const Icon = item.icon ? iconMap[item.icon] : null;
+        let displayValue = item.value ? privacySettings[item.value] : item.value;
+
+        // Override with real user data if available
+        if (item.value === 'comments' && currentUser?.commentPrivacy) {
+          displayValue = formatPrivacyValue(currentUser.commentPrivacy);
+        } else if (item.value === 'mentionsTags' && currentUser?.mentionPrivacy) {
+          displayValue = formatPrivacyValue(currentUser.mentionPrivacy);
+        } else if (item.value === 'directMessages' && currentUser?.messagePrivacy) {
+          displayValue = formatPrivacyValue(currentUser.messagePrivacy);
+        } else if (item.value === 'downloads' && currentUser?.downloadPrivacy) {
+          displayValue = formatPrivacyValue(currentUser.downloadPrivacy);
+        }
+
         return {
           ...item,
           icon: Icon ? <Icon size={20} className={item.icon === 'stitch' ? 'rotate-90' : ''} /> : null,
-          value: item.value ? privacySettings[item.value] : item.value,
+          value: displayValue,
         };
       }),
     }));

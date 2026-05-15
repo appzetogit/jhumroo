@@ -58,8 +58,6 @@ const createInitialPostState = () => ({
   location: '',
   linkType: '',
   allowComments: true,
-  allowDuet: true,
-  allowStitch: true,
   highQuality: true,
   saveToDevice: true,
   autoCaptions: true,
@@ -520,11 +518,15 @@ const DraggableOverlay = ({ overlay, index, setActiveOverlays, setIsDraggingAny,
       {overlay.type === 'video' ? (
         <video 
           src={overlay.url} 
-          autoPlay 
           loop 
           muted 
           playsInline 
-          className="h-full w-full object-cover" 
+          className="h-full w-full object-cover"
+          onCanPlay={(e) => {
+            e.target.play().catch(err => {
+              if (err.name !== 'AbortError') console.warn("Overlay video play failed:", err);
+            });
+          }}
         />
       ) : (
         <img src={overlay.url} alt="" className="h-full w-full object-cover" />
@@ -853,6 +855,28 @@ const CreatePage = () => {
       }
     };
   }, [stageStack, selectedSound]);
+  
+  // Handle Editor Video Playback Safely
+  useEffect(() => {
+    if (stage === 'editor' && editorVideoRef.current) {
+      if (isEditorPlaying) {
+        editorVideoRef.current.play().catch(err => {
+          if (err.name !== 'AbortError') console.warn("Editor video play failed:", err);
+        });
+      } else {
+        editorVideoRef.current.pause();
+      }
+    }
+  }, [isEditorPlaying, stage, currentClipIndex]);
+
+  // Handle Preview Video Playback Safely
+  useEffect(() => {
+    if (stage === 'preview' && previewVideoRef.current) {
+      previewVideoRef.current.play().catch(err => {
+        if (err.name !== 'AbortError') console.warn("Preview video play failed:", err);
+      });
+    }
+  }, [stage, previewUrl]);
 
   // Sync audio playback position when clipStart changes
   useEffect(() => {
@@ -1054,7 +1078,7 @@ const CreatePage = () => {
 
   // Safety: Reset to camera if data is lost but stage is advanced
   useEffect(() => {
-    if (!isRestoring && stage !== 'camera' && stage !== 'templates' && !previewUrl && !videoFile) {
+    if (!isRestoring && stage !== 'camera' && !previewUrl && !videoFile) {
       console.warn("Session data lost, resetting create flow to camera.");
       setStageStack(['camera']);
     }
@@ -1169,8 +1193,6 @@ const CreatePage = () => {
     const secs = Math.floor(seconds % 60);
     return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
   };
-  const themedTemplateCardClass = 'min-w-[140px] rounded-[18px] border border-white/15 bg-black/30 p-3 text-left text-white backdrop-blur-sm';
-  const themedTemplateMetaClass = 'mt-1 text-[11px] text-white/55';
   const themedUtilityTextClass = 'text-white';
   const themedUtilityBadgeClass = isDarkMode
     ? 'mx-auto flex h-11 w-11 items-center justify-center overflow-hidden rounded-xl border border-white/25 bg-black/25 backdrop-blur-sm'
@@ -1954,8 +1976,6 @@ const CreatePage = () => {
             caption: postState.caption,
             audience: postState.audience,
             allowComments: postState.allowComments,
-            allowDuet: postState.allowDuet,
-            allowStitch: postState.allowStitch,
             highQuality: postState.highQuality,
             saveToDevice: postState.saveToDevice,
             autoCaptions: postState.autoCaptions,
@@ -2349,7 +2369,7 @@ const CreatePage = () => {
     }
 
     if (actionId === 'delete') {
-      showToast('Delete action is mocked for UI');
+      // Future: Implement clip deletion
       setEditorAction(actionId);
       return;
     }
@@ -2496,123 +2516,107 @@ const CreatePage = () => {
 
       {isFiltersTrayOpen && renderFiltersTray()}
 
-      {captureMode === 'templates' ? (
-        <div className="mb-6 flex gap-3 overflow-x-auto no-scrollbar pb-1">
-          {['Daily vlog', 'Travel cut', 'Product tease', 'Food drop'].map((templateTitle, index) => (
-            <button
-              key={templateTitle}
-              type="button"
-              className={themedTemplateCardClass}
+      <div className="flex items-end justify-between px-2">
+        {/* Left: Effects (hidden when recorded) */}
+        <div className="flex w-[92px] items-center justify-start">
+          {recordStatus !== 'recorded' && (
+            <button 
+              type="button" 
+              onClick={() => handleCameraToolClick('filters')}
+              className={`w-[74px] text-center ${themedUtilityTextClass} active:opacity-70`}
             >
-              <div className="h-20 rounded-[14px] bg-gradient-to-br from-[#2f364b] to-[#181d2f]" />
-              <p className="mt-3 text-[13px] font-semibold">{templateTitle}</p>
-              <p className={themedTemplateMetaClass}>{index + 3} scenes ready</p>
+              <span className="mx-auto flex h-11 w-11 items-center justify-center overflow-hidden rounded-xl border border-white/25 bg-[radial-gradient(circle_at_30%_30%,#ffd8e6_0%,#f4abc1_48%,#d86583_100%)] shadow-[0_10px_20px_rgba(223,109,141,0.32)] backdrop-blur-sm">
+                <span className="translate-y-[1px] text-[22px] leading-none drop-shadow-sm" role="img" aria-label="Effects emoji">
+                  😊
+                </span>
+              </span>
+              <span className="mt-2 block text-[11px] font-medium">Effects</span>
             </button>
-          ))}
+          )}
         </div>
-      ) : (
-        <div className="flex items-end justify-between px-2">
-          {/* Left: Effects (hidden when recorded) */}
-          <div className="flex w-[92px] items-center justify-start">
-            {recordStatus !== 'recorded' && (
-              <button 
-                type="button" 
-                onClick={() => handleCameraToolClick('filters')}
-                className={`w-[74px] text-center ${themedUtilityTextClass} active:opacity-70`}
-              >
-                <span className="mx-auto flex h-11 w-11 items-center justify-center overflow-hidden rounded-xl border border-white/25 bg-[radial-gradient(circle_at_30%_30%,#ffd8e6_0%,#f4abc1_48%,#d86583_100%)] shadow-[0_10px_20px_rgba(223,109,141,0.32)] backdrop-blur-sm">
-                  <span className="translate-y-[1px] text-[22px] leading-none drop-shadow-sm" role="img" aria-label="Effects emoji">
-                    😊
-                  </span>
-                </span>
-                <span className="mt-2 block text-[11px] font-medium">Effects</span>
-              </button>
-            )}
-          </div>
 
-          {/* Center: Record button OR Confirm/Discard buttons */}
-          <div className="flex flex-col items-center">
-            {recordStatus === 'recorded' ? (
-              <div className="flex flex-col items-center gap-6">
-                <span className="text-[20px] font-bold tracking-[0.1em] text-white/90 drop-shadow-md">
-                  {formatElapsed(recordedSeconds)}
-                </span>
-                <div className="flex items-center gap-8">
-                  <button
-                    type="button"
-                    onClick={() => setActiveSheet('discard-last-clip')}
-                    className="flex h-14 w-14 items-center justify-center rounded-full bg-white/10 backdrop-blur-md text-white border border-white/20 shadow-[0_4px_16px_rgba(0,0,0,0.3)] active:scale-90 transition-transform"
-                  >
-                    <BiX size={32} />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleConfirmClip}
-                    className="flex h-14 w-14 items-center justify-center rounded-full bg-[#fe2c55] text-white active:scale-90 transition-transform shadow-[0_4px_20px_rgba(254,44,85,0.4)]"
-                  >
-                    <BiCheck size={36} />
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <>
-                <span className="mb-2 text-[12px] font-medium tracking-[0.18em] text-white/90">
-                  {formatElapsed(recordedSeconds)}
-                </span>
+        {/* Center: Record button OR Confirm/Discard buttons */}
+        <div className="flex flex-col items-center">
+          {recordStatus === 'recorded' ? (
+            <div className="flex flex-col items-center gap-6">
+              <span className="text-[20px] font-bold tracking-[0.1em] text-white/90 drop-shadow-md">
+                {formatElapsed(recordedSeconds)}
+              </span>
+              <div className="flex items-center gap-8">
                 <button
                   type="button"
-                  onClick={handleStartOrStopRecording}
-                  className={`relative flex items-center justify-center active:scale-95 ${
-                    isFiltersTrayOpen ? 'h-20 w-20' : 'h-24 w-24'
-                  }`}
+                  onClick={() => setActiveSheet('discard-last-clip')}
+                  className="flex h-14 w-14 items-center justify-center rounded-full bg-white/10 backdrop-blur-md text-white border border-white/20 shadow-[0_4px_16px_rgba(0,0,0,0.3)] active:scale-90 transition-transform"
                 >
-                  <span className="absolute inset-0 rounded-full bg-white/20 backdrop-blur-md" />
-                  <span
-                    className={`absolute rounded-full border-[4px] border-white/70 ${
-                      isFiltersTrayOpen ? 'inset-[12px]' : 'inset-[14px]'
-                    }`}
-                  />
-                  <span
-                    className={`relative flex items-center justify-center rounded-full bg-[#fe2c55] transition-all ${
-                      isFiltersTrayOpen ? 'h-[48px] w-[48px]' : 'h-[54px] w-[54px]'
-                    } ${
-                      recordStatus === 'recording' ? 'rounded-[16px]' : ''
-                    }`}
-                  >
-                    {recordStatus === 'recording' ? (
-                      <span className="h-5 w-5 rounded-[4px] bg-white" />
-                    ) : (
-                      <span className="h-5 w-5 rounded-full bg-white/0" />
-                    )}
-                  </span>
+                  <BiX size={32} />
                 </button>
-              </>
-            )}
-          </div>
-
-          {/* Right: Upload (hidden when recorded) */}
-          <div className="flex w-[92px] items-center justify-end gap-2">
-            {recordStatus !== 'recorded' && (
+                <button
+                  type="button"
+                  onClick={handleConfirmClip}
+                  className="flex h-14 w-14 items-center justify-center rounded-full bg-[#fe2c55] text-white active:scale-90 transition-transform shadow-[0_4px_20px_rgba(254,44,85,0.4)]"
+                >
+                  <BiCheck size={36} />
+                </button>
+              </div>
+            </div>
+          ) : (
+            <>
+              <span className="mb-2 text-[12px] font-medium tracking-[0.18em] text-white/90">
+                {formatElapsed(recordedSeconds)}
+              </span>
               <button
                 type="button"
-                onClick={triggerFilePicker}
-                className={`w-[74px] text-center ${themedUtilityTextClass} active:opacity-70`}
+                onClick={handleStartOrStopRecording}
+                className={`relative flex items-center justify-center active:scale-95 ${
+                  isFiltersTrayOpen ? 'h-20 w-20' : 'h-24 w-24'
+                }`}
               >
-                <span className={themedUtilityBadgeClass}>
-                  <div className="flex h-full w-full items-center justify-center bg-white/10">
-                    <BiImageAlt size={24} className="text-white/60" />
-                  </div>
+                <span className="absolute inset-0 rounded-full bg-white/20 backdrop-blur-md" />
+                <span
+                  className={`absolute rounded-full border-[4px] border-white/70 ${
+                    isFiltersTrayOpen ? 'inset-[12px]' : 'inset-[14px]'
+                  }`}
+                />
+                <span
+                  className={`relative flex items-center justify-center rounded-full bg-[#fe2c55] transition-all ${
+                    isFiltersTrayOpen ? 'h-[48px] w-[48px]' : 'h-[54px] w-[54px]'
+                  } ${
+                    recordStatus === 'recording' ? 'rounded-[16px]' : ''
+                  }`}
+                >
+                  {recordStatus === 'recording' ? (
+                    <span className="h-5 w-5 rounded-[4px] bg-white" />
+                  ) : (
+                    <span className="h-5 w-5 rounded-full bg-white/0" />
+                  )}
                 </span>
-                <span className="mt-2 block text-[11px] font-medium">Upload</span>
               </button>
-            )}
-          </div>
+            </>
+          )}
         </div>
-      )}
+
+        {/* Right: Upload (hidden when recorded) */}
+        <div className="flex w-[92px] items-center justify-end gap-2">
+          {recordStatus !== 'recorded' && (
+            <button
+              type="button"
+              onClick={triggerFilePicker}
+              className={`w-[74px] text-center ${themedUtilityTextClass} active:opacity-70`}
+            >
+              <span className={themedUtilityBadgeClass}>
+                <div className="flex h-full w-full items-center justify-center bg-white/10">
+                  <BiImageAlt size={24} className="text-white/60" />
+                </div>
+              </span>
+              <span className="mt-2 block text-[11px] font-medium">Upload</span>
+            </button>
+          )}
+        </div>
+      </div>
 
       {recordStatus !== 'recorded' && (
         <div className={themedModeTabsClass}>
-          {['camera', 'story', 'templates'].map((mode) => (
+          {['camera', 'story'].map((mode) => (
             <button
               key={mode}
               type="button"
@@ -2859,7 +2863,6 @@ const CreatePage = () => {
                 className="h-full w-full object-cover" 
                 muted={isVideoMuted} 
                 playsInline 
-                autoPlay={isEditorPlaying}
                 onTimeUpdate={handleEditorTimeUpdate}
                 onError={() => {
                   console.log("Video error, attempting re-hydration...");
@@ -3484,7 +3487,6 @@ const CreatePage = () => {
               src={previewUrl} 
               className="h-full w-full object-cover transition-all duration-500" 
               loop 
-              autoPlay
               muted={isVideoMuted}
               playsInline
               style={{ 
@@ -3788,7 +3790,7 @@ const CreatePage = () => {
             />
             <button
               type="button"
-              onClick={() => showToast('Cover picker is mocked for UI')}
+              onClick={() => {}}
               className="relative h-[110px] w-[82px] overflow-hidden rounded-[6px] border border-black/10"
             >
               {previewUrl ? (
@@ -3925,14 +3927,6 @@ const CreatePage = () => {
             {
               key: 'allowComments',
               label: 'Allow comments',
-            },
-            {
-              key: 'allowDuet',
-              label: 'Allow Duet',
-            },
-            {
-              key: 'allowStitch',
-              label: 'Allow Stitch',
             },
             {
               key: 'highQuality',

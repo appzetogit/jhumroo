@@ -13,8 +13,6 @@ import PrivacyPage from './modules/user/pages/Settings/PrivacyPage';
 import PrivacyCommentsPage from './modules/user/pages/Settings/PrivacyCommentsPage';
 import PrivacyMentionsTagsPage from './modules/user/pages/Settings/PrivacyMentionsTagsPage';
 import PrivacyDirectMessagesPage from './modules/user/pages/Settings/PrivacyDirectMessagesPage';
-import PrivacyDuetPage from './modules/user/pages/Settings/PrivacyDuetPage';
-import PrivacyStitchPage from './modules/user/pages/Settings/PrivacyStitchPage';
 import PrivacyDownloadsPage from './modules/user/pages/Settings/PrivacyDownloadsPage';
 import BlockedAccountsPage from './modules/user/pages/Settings/BlockedAccountsPage';
 import SecurityPage from './modules/user/pages/Settings/SecurityPage';
@@ -30,6 +28,7 @@ import HelpPrivacySecurityPage from './modules/user/pages/Settings/HelpPrivacySe
 import ReportProblemPage from './modules/user/pages/Settings/ReportProblemPage';
 import HelpArticlesPage from './modules/user/pages/Settings/HelpArticlesPage';
 import HelpArticleDetailPage from './modules/user/pages/Settings/HelpArticleDetailPage';
+import SupportPage from './modules/user/pages/Settings/SupportPage';
 import { TermsAndConditionPage, PrivacyPolicyPage } from './modules/user/pages/Settings/StaticContentPages';
 import Splash from './modules/user/components/common/Splash';
 import AuthPage from './modules/user/pages/Auth/AuthPage';
@@ -42,6 +41,7 @@ import NewMessagePage from './modules/user/pages/Inbox/NewMessagePage';
 import ChatPage from './modules/user/pages/Inbox/ChatPage';
 import ChatMediaPage from './modules/user/pages/Inbox/ChatMediaPage';
 import FollowRequestsPage from './modules/user/pages/Profile/FollowRequestsPage';
+import PendingRequestsPage from './modules/user/pages/Profile/PendingRequestsPage';
 import { ThemeProvider, useTheme } from './context/ThemeContext';
 import { AdminConfigProvider } from './context/AdminConfigContext';
 import { SocketProvider } from './context/SocketContext';
@@ -61,7 +61,6 @@ const MainLayout = ({ onLogout }) => {
       document.activeElement.blur();
     }
 
-    const isUserSubPage = /^\/user\/[^/]+\/followers$/.test(location.pathname);
     const isChatSubPage =
       location.pathname === '/inbox/new-message' ||
       location.pathname.startsWith('/inbox/chat/');
@@ -70,15 +69,14 @@ const MainLayout = ({ onLogout }) => {
       location.pathname.startsWith('/settings/');
     const isSearchDetailPage = location.pathname.startsWith('/search/hashtag/');
 
-    // Hide bottom nav on sub-pages (Sound, User Profile sub-pages, Inbox sub-pages)
+    // Hide bottom nav on sub-pages (Sound, User Profile pages, Inbox sub-pages)
     const isSubPage = 
       location.pathname.includes('/sound/') || 
       location.pathname === '/create' ||
-      isUserSubPage || 
+      location.pathname.startsWith('/user/') || 
       isSettingsPage ||
       isSearchDetailPage ||
       isChatSubPage ||
-      location.pathname === '/user/requests' ||
       location.pathname === '/inbox/new-followers' || 
       location.pathname === '/inbox/activity';
     
@@ -103,12 +101,11 @@ const MainLayout = ({ onLogout }) => {
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/settings" element={<SettingsPage onLogout={onLogout} />} />
         <Route path="/settings/edit-profile" element={<EditProfilePage />} />
+        <Route path="/settings/interests" element={<OnboardingPage onComplete={() => window.history.back()} />} />
         <Route path="/settings/privacy" element={<PrivacyPage />} />
         <Route path="/settings/privacy/comments" element={<PrivacyCommentsPage />} />
         <Route path="/settings/privacy/mentions-tags" element={<PrivacyMentionsTagsPage />} />
         <Route path="/settings/privacy/direct-messages" element={<PrivacyDirectMessagesPage />} />
-        <Route path="/settings/privacy/duet" element={<PrivacyDuetPage />} />
-        <Route path="/settings/privacy/stitch" element={<PrivacyStitchPage />} />
         <Route path="/settings/privacy/downloads" element={<PrivacyDownloadsPage />} />
         <Route path="/settings/privacy/blocked-accounts" element={<BlockedAccountsPage />} />
         <Route path="/settings/security" element={<SecurityPage />} />
@@ -119,6 +116,7 @@ const MainLayout = ({ onLogout }) => {
         <Route path="/settings/push-notifications" element={<PushNotificationsPage />} />
         <Route path="/settings/language" element={<LanguagePage />} />
         <Route path="/settings/help-center" element={<HelpCenterPage />} />
+        <Route path="/settings/support" element={<SupportPage />} />
         <Route path="/settings/help-center/safety-center" element={<SafetyCenterPage />} />
         <Route path="/settings/help-center/privacy-security" element={<HelpPrivacySecurityPage />} />
         <Route path="/settings/help-center/report-problem" element={<ReportProblemPage />} />
@@ -130,6 +128,7 @@ const MainLayout = ({ onLogout }) => {
         <Route path="/user/:username" element={<ProfilePage />} />
         <Route path="/user/:username/followers" element={<FollowersPage />} />
         <Route path="/user/requests" element={<FollowRequestsPage />} />
+        <Route path="/user/requests/pending" element={<PendingRequestsPage />} />
       </Routes>
       {showNav && <BottomNavBar isDarkTheme={location.pathname !== '/'} />}
     </>
@@ -159,12 +158,15 @@ const AppContent = () => {
         if (appState === 'launch') {
             const timer = setTimeout(() => {
                 const isAdminRoute = location.pathname.startsWith('/admin');
-                const isAdminAuthenticated = adminAuthService.isAdminAuthenticated();
                 
-                if (isAdminRoute || isAdminAuthenticated) {
+                if (isAdminRoute) {
                     setAppState('main');
                 } else if (isAuthenticated) {
-                    setAppState('main');
+                    if (user && !user.isOnboarded) {
+                        setAppState('onboarding');
+                    } else {
+                        setAppState('main');
+                    }
                 } else {
                     setAppState('auth');
                     // Force navigate to welcome after splash only for regular app root
@@ -193,16 +195,6 @@ const AppContent = () => {
 
     const handleLogout = () => {
         logout();
-        
-        // If we're an admin, don't redirect to welcome or change to auth state
-        if (adminAuthService.isAdminAuthenticated()) {
-            // If we're on a user settings page, go to home instead of welcome
-            if (location.pathname.startsWith('/settings')) {
-                navigate('/', { replace: true });
-            }
-            return;
-        }
-
         setAppState('auth');
         navigate('/welcome', { replace: true });
     };
@@ -219,17 +211,6 @@ const AppContent = () => {
                     <SuspendedScreen reason={user?.banReason} />
                   ) : (
                     <Routes>
-                        {/* Admin routes are always available regardless of user appState */}
-                        <Route path="/admin/login" element={<AdminLogin />} />
-                        <Route 
-                            path="/admin/*" 
-                            element={
-                                adminAuthService.isAdminAuthenticated() ? 
-                                <AdminLayout /> : 
-                                <Navigate to="/admin/login" replace />
-                            } 
-                        />
-
                         {appState === 'auth' ? (
                             <>
                                 <Route path="/welcome" element={<AuthPage key="welcome" onComplete={handleAuthComplete} initialMode="signup" />} />
@@ -240,7 +221,18 @@ const AppContent = () => {
                         ) : appState === 'onboarding' ? (
                             <Route path="/*" element={<OnboardingPage onComplete={handleOnboardingComplete} />} />
                         ) : (
-                            <Route path="/*" element={<MainLayout onLogout={handleLogout} />} />
+                            <>
+                              <Route path="/admin/login" element={<AdminLogin />} />
+                              <Route 
+                                path="/admin/*" 
+                                element={
+                                  adminAuthService.isAdminAuthenticated() ? 
+                                  <AdminLayout /> : 
+                                  <Navigate to="/admin/login" replace />
+                                } 
+                              />
+                              <Route path="/*" element={<MainLayout onLogout={handleLogout} />} />
+                            </>
                         )}
                     </Routes>
                   )}

@@ -197,6 +197,90 @@ const userService = {
       throw error;
     }
   },
+  
+  /**
+   * Update FCM tokens for push notifications
+   * @param {Object} tokens - FCM tokens
+   * @returns {Promise} Response
+   */
+  updateFCMToken: async (tokens) => {
+    try {
+      const response = await api.post('/users/fcm-token', tokens);
+      return response;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  /**
+   * Get user mention suggestions
+   * @param {string} query - Suggestion query
+   * @returns {Promise} Response with suggestions
+   */
+  getMentionSuggestions: async (query) => {
+    try {
+      const response = await api.get('/users/mentions/suggestions', {
+        params: { q: query },
+      });
+      return response;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  /**
+   * Submit a problem report
+   * @param {Object} reportData - Report data (category, description, attachments)
+   * @returns {Promise} Response
+   */
+  submitProblemReport: async (reportData) => {
+    try {
+      const response = await api.post('/problem-reports', reportData);
+      return response;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  /**
+   * Get current user's problem reports
+   * @returns {Promise} Response with reports
+   */
+  getMyProblemReports: async () => {
+    try {
+      const response = await api.get('/problem-reports/me');
+      return response;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  /**
+   * Submit a support request
+   * @param {Object} supportData - Support data (name, email, phoneNumber, reason)
+   * @returns {Promise} Response
+   */
+  submitSupportRequest: async (supportData) => {
+    try {
+      const response = await api.post('/support-requests', supportData);
+      return response;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  /**
+   * Get current user's support requests
+   * @returns {Promise} Response with requests
+   */
+  getMySupportRequests: async () => {
+    try {
+      const response = await api.get('/support-requests/me');
+      return response;
+    } catch (error) {
+      throw error;
+    }
+  },
 };
 
 export default userService;

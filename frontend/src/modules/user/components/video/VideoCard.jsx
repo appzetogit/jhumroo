@@ -62,46 +62,58 @@ const VideoCard = ({ videoData, isActive }) => {
 
     if (isActive) {
       if (videoRef.current) {
-        // Start video
-        videoRef.current.play().then(() => {
-          setPlaying(true);
-          // Respect global mute state
-          if (videoRef.current) {
-            videoRef.current.muted = isMuted;
-            videoRef.current.volume = isMuted ? 0 : 1;
-          }
-          
-          // Record view after 3 seconds of active play
-          viewTimer = setTimeout(async () => {
-             try {
-                await reelService.recordView(reelId);
-             } catch (err) {
-                console.error("Error recording view:", err);
-             }
-          }, 3000);
-        }).catch(err => {
-            console.log("Autoplay prevented:", err);
-            setPlaying(false);
-        });
+        const video = videoRef.current;
+        const videoSrc = localVideoData.video?.url || localVideoData.url;
+        
+        if (!videoSrc) {
+           console.warn("Video source missing for reel:", reelId);
+           return;
+        }
 
-        // Start music if available via the audio ref (now a JSX element)
-        // ONLY if the reel hasn't been processed with merged audio yet
+        // Start video
+        const playPromise = video.play();
+        if (playPromise !== undefined) {
+          playPromise.then(() => {
+            if (!video.paused) {
+              setPlaying(true);
+              video.muted = isMuted;
+              video.volume = isMuted ? 0 : 1;
+              
+              // Record view after 3 seconds of active play
+              viewTimer = setTimeout(async () => {
+                 try {
+                    await reelService.recordView(reelId);
+                 } catch (err) {
+                    console.error("Error recording view:", err);
+                 }
+              }, 3000);
+            }
+          }).catch(err => {
+            if (err.name !== 'AbortError') {
+              console.warn("Autoplay prevented or interrupted:", err);
+            }
+            setPlaying(false);
+          });
+        }
+
+        // Start music if available via the audio ref
         if (audioRef.current && (localVideoData.music?.url || localVideoData.music?.audioUrl) && localVideoData.status !== 'completed') {
           const audio = audioRef.current;
           
           const startAudio = () => {
-            if (!isActive || !audio) return; // Guard against rapid scroll or unmount
+            if (!isActive || !audio) return;
             
             try {
               audio.currentTime = localVideoData.music.startTime || 0;
               audio.volume = isMuted ? 0 : 1.0;
-              audio.muted = isMuted; // Respect global mute state
+              audio.muted = isMuted;
               
-              const playPromise = audio.play();
-              if (playPromise !== undefined) {
-                playPromise.catch(err => {
-                  console.warn("Music playback failed, retrying on user interaction:", err);
-                  // Some browsers require a click even if previous interaction happened
+              const audioPlayPromise = audio.play();
+              if (audioPlayPromise !== undefined) {
+                audioPlayPromise.catch(err => {
+                  if (err.name !== 'AbortError') {
+                    console.warn("Music playback failed:", err);
+                  }
                 });
               }
             } catch (err) {
@@ -112,21 +124,18 @@ const VideoCard = ({ videoData, isActive }) => {
           if (audio.readyState >= 2) {
             startAudio();
           } else {
-            audio.load(); // Force load
+            audio.load();
             audio.addEventListener('canplay', startAudio, { once: true });
           }
           
-          // Sync music with video
           syncInterval = setInterval(() => {
-            if (videoRef.current && audio && !videoRef.current.paused) {
-              // If video loops (currentTime jumps back), reset audio to startTime
-              // Increased threshold to 0.5s for better loop detection
-              if (videoRef.current.currentTime < 0.5 && audio.currentTime > (localVideoData.music.startTime || 0) + 1) {
+            if (video && audio && !video.paused) {
+              if (video.currentTime < 0.5 && audio.currentTime > (localVideoData.music.startTime || 0) + 1) {
                 audio.currentTime = localVideoData.music.startTime || 0;
-                if (audio.paused) audio.play().catch(() => {});
+                audio.play().catch(() => {});
               }
             }
-          }, 400); // Slightly faster check
+          }, 400);
         }
       }
     } else {
@@ -174,16 +183,28 @@ const VideoCard = ({ videoData, isActive }) => {
       setPlaying(false);
     } else {
       if (videoRef.current) {
-        videoRef.current.play();
+        const playPromise = videoRef.current.play();
+        if (playPromise !== undefined) {
+          playPromise.then(() => {
+            setPlaying(true);
+          }).catch(err => {
+            if (err.name !== 'AbortError') console.warn("Video play failed:", err);
+            setPlaying(false);
+          });
+        }
         videoRef.current.muted = isMuted;
         videoRef.current.volume = isMuted ? 0 : 1;
       }
       if (audioRef.current && localVideoData.status !== 'completed') {
         audioRef.current.volume = isMuted ? 0 : 1.0;
         audioRef.current.muted = isMuted;
-        audioRef.current.play();
+        const audioPlayPromise = audioRef.current.play();
+        if (audioPlayPromise !== undefined) {
+          audioPlayPromise.catch(err => {
+            if (err.name !== 'AbortError') console.warn("Audio play failed:", err);
+          });
+        }
       }
-      setPlaying(true);
     }
   };
 

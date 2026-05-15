@@ -4,6 +4,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { getSearchResults, normalizeSearchQuery } from '../../../../utils/searchUtils';
 import { useAppContent } from '../../../../hooks/useAppContent';
 import userService from '../../../../services/userService';
+import followService from '../../../../services/followService';
 
 const SEARCH_HISTORY_KEY = 'searchHistory';
 
@@ -44,7 +45,7 @@ const ResultsEmptyState = ({ title, subtitle }) => (
   </div>
 );
 
-const UsersResultList = ({ users, isFollowingUser, isFollowerOfMe, onToggleFollow, onOpenUser, isLoading }) => {
+const UsersResultList = ({ users, onToggleFollow, onOpenUser, isLoading }) => {
   if (isLoading) {
     return (
       <div className="flex flex-col items-center justify-center py-24 gap-4">
@@ -68,10 +69,9 @@ const UsersResultList = ({ users, isFollowingUser, isFollowerOfMe, onToggleFollo
   return (
     <div className="pb-24">
       {users.map((user) => {
-        const isFollowing = isFollowingUser(user.username);
-        const isFollower = isFollowerOfMe(user.username);
-        const showFollowing = isFollowing || isFollower;
-
+        const isFollowing = user.isFollowing;
+        const isFollowPending = user.followStatus === 'pending';
+        
         return (
           <div
             key={user.id}
@@ -94,15 +94,17 @@ const UsersResultList = ({ users, isFollowingUser, isFollowerOfMe, onToggleFollo
               type="button"
               onClick={(event) => {
                 event.stopPropagation();
-                onToggleFollow(user.username);
+                onToggleFollow(user);
               }}
-              className={`min-w-[76px] rounded-[3px] px-4 py-2 text-[13px] font-semibold transition-colors ${
-                showFollowing
-                  ? 'bg-white/5 text-white/70 border border-white/10'
-                  : 'bg-[#fe2c55] text-white'
+              className={`min-w-[76px] px-4 py-2 text-[13px] font-semibold transition-all duration-200 ${
+                isFollowPending
+                  ? 'bg-gray-100 text-gray-700 border border-gray-300 rounded-lg shadow-sm'
+                  : isFollowing
+                  ? 'bg-white/5 text-white/70 border border-white/10 rounded-[3px]'
+                  : 'bg-[#fe2c55] text-white rounded-[3px]'
               }`}
             >
-              {showFollowing ? 'Following' : 'Follow'}
+              {isFollowPending ? 'Requested' : (isFollowing ? 'Following' : 'Follow')}
             </button>
           </div>
         );
@@ -113,7 +115,7 @@ const UsersResultList = ({ users, isFollowingUser, isFollowerOfMe, onToggleFollo
 
 const SearchPage = () => {
   const navigate = useNavigate();
-  const { config, isFollowingUser, isFollowerOfMe, toggleFollowUser } = useAppContent();
+  const { config } = useAppContent();
   const searchConfig = config?.search || {};
   const [searchParams, setSearchParams] = useSearchParams();
   const [searchHistory, setSearchHistory] = useState(() => readSearchHistory());
@@ -134,12 +136,14 @@ const SearchPage = () => {
         const res = await userService.getSuggestedUsers(10);
         if (res.success && res.users) {
           const formatted = res.users.map((u) => ({
-            id: u._id,
+            id: u._id || u.id,
             username: u.username,
             displayName: u.fullName || u.username,
             avatar: u.profilePicture?.url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${u.username}&style=circle`,
             followers: u.stats?.followersCount || 0,
             videos: u.stats?.reelsCount || 0,
+            isFollowing: u.isFollowing,
+            followStatus: u.followStatus
           }));
           setDbSuggestedUsers(formatted);
         }
@@ -162,12 +166,14 @@ const SearchPage = () => {
         const res = await userService.searchUsers(deferredQuery.trim());
         if (res.success && res.users) {
           const formatted = res.users.map((u) => ({
-            id: u._id,
+            id: u._id || u.id,
             username: u.username,
             displayName: u.fullName || u.username,
             avatar: u.profilePicture?.url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${u.username}&style=circle`,
             followers: u.stats?.followersCount || 0,
             videos: u.stats?.reelsCount || 0,
+            isFollowing: u.isFollowing,
+            followStatus: u.followStatus
           }));
           setDbSearchResults(formatted);
         }
@@ -181,7 +187,30 @@ const SearchPage = () => {
   }, [deferredQuery]);
 
   const searchResults = { users: dbSearchResults.length > 0 ? dbSearchResults : [] };
-  const suggestedUsers = dbSuggestedUsers.length > 0 ? dbSuggestedUsers : (searchConfig.users || []).slice(0, 10);
+  const suggestedUsers = dbSuggestedUsers;
+
+  const handleToggleFollow = async (user) => {
+    try {
+      if (user.isFollowing || user.followStatus === 'pending') {
+        const res = await followService.unfollowUser(user.id);
+        if (res.success) {
+          const updateFn = (list) => list.map(u => u.id === user.id ? { ...u, isFollowing: false, followStatus: null } : u);
+          setDbSearchResults(updateFn);
+          setDbSuggestedUsers(updateFn);
+        }
+      } else {
+        const res = await followService.followUser(user.id);
+        if (res.success) {
+          const newStatus = res.status || 'accepted';
+          const updateFn = (list) => list.map(u => u.id === user.id ? { ...u, isFollowing: newStatus === 'accepted', followStatus: newStatus } : u);
+          setDbSearchResults(updateFn);
+          setDbSuggestedUsers(updateFn);
+        }
+      }
+    } catch (err) {
+      console.error('Follow action failed:', err);
+    }
+  };
 
   const clearUsersLoader = () => {
     if (usersLoaderTimeoutRef.current) {
@@ -195,20 +224,17 @@ const SearchPage = () => {
       navigate(-1);
       return;
     }
-
     navigate('/');
   };
 
   const handleDraftChange = (nextValue) => {
     clearUsersLoader();
     setIsUsersLoading(false);
-
     const trimmedValue = nextValue.trim();
     if (!trimmedValue) {
       setSearchParams(new URLSearchParams(), { replace: true });
       return;
     }
-
     const nextParams = new URLSearchParams();
     nextParams.set('q', normalizeSearchQuery(nextValue));
     setSearchParams(nextParams, { replace: true });
@@ -216,13 +242,9 @@ const SearchPage = () => {
 
   const handleSubmitSearch = (nextValue = searchQuery) => {
     const normalizedValue = normalizeSearchQuery(nextValue);
-    if (!normalizedValue) {
-      return;
-    }
-
+    if (!normalizedValue) return;
     persistSearchHistory(normalizedValue);
     setSearchHistory(readSearchHistory());
-
     const nextParams = new URLSearchParams();
     nextParams.set('q', normalizedValue);
     setSearchParams(nextParams);
@@ -232,10 +254,6 @@ const SearchPage = () => {
     clearUsersLoader();
     setIsUsersLoading(false);
     setSearchParams(new URLSearchParams(), { replace: true });
-  };
-
-  const handleToggleFollow = (username) => {
-    toggleFollowUser(username);
   };
 
   return (
@@ -262,6 +280,7 @@ const SearchPage = () => {
           <input
             type="text"
             value={searchQuery}
+            autoFocus
             onChange={(event) => handleDraftChange(event.target.value)}
             onKeyDown={(event) => {
               if (event.key === 'Enter') {
@@ -330,8 +349,6 @@ const SearchPage = () => {
             <h2 className="theme-text-primary text-[15px] font-bold mb-3">Suggested users</h2>
             <UsersResultList
               users={suggestedUsers}
-              isFollowingUser={isFollowingUser}
-              isFollowerOfMe={isFollowerOfMe}
               onToggleFollow={handleToggleFollow}
               onOpenUser={(username) => navigate(`/user/${username}`)}
               isLoading={false}
@@ -342,8 +359,6 @@ const SearchPage = () => {
         {isResultsState && (
           <UsersResultList
             users={searchResults.users}
-            isFollowingUser={isFollowingUser}
-            isFollowerOfMe={isFollowerOfMe}
             onToggleFollow={handleToggleFollow}
             onOpenUser={(username) => navigate(`/user/${username}`)}
             isLoading={isUsersLoading}

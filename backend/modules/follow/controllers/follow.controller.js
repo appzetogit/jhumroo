@@ -1,6 +1,8 @@
 import Follow from '../../../models/Follow.model.js';
 import User from '../../../models/User.model.js';
+import Notification from '../../../models/Notification.model.js';
 import { asyncHandler } from '../../../middleware/errorHandler.js';
+import { createNotification } from '../../../utils/notificationService.js';
 
 /**
  * @desc    Follow a user
@@ -47,6 +49,21 @@ export const followUser = asyncHandler(async (req, res) => {
     status: userToFollow.isPrivate ? 'pending' : 'accepted'
   });
 
+  // Send notification
+  if (follow.status === 'accepted') {
+    await createNotification({
+      recipient: userId,
+      sender: req.user._id,
+      type: 'follow'
+    });
+  } else if (follow.status === 'pending') {
+    await createNotification({
+      recipient: userId,
+      sender: req.user._id,
+      type: 'follow_request'
+    });
+  }
+
   res.status(201).json({
     success: true,
     message: userToFollow.isPrivate ? 'Follow request sent' : 'User followed successfully',
@@ -74,6 +91,14 @@ export const unfollowUser = asyncHandler(async (req, res) => {
     });
   }
 
+  // Delete ALL follow-related notifications between these two users (both ways)
+  await Notification.deleteMany({
+    $or: [
+      { recipient: userId, sender: req.user._id, type: { $in: ['follow', 'follow_request', 'follow_accept'] } },
+      { recipient: req.user._id, sender: userId, type: { $in: ['follow', 'follow_request', 'follow_accept'] } }
+    ]
+  });
+
   res.status(200).json({
     success: true,
     message: 'User unfollowed successfully'
@@ -98,6 +123,26 @@ export const getFollowers = asyncHandler(async (req, res) => {
       success: false,
       message: 'User not found'
     });
+  }
+
+  // Check privacy
+  if (user.isPrivate && (!req.user || req.user._id.toString() !== user._id.toString())) {
+    let isFollowing = false;
+    if (req.user) {
+      const follow = await Follow.findOne({ 
+        follower: req.user._id, 
+        following: user._id,
+        status: 'accepted'
+      });
+      isFollowing = !!follow;
+    }
+    if (!isFollowing) {
+      return res.status(403).json({
+        success: false,
+        message: 'This account is private',
+        isPrivate: true
+      });
+    }
   }
 
   // Get followers
@@ -157,6 +202,26 @@ export const getFollowing = asyncHandler(async (req, res) => {
     });
   }
 
+  // Check privacy
+  if (user.isPrivate && (!req.user || req.user._id.toString() !== user._id.toString())) {
+    let isFollowing = false;
+    if (req.user) {
+      const follow = await Follow.findOne({ 
+        follower: req.user._id, 
+        following: user._id,
+        status: 'accepted'
+      });
+      isFollowing = !!follow;
+    }
+    if (!isFollowing) {
+      return res.status(403).json({
+        success: false,
+        message: 'This account is private',
+        isPrivate: true
+      });
+    }
+  }
+
   // Get following
   const follows = await Follow.find({ 
     follower: userId,
@@ -214,6 +279,14 @@ export const removeFollower = asyncHandler(async (req, res) => {
     });
   }
 
+  // Delete ALL follow-related notifications between these two users (both ways)
+  await Notification.deleteMany({
+    $or: [
+      { recipient: userId, sender: req.user._id, type: { $in: ['follow', 'follow_request', 'follow_accept'] } },
+      { recipient: req.user._id, sender: userId, type: { $in: ['follow', 'follow_request', 'follow_accept'] } }
+    ]
+  });
+
   res.status(200).json({
     success: true,
     message: 'Follower removed successfully'
@@ -237,9 +310,25 @@ export const getFollowRequests = asyncHandler(async (req, res) => {
     .sort({ createdAt: -1 })
     .skip(skip)
     .limit(limit)
-    .populate('follower', 'username fullName profilePicture isVerified stats');
+    .populate('follower', 'username fullName profilePicture isVerified stats')
+    .lean();
 
   const requests = follows.map(follow => follow.follower);
+
+  // Add following status to requesters
+  const requesterIds = requests.map(u => u?._id).filter(id => !!id);
+  if (requesterIds.length > 0) {
+    const following = await Follow.find({
+      follower: req.user._id,
+      following: { $in: requesterIds },
+      status: 'accepted'
+    });
+    const followingSet = new Set(following.map(f => f.following.toString()));
+    requests.forEach(u => {
+      if (u) u.isFollowing = followingSet.has(u._id.toString());
+    });
+  }
+
   const total = await Follow.countDocuments({ following: req.user._id, status: 'pending' });
 
   res.status(200).json({
@@ -278,6 +367,28 @@ export const acceptFollowRequest = asyncHandler(async (req, res) => {
   follow.status = 'accepted';
   await follow.save();
 
+  // Send notification to the person who requested (the follower)
+  await createNotification({
+    recipient: userId,
+    sender: req.user._id,
+    type: 'follow_accept'
+  });
+
+  // Create/Update 'follow' notification for current user (the one who accepted)
+  // This ensures it shows up in their activity list as "X started following you"
+  await createNotification({
+    recipient: req.user._id,
+    sender: userId,
+    type: 'follow'
+  });
+
+  // Cleanup: Delete the old follow_request notification
+  await Notification.findOneAndDelete({
+    recipient: req.user._id,
+    sender: userId,
+    type: 'follow_request'
+  });
+
   res.status(200).json({
     success: true,
     message: 'Follow request accepted'
@@ -305,6 +416,13 @@ export const rejectFollowRequest = asyncHandler(async (req, res) => {
     });
   }
 
+  // Delete the follow request notification
+  await Notification.findOneAndDelete({
+    recipient: req.user._id,
+    sender: userId,
+    type: 'follow_request'
+  });
+
   res.status(200).json({
     success: true,
     message: 'Follow request rejected'
@@ -328,5 +446,22 @@ export const checkFollowStatus = asyncHandler(async (req, res) => {
     success: true,
     isFollowing: !!follow,
     status: follow?.status || null
+  });
+});
+
+/**
+ * @desc    Get follow requests count
+ * @route   GET /api/follows/requests/count
+ * @access  Private
+ */
+export const getFollowRequestsCount = asyncHandler(async (req, res) => {
+  const count = await Follow.countDocuments({ 
+    following: req.user._id, 
+    status: 'pending' 
+  });
+
+  res.status(200).json({
+    success: true,
+    count
   });
 });

@@ -13,6 +13,12 @@ import { asyncHandler } from '../../../middleware/errorHandler.js';
  * @access  Private/Admin
  */
 export const getDashboardStats = asyncHandler(async (req, res) => {
+  // Get today's start
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+
+  const last24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
   // Get total counts
   const [
     totalUsers,
@@ -20,7 +26,8 @@ export const getDashboardStats = asyncHandler(async (req, res) => {
     totalComments,
     totalLikes,
     totalReports,
-    activeUsers,
+    activeUsers24h,
+    liveUsers,
     bannedUsers
   ] = await Promise.all([
     User.countDocuments(),
@@ -28,14 +35,12 @@ export const getDashboardStats = asyncHandler(async (req, res) => {
     Comment.countDocuments(),
     Like.countDocuments(),
     Report.countDocuments(),
-    User.countDocuments({ isActive: true }),
+    User.countDocuments({ lastActive: { $gte: last24h } }),
+    User.countDocuments({ isLive: true }),
     User.countDocuments({ isBanned: true })
   ]);
 
   // Get today's stats
-  const todayStart = new Date();
-  todayStart.setHours(0, 0, 0, 0);
-
   const [
     newUsersToday,
     newReelsToday,
@@ -48,13 +53,34 @@ export const getDashboardStats = asyncHandler(async (req, res) => {
     Report.countDocuments({ createdAt: { $gte: todayStart } })
   ]);
 
-  // Get pending reports by priority
+  // Get pending reports
   const [criticalReports, highReports, mediumReports, lowReports] = await Promise.all([
     Report.countDocuments({ status: { $in: ['pending', 'under_review'] }, priority: 'critical' }),
     Report.countDocuments({ status: { $in: ['pending', 'under_review'] }, priority: 'high' }),
     Report.countDocuments({ status: { $in: ['pending', 'under_review'] }, priority: 'medium' }),
     Report.countDocuments({ status: { $in: ['pending', 'under_review'] }, priority: 'low' })
   ]);
+
+  // Get trending hashtags (top 5)
+  const trendingHashtags = await Reel.aggregate([
+    { $unwind: '$hashtags' },
+    { $group: { _id: '$hashtags', count: { $sum: 1 } } },
+    { $sort: { count: -1 } },
+    { $limit: 5 }
+  ]);
+
+  // Get watch time estimate (total views * avg duration if we don't track per-view duration)
+  // Let's assume average reel duration is 15s if not specified, or use the actual duration
+  const watchTimeData = await Reel.aggregate([
+    {
+      $group: {
+        _id: null,
+        totalWatchTime: { $sum: { $multiply: ['$stats.viewsCount', '$video.duration'] } }
+      }
+    }
+  ]);
+
+  const totalWatchTimeSeconds = watchTimeData.length > 0 ? watchTimeData[0].totalWatchTime : 0;
 
   res.status(200).json({
     success: true,
@@ -65,8 +91,10 @@ export const getDashboardStats = asyncHandler(async (req, res) => {
         totalComments,
         totalLikes,
         totalReports,
-        activeUsers,
-        bannedUsers
+        activeUsers24h,
+        liveUsers,
+        bannedUsers,
+        totalWatchTimeSeconds
       },
       today: {
         newUsers: newUsersToday,
@@ -80,7 +108,8 @@ export const getDashboardStats = asyncHandler(async (req, res) => {
         medium: mediumReports,
         low: lowReports,
         total: criticalReports + highReports + mediumReports + lowReports
-      }
+      },
+      trendingHashtags: trendingHashtags.map(h => ({ tag: h._id, count: h.count }))
     }
   });
 });
@@ -187,6 +216,37 @@ export const getContentAnalytics = asyncHandler(async (req, res) => {
       comments: commentsData,
       likes: likesData
     }
+  });
+});
+
+/**
+ * @desc    Get watch time analytics
+ * @route   GET /api/admin/analytics/watch-time
+ * @access  Private/Admin
+ */
+export const getWatchTimeAnalytics = asyncHandler(async (req, res) => {
+  const { days = 30 } = req.query;
+
+  const startDate = new Date();
+  startDate.setDate(startDate.getDate() - parseInt(days));
+
+  // Get daily watch time stats
+  const watchTimeData = await Reel.aggregate([
+    { $match: { createdAt: { $gte: startDate } } },
+    {
+      $group: {
+        _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } },
+        dailyWatchTime: { $sum: { $multiply: ['$stats.viewsCount', '$video.duration'] } },
+        totalViews: { $sum: '$stats.viewsCount' }
+      }
+    },
+    { $sort: { _id: 1 } }
+  ]);
+
+  res.status(200).json({
+    success: true,
+    period: `Last ${days} days`,
+    data: watchTimeData
   });
 });
 

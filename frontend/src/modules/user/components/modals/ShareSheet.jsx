@@ -103,10 +103,12 @@ const ShareSheet = ({ isOpen, onClose, reelData, onShare }) => {
                    <BiMessageSquareDetail size={20} className="group-hover:text-tiktok-cyan transition-colors" />
                    <span className="text-[10px] font-bold">Not interested</span>
                 </div>
-                <div className={`flex-1 flex flex-col items-center gap-2 tap-effect cursor-pointer group ${isDarkMode ? 'text-white' : 'text-black/80'}`}>
-                   <BiDownload size={20} className="group-hover:text-success transition-colors" />
-                   <span className="text-[10px] font-bold">Save video</span>
-                </div>
+                {((reelData?.user?.downloadPrivacy !== 'Off') && (reelData?.allowDownload !== false)) && (
+                  <div className={`flex-1 flex flex-col items-center gap-2 tap-effect cursor-pointer group ${isDarkMode ? 'text-white' : 'text-black/80'}`}>
+                    <BiDownload size={20} className="group-hover:text-success transition-colors" />
+                    <span className="text-[10px] font-bold">Save video</span>
+                  </div>
+                )}
             </div>
         </div>
       </div>

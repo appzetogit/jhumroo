@@ -114,7 +114,7 @@ export const getUserProfile = asyncHandler(async (req, res) => {
  * @access  Private
  */
 export const updateProfile = asyncHandler(async (req, res) => {
-  const { username, fullName, bio, email, isPrivate, socialLinks, interests } = req.body;
+  const { username, fullName, bio, email, isPrivate, socialLinks, interests, commentPrivacy, mentionPrivacy, messagePrivacy, downloadPrivacy } = req.body;
 
   const user = req.user;
 
@@ -141,6 +141,10 @@ export const updateProfile = asyncHandler(async (req, res) => {
   if (isPrivate !== undefined) user.isPrivate = isPrivate;
   if (socialLinks) user.socialLinks = socialLinks;
   if (interests !== undefined) user.interests = interests;
+  if (commentPrivacy !== undefined) user.commentPrivacy = commentPrivacy;
+  if (mentionPrivacy !== undefined) user.mentionPrivacy = mentionPrivacy;
+  if (messagePrivacy !== undefined) user.messagePrivacy = messagePrivacy;
+  if (downloadPrivacy !== undefined) user.downloadPrivacy = downloadPrivacy;
 
   await user.save();
 
@@ -216,7 +220,11 @@ export const getUserReels = asyncHandler(async (req, res) => {
   if (user.isPrivate && (!req.user || req.user._id.toString() !== user._id.toString())) {
     let isFollowing = false;
     if (req.user) {
-      const follow = await Follow.findOne({ follower: req.user._id, following: user._id });
+      const follow = await Follow.findOne({ 
+        follower: req.user._id, 
+        following: user._id,
+        status: 'accepted'
+      });
       isFollowing = !!follow;
     }
     if (!isFollowing) {
@@ -232,7 +240,7 @@ export const getUserReels = asyncHandler(async (req, res) => {
     .sort({ createdAt: -1 })
     .skip(skip)
     .limit(limit)
-    .populate('user', 'username fullName profilePicture isVerified');
+    .populate('user', 'username fullName profilePicture isVerified downloadPrivacy');
 
   const total = await Reel.countDocuments({ user: user._id, isActive: true });
 
@@ -266,7 +274,7 @@ export const getLikedReels = asyncHandler(async (req, res) => {
       path: 'reel',
       populate: {
         path: 'user',
-        select: 'username fullName profilePicture isVerified'
+        select: 'username fullName profilePicture isVerified downloadPrivacy'
       }
     });
 
@@ -309,7 +317,7 @@ export const getSavedReels = asyncHandler(async (req, res) => {
       path: 'reel',
       populate: {
         path: 'user',
-        select: 'username fullName profilePicture isVerified'
+        select: 'username fullName profilePicture isVerified downloadPrivacy'
       }
     });
 
@@ -346,29 +354,46 @@ export const searchUsers = asyncHandler(async (req, res) => {
     });
   }
 
-  const users = await User.find({
+  const queryObj = {
     $or: [
       { username: { $regex: q, $options: 'i' } },
       { fullName: { $regex: q, $options: 'i' } }
     ],
     isActive: true
-  })
+  };
+
+  if (req.user) {
+    queryObj._id = { $ne: req.user._id };
+  }
+
+  const users = await User.find(queryObj)
     .select('username fullName profilePicture isVerified stats')
     .sort({ 'stats.followersCount': -1 })
     .skip(skip)
     .limit(limit);
 
-  const total = await User.countDocuments({
-    $or: [
-      { username: { $regex: q, $options: 'i' } },
-      { fullName: { $regex: q, $options: 'i' } }
-    ],
-    isActive: true
-  });
+  const total = await User.countDocuments(queryObj);
+
+  // Add isFollowing status
+  const userList = await Promise.all(users.map(async (u) => {
+    const userObj = u.toJSON();
+    if (req.user) {
+      const follow = await Follow.findOne({
+        follower: req.user._id,
+        following: u._id
+      });
+      userObj.isFollowing = !!follow && follow.status === 'accepted';
+      userObj.followStatus = follow?.status || null;
+    } else {
+      userObj.isFollowing = false;
+      userObj.followStatus = null;
+    }
+    return userObj;
+  }));
 
   res.status(200).json({
     success: true,
-    users,
+    users: userList,
     pagination: {
       page,
       limit,
@@ -404,8 +429,95 @@ export const getSuggestedUsers = asyncHandler(async (req, res) => {
     .sort({ 'stats.followersCount': -1 })
     .limit(limit);
 
+  // Add isFollowing status
+  const userList = await Promise.all(users.map(async (u) => {
+    const userObj = u.toJSON();
+    if (req.user) {
+      const follow = await Follow.findOne({
+        follower: req.user._id,
+        following: u._id
+      });
+      userObj.isFollowing = !!follow && follow.status === 'accepted';
+      userObj.followStatus = follow?.status || null;
+    } else {
+      userObj.isFollowing = false;
+      userObj.followStatus = null;
+    }
+    return userObj;
+  }));
+
   res.status(200).json({
     success: true,
-    users
+    users: userList
+  });
+});
+
+/**
+ * @desc    Update FCM tokens for push notifications
+ * @route   POST /api/users/fcm-token
+ * @access  Private
+ */
+export const updateFCMToken = asyncHandler(async (req, res) => {
+  const { fcmTokenMobile, fcmToken } = req.body;
+
+  if (fcmTokenMobile) req.user.fcmTokenMobile = fcmTokenMobile;
+  if (fcmToken) req.user.fcmToken = fcmToken;
+
+  await req.user.save();
+
+  res.status(200).json({
+    success: true,
+    message: 'FCM token updated successfully'
+  });
+});
+
+/**
+ * @desc    Get users for mention suggestions
+ * @route   GET /api/users/mentions/suggestions
+ * @access  Private
+ */
+export const getMentionSuggestions = asyncHandler(async (req, res) => {
+  const { q } = req.query;
+  const currentUserId = req.user._id;
+
+  if (!q) {
+    return res.status(200).json({ success: true, users: [] });
+  }
+
+  // 1. Find users matching the query
+  const queryObj = {
+    username: { $regex: q.startsWith('@') ? q.slice(1) : q, $options: 'i' },
+    isActive: true,
+    _id: { $ne: currentUserId }
+  };
+
+  const users = await User.find(queryObj)
+    .select('username fullName profilePicture isVerified mentionPrivacy')
+    .limit(10)
+    .lean();
+
+  const suggestions = [];
+
+  for (const targetUser of users) {
+    const privacy = targetUser.mentionPrivacy || 'everyone';
+
+    if (privacy === 'everyone') {
+      suggestions.push(targetUser);
+    } else if (privacy === 'friends') {
+      // Check mutual follow
+      const [followA, followB] = await Promise.all([
+        Follow.findOne({ follower: currentUserId, following: targetUser._id, status: 'accepted' }),
+        Follow.findOne({ follower: targetUser._id, following: currentUserId, status: 'accepted' })
+      ]);
+      if (followA && followB) {
+        suggestions.push(targetUser);
+      }
+    }
+    // If 'no_one', don't add
+  }
+
+  res.status(200).json({
+    success: true,
+    users: suggestions
   });
 });

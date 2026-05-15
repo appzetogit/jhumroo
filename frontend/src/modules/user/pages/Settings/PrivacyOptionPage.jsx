@@ -1,15 +1,35 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { BiCheck, BiChevronLeft } from 'react-icons/bi';
-import { getPrivacySetting, setPrivacySetting } from '../../../../utils/privacySettings';
+import { useAuth } from '../../../../context/AuthContext';
+import userService from '../../../../services/userService';
 
 const PrivacyOptionPage = ({ title, settingKey, options, helperText }) => {
   const navigate = useNavigate();
-  const [selectedValue, setSelectedValue] = useState(() => getPrivacySetting(settingKey));
+  const { user, updateUser } = useAuth();
+  
+  // Map internal database field names if they differ from settingKey
+  const dbKeyMap = {
+    'comments': 'commentPrivacy',
+    'mentionsTags': 'mentionPrivacy',
+    'directMessages': 'messagePrivacy',
+    'downloads': 'downloadPrivacy',
+  };
+  
+  const dbKey = dbKeyMap[settingKey] || settingKey;
+  const [selectedValue, setSelectedValue] = useState(user?.[dbKey] || options[0].value);
 
-  const handleSelect = (value) => {
+  const handleSelect = async (value) => {
     setSelectedValue(value);
-    setPrivacySetting(settingKey, value);
+    try {
+      const response = await userService.updateProfile({ [dbKey]: value });
+      if (response.success) {
+        updateUser(response.user);
+      }
+    } catch (error) {
+      console.error(`Failed to update ${settingKey}:`, error);
+      // Revert on error if needed, but usually we just keep it or show toast
+    }
   };
 
   return (

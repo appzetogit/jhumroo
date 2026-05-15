@@ -68,7 +68,7 @@ const PhoneInput = ({ onNext, onBack, mode = 'signup', isThemed = false }) => {
             <input
               type="tel"
               inputMode="numeric"
-              placeholder="000 000 0000"
+              placeholder="Enter Your Phone Number"
               autoFocus
               value={phoneNumber}
               onChange={(e) => setPhoneNumber(e.target.value.replace(/\D/g, '').slice(0, 10))}

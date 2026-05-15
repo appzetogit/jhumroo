@@ -7,7 +7,14 @@ const FullscreenPlayer = ({ isOpen, onClose, videoUrl, posterUrl }) => {
 
   useEffect(() => {
     const video = videoRef.current;
-    if (!video || !isOpen) return;
+    if (!video || !isOpen || !videoUrl) return;
+    
+    const playPromise = video.play();
+    if (playPromise !== undefined) {
+      playPromise.catch(err => {
+        if (err.name !== 'AbortError') console.warn("Fullscreen play failed:", err);
+      });
+    }
 
     const handleTimeUpdate = () => {
       const p = (video.currentTime / video.duration) * 100;
@@ -15,7 +22,10 @@ const FullscreenPlayer = ({ isOpen, onClose, videoUrl, posterUrl }) => {
     };
 
     video.addEventListener('timeupdate', handleTimeUpdate);
-    return () => video.removeEventListener('timeupdate', handleTimeUpdate);
+    return () => {
+      video.removeEventListener('timeupdate', handleTimeUpdate);
+      video.pause();
+    };
   }, [isOpen]);
 
   const handleSeek = (e) => {
@@ -45,7 +55,6 @@ const FullscreenPlayer = ({ isOpen, onClose, videoUrl, posterUrl }) => {
         src={videoUrl}
         poster={posterUrl}
         className="w-full h-full object-cover"
-        autoPlay
         loop
         controls={false}
         playsInline

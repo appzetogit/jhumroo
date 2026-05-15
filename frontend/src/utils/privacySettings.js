@@ -4,8 +4,6 @@ const DEFAULT_PRIVACY_SETTINGS = {
   comments: 'Everyone',
   mentionsTags: 'Friends',
   directMessages: 'Friends',
-  duet: 'Everyone',
-  stitch: 'Everyone',
   downloads: 'On',
   privateAccount: false,
   blockedAccounts: [],
@@ -20,8 +18,6 @@ const normalizePrivacySettings = (value) => {
     comments: value.comments || DEFAULT_PRIVACY_SETTINGS.comments,
     mentionsTags: value.mentionsTags || DEFAULT_PRIVACY_SETTINGS.mentionsTags,
     directMessages: value.directMessages || DEFAULT_PRIVACY_SETTINGS.directMessages,
-    duet: value.duet || DEFAULT_PRIVACY_SETTINGS.duet,
-    stitch: value.stitch || DEFAULT_PRIVACY_SETTINGS.stitch,
     downloads: value.downloads || DEFAULT_PRIVACY_SETTINGS.downloads,
     privateAccount:
       typeof value.privateAccount === 'boolean'

@@ -5,6 +5,7 @@ import User from '../../../models/User.model.js';
 import Follow from '../../../models/Follow.model.js';
 import Like from '../../../models/Like.model.js';
 import { asyncHandler } from '../../../middleware/errorHandler.js';
+import { createNotification } from '../../../utils/notificationService.js';
 
 /**
  * Helper function to populate comment with user details and follow status
@@ -115,7 +116,7 @@ export const createComment = asyncHandler(async (req, res) => {
   }
 
   // Check if reel exists
-  const reel = await Reel.findById(reelId);
+  const reel = await Reel.findById(reelId).populate('user', 'commentPrivacy');
   if (!reel) {
     return res.status(404).json({
       success: false,
@@ -123,12 +124,42 @@ export const createComment = asyncHandler(async (req, res) => {
     });
   }
 
-  // Check if comments are allowed
+  // Check if comments are allowed (legacy boolean flag)
   if (!reel.allowComments) {
     return res.status(403).json({
       success: false,
       message: 'Comments are not allowed on this reel'
     });
+  }
+
+  // Check comment privacy settings of the reel owner
+  const reelOwner = reel.user;
+  
+  if (reelOwner && reelOwner._id.toString() !== req.user._id.toString()) {
+    const privacy = reelOwner.commentPrivacy || 'everyone';
+    console.log(`[Comment Privacy] Owner: ${reelOwner._id}, Privacy: ${privacy}, Requester: ${req.user._id}`);
+
+    if (privacy === 'no_one') {
+      return res.status(403).json({
+        success: false,
+        message: 'Comments are turned off for this video'
+      });
+    }
+
+    if (privacy === 'friends') {
+      // Friends means mutual followers
+      const [followA, followB] = await Promise.all([
+        Follow.findOne({ follower: req.user._id, following: reelOwner._id, status: 'accepted' }),
+        Follow.findOne({ follower: reelOwner._id, following: req.user._id, status: 'accepted' })
+      ]);
+
+      if (!followA || !followB) {
+        return res.status(403).json({
+          success: false,
+          message: 'Only mutual followers (friends) can comment on this video'
+        });
+      }
+    }
   }
 
   // If it's a reply, check if parent comment exists
@@ -159,6 +190,23 @@ export const createComment = asyncHandler(async (req, res) => {
   // Populate user details
   await comment.populate('user', 'username fullName profilePicture isVerified');
 
+  // Trigger mention notifications if any
+  if (comment.mentions && comment.mentions.length > 0) {
+    comment.mentions.forEach(mentionUserId => {
+      // Avoid notifying self
+      if (mentionUserId.toString() !== req.user._id.toString()) {
+        createNotification({
+          recipient: mentionUserId,
+          sender: req.user._id,
+          type: 'mention',
+          reel: reelId,
+          comment: comment._id,
+          text: 'mentioned you in a comment'
+        }).catch(err => console.error('[createComment] Mention notification failed:', err));
+      }
+    });
+  }
+
   // Add follow status for Instagram-like experience
   const enrichedComments = await populateCommentWithUserDetails([comment], req.user._id);
 
@@ -182,11 +230,28 @@ export const getReelComments = asyncHandler(async (req, res) => {
   const sortBy = req.query.sortBy || 'recent'; // 'recent' or 'popular'
 
   // Check if reel exists
-  const reel = await Reel.findById(reelId);
+  const reel = await Reel.findById(reelId).populate('user', 'commentPrivacy');
   if (!reel) {
     return res.status(404).json({
       success: false,
       message: 'Reel not found'
+    });
+  }
+
+  // Check if comments are turned off via privacy settings
+  const reelOwner = reel.user;
+  if (reelOwner && reelOwner.commentPrivacy === 'no_one') {
+    return res.status(200).json({
+      success: true,
+      comments: [],
+      commentsDisabled: true,
+      message: 'Comments are turned off',
+      pagination: {
+        currentPage: page,
+        totalPages: 0,
+        totalComments: 0,
+        hasMore: false
+      }
     });
   }
 

@@ -7,9 +7,9 @@ const PrivacyDirectMessagesPage = () => (
     settingKey="directMessages"
     helperText="Choose who can send you direct messages on Jhumroo."
     options={[
-      { value: 'Everyone', label: 'Everyone', description: 'Anyone can start a chat with you.' },
-      { value: 'Friends', label: 'Friends', description: 'Only mutual followers can message you.' },
-      { value: 'No one', label: 'No one', description: 'New direct messages will be turned off.' },
+      { value: 'everyone', label: 'Everyone', description: 'Anyone can start a chat with you.' },
+      { value: 'friends', label: 'Friends', description: 'Only mutual followers can message you.' },
+      { value: 'no_one', label: 'No one', description: 'New direct messages will be turned off.' },
     ]}
   />
 );

@@ -1,18 +1,40 @@
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
-import { BiChevronLeft, BiSearch, BiChevronRight, BiMessageDetail, BiShield, BiSolidLockAlt, BiQuestionMark } from 'react-icons/bi';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { BiChevronLeft, BiSearch, BiChevronRight, BiMessageDetail, BiShield, BiSolidLockAlt, BiQuestionMark, BiTimeFive, BiCheckCircle, BiPlayCircle } from 'react-icons/bi';
 import { useAppContent } from '../../../../hooks/useAppContent';
+import userService from '../../../../services/userService';
 
 const HelpCenterPage = () => {
     const navigate = useNavigate();
+    const location = useLocation();
     const { config } = useAppContent();
-    const [activeTab, setActiveTab] = React.useState('help'); // 'help' or 'support'
+    const [activeTab, setActiveTab] = React.useState(location.state?.activeTab || 'help'); // 'help' or 'support'
     
-    // Support form state
-    const categories = config?.helpCenter?.reportProblemCategories || [];
-    const [selectedCategory, setSelectedCategory] = React.useState(categories[0] || '');
-    const [description, setDescription] = React.useState('');
-    const [submitted, setSubmitted] = React.useState(false);
+    // Support state
+    const [myReports, setMyReports] = React.useState([]);
+    const [loadingReports, setLoadingReports] = React.useState(false);
+
+    React.useEffect(() => {
+        if (activeTab === 'support') {
+            fetchMyReports();
+        }
+    }, [activeTab]);
+
+    const fetchMyReports = async () => {
+        setLoadingReports(true);
+        console.log('Fetching my reports...');
+        try {
+            const res = await userService.getMyProblemReports();
+            console.log('My reports response:', res);
+            if (res.success) {
+                setMyReports(res.reports || []);
+            }
+        } catch (error) {
+            console.error('Failed to fetch my reports:', error);
+        } finally {
+            setLoadingReports(false);
+        }
+    };
 
     const iconMap = {
       safety: BiShield,
@@ -32,11 +54,18 @@ const HelpCenterPage = () => {
       }),
     }));
 
-    const handleSubmit = () => {
-        if (!description.trim()) return;
-        setSubmitted(true);
-        setDescription('');
-        setTimeout(() => setSubmitted(false), 3000);
+    const getStatusIcon = (status) => {
+        switch (status) {
+            case 'pending': return <BiTimeFive className="text-yellow-500" size={18} />;
+            case 'in_progress': return <BiPlayCircle className="text-blue-500" size={18} />;
+            case 'resolved': return <BiCheckCircle className="text-green-500" size={18} />;
+            default: return <BiTimeFive className="text-white/20" size={18} />;
+        }
+    };
+
+    const getStatusText = (status) => {
+        if (!status) return 'Pending';
+        return status.charAt(0).toUpperCase() + status.slice(1).replace('_', ' ');
     };
 
     return (
@@ -66,7 +95,7 @@ const HelpCenterPage = () => {
                         className={`pb-2 text-[15px] font-bold cursor-pointer transition-all ${activeTab === 'support' ? 'text-white border-b-2 border-white' : 'text-white/40'}`}
                         onClick={() => setActiveTab('support')}
                     >
-                        Support
+                        History
                     </div>
                 </div>
             </div>
@@ -105,52 +134,48 @@ const HelpCenterPage = () => {
                     </>
                 ) : (
                     <div className="space-y-8 animate-in fade-in duration-300">
+                        {/* Report History */}
                         <div>
-                            <h4 className="text-[11px] text-white/40 font-bold uppercase tracking-widest mb-4 ml-1">Topic</h4>
-                            <div className="flex flex-wrap gap-2">
-                                {categories.map((category) => (
-                                    <button
-                                        key={category}
-                                        type="button"
-                                        onClick={() => setSelectedCategory(category)}
-                                        className={`px-4 py-2 rounded-full text-[13px] font-semibold transition-all ${
-                                            selectedCategory === category
-                                                ? 'bg-white text-black'
-                                                : 'bg-[#242424] text-white/70 border border-white/5'
-                                        }`}
-                                    >
-                                        {category}
-                                    </button>
-                                ))}
+                            <div className="flex items-center justify-between mb-4 ml-1">
+                                <h4 className="text-[11px] text-white/40 font-bold uppercase tracking-widest">Your Reports</h4>
+                                <button 
+                                    onClick={(e) => { e.stopPropagation(); fetchMyReports(); }}
+                                    className="text-[11px] text-[#FE2C55] font-bold uppercase tracking-widest hover:opacity-70 transition-opacity"
+                                >
+                                    {loadingReports ? 'Loading...' : 'Refresh'}
+                                </button>
                             </div>
-                        </div>
-
-                        <div className="bg-[#242424] rounded-[24px] p-5 border border-white/5 shadow-xl">
-                            <div className="mb-6">
-                                <label className="block text-[11px] text-white/40 font-bold uppercase tracking-widest mb-3">Reason</label>
-                                <textarea
-                                    value={description}
-                                    onChange={(e) => setDescription(e.target.value)}
-                                    placeholder="Please describe your issue in detail..."
-                                    className="w-full h-40 rounded-[20px] bg-white/5 border border-white/5 p-4 text-[15px] text-white placeholder:text-white/20 resize-none outline-none focus:border-white/20 transition-all"
-                                />
-                            </div>
-
-                            {submitted && (
-                                <div className="mb-6 p-4 bg-green-500/10 border border-green-500/20 rounded-[16px]">
-                                    <p className="text-[13px] text-green-400 font-medium text-center">
-                                        Support request submitted successfully!
-                                    </p>
+                            
+                            {loadingReports && myReports.length === 0 ? (
+                                <div className="p-8 text-center">
+                                    <div className="w-8 h-8 border-2 border-[#FE2C55] border-t-transparent rounded-full animate-spin mx-auto"></div>
+                                </div>
+                            ) : myReports && myReports.length > 0 ? (
+                                <div className="space-y-3">
+                                    {myReports.map((report) => (
+                                        <div key={report._id} className="bg-[#242424] rounded-[20px] p-4 border border-white/5 flex flex-col gap-2">
+                                            <div className="flex justify-between items-start">
+                                                <span className="text-[14px] font-bold text-white/90">{report.category}</span>
+                                                <span className="text-[11px] text-white/30">{new Date(report.createdAt).toLocaleDateString()}</span>
+                                            </div>
+                                            <p className="text-[13px] text-white/50 line-clamp-2 leading-relaxed">
+                                                {report.description}
+                                            </p>
+                                            <div className="flex items-center gap-2 mt-1 pt-2 border-t border-white/5">
+                                                {getStatusIcon(report.status)}
+                                                <span className="text-[12px] font-bold text-white/70 uppercase tracking-wider">
+                                                    {getStatusText(report.status)}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : !loadingReports && (
+                                <div className="bg-white/5 rounded-[20px] p-8 text-center border border-dashed border-white/10">
+                                    <BiTimeFive className="mx-auto mb-3 text-white/10" size={32} />
+                                    <p className="text-[13px] text-white/30 font-medium">No reports submitted yet.</p>
                                 </div>
                             )}
-
-                            <button
-                                type="button"
-                                onClick={handleSubmit}
-                                className="w-full h-[56px] rounded-[20px] bg-[#FE2C55] text-white text-[16px] font-bold active:scale-[0.98] transition-all shadow-lg shadow-[#FE2C55]/20"
-                            >
-                                Submit
-                            </button>
                         </div>
 
                         <div className="bg-white/5 rounded-[20px] p-6 text-center">

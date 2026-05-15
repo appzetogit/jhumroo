@@ -1,20 +1,42 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import SettingsSubPageLayout from './SettingsSubPageLayout';
 import { getReportProblemCategories } from '../../../../utils/helpCenterData';
+import userService from '../../../../services/userService';
 
 const ReportProblemPage = () => {
+  const navigate = useNavigate();
   const categories = getReportProblemCategories();
   const [selectedCategory, setSelectedCategory] = useState(categories[0]);
   const [description, setDescription] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
-  const handleSubmit = () => {
-    if (!description.trim()) {
+  const handleSubmit = async () => {
+    if (!description.trim() || isSubmitting) {
       return;
     }
 
-    setSubmitted(true);
-    setDescription('');
+    setIsSubmitting(true);
+    try {
+      const res = await userService.submitProblemReport({
+        category: selectedCategory,
+        description: description.trim()
+      });
+      
+      if (res.success) {
+        setSubmitted(true);
+        setDescription('');
+        // Redirect to support history after a short delay
+        setTimeout(() => {
+          navigate('/settings/help-center', { state: { activeTab: 'support' } });
+        }, 1500);
+      }
+    } catch (error) {
+      console.error('Failed to submit problem report:', error);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -75,9 +97,12 @@ const ReportProblemPage = () => {
         <button
           type="button"
           onClick={handleSubmit}
-          className="w-full rounded-[16px] bg-[#FE2C55] text-white text-[14px] font-semibold py-3 active:brightness-95 transition-colors"
+          disabled={isSubmitting || !description.trim()}
+          className={`w-full rounded-[16px] bg-[#FE2C55] text-white text-[14px] font-semibold py-3 active:brightness-95 transition-all ${
+            (isSubmitting || !description.trim()) ? 'opacity-50 cursor-not-allowed' : 'hover:brightness-110'
+          }`}
         >
-          Submit report
+          {isSubmitting ? 'Submitting...' : 'Submit report'}
         </button>
       </div>
     </SettingsSubPageLayout>

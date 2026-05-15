@@ -9,7 +9,11 @@ import {
   markConversationAsRead,
   deleteMessage,
   unsendMessage,
-  deleteConversation
+  deleteConversation,
+  togglePinConversation,
+  toggleMuteConversation,
+  pinMessage,
+  unpinMessage
 } from '../controllers/message.controller.js';
 import { uploadImage, uploadVideo } from '../../../middleware/upload.js';
 
@@ -23,6 +27,8 @@ router.get('/conversations', getConversations);
 router.get('/conversation/:userId', getOrCreateConversation);
 router.delete('/conversation/:conversationId', deleteConversation);
 router.put('/conversation/:conversationId/read', markConversationAsRead);
+router.put('/conversation/:conversationId/pin', togglePinConversation);
+router.put('/conversation/:conversationId/mute', toggleMuteConversation);
 
 // Message routes
 router.get('/:conversationId', getMessages);
@@ -34,5 +40,7 @@ router.post('/send/video', uploadVideo, sendMessage);
 router.put('/:messageId/read', markAsRead);
 router.delete('/:messageId', deleteMessage);
 router.post('/:messageId/unsend', unsendMessage);
+router.put('/:messageId/pin', pinMessage);
+router.put('/:messageId/unpin', unpinMessage);
 
 export default router;

@@ -14,6 +14,25 @@ import { deleteFile } from '../../../config/cloudinary.js';
 import fs from 'fs';
 
 /**
+ * Helper to handle mention notifications for Reels
+ */
+const handleMentionNotifications = (reel, currentUserId) => {
+  if (reel.mentions && reel.mentions.length > 0) {
+    reel.mentions.forEach(mentionUserId => {
+      if (mentionUserId.toString() !== currentUserId.toString()) {
+        createNotification({
+          recipient: mentionUserId,
+          sender: currentUserId,
+          type: 'mention',
+          reel: reel._id,
+          text: 'mentioned you in a post'
+        }).catch(err => console.error('[handleMentionNotifications] failed:', err));
+      }
+    });
+  }
+};
+
+/**
  * @desc    Get presigned URL for direct S3 upload
  * @route   POST /api/reels/create-upload-url
  * @access  Private
@@ -98,6 +117,9 @@ export const completeUpload = asyncHandler(async (req, res) => {
     $inc: { 'stats.reelsCount': 1 }
   });
 
+  // Handle mentions
+  handleMentionNotifications(reel, req.user._id);
+
   // Trigger background processing (Audio Merging)
   reel.status = 'processing';
   await reel.save();
@@ -110,6 +132,7 @@ export const completeUpload = asyncHandler(async (req, res) => {
         'video.url': processed.videoUrl,
         'video.publicId': processed.videoKey,
         'video.thumbnail': processed.thumbnailUrl,
+        'video.duration': processed.duration || 0,
         status: 'completed'
       });
     })
@@ -206,6 +229,9 @@ export const createReel = asyncHandler(async (req, res) => {
     $inc: { 'stats.reelsCount': 1 }
   });
 
+  // Handle mentions
+  handleMentionNotifications(reel, req.user._id);
+
   // Trigger background processing for uploaded files
   processReelWithAudio(reel._id, s3Result.key, reel.music)
     .then(async (processed) => {
@@ -213,6 +239,7 @@ export const createReel = asyncHandler(async (req, res) => {
         'video.url': processed.videoUrl,
         'video.publicId': processed.videoKey,
         'video.thumbnail': processed.thumbnailUrl,
+        'video.duration': processed.duration || 0,
         status: 'completed'
       });
     })
@@ -220,7 +247,7 @@ export const createReel = asyncHandler(async (req, res) => {
        console.error(`[ReelController] createReel processing failed:`, err);
     });
 
-  await reel.populate('user', 'username fullName profilePicture isVerified');
+  await reel.populate('user', 'username fullName profilePicture isVerified downloadPrivacy');
 
   res.status(201).json({
     success: true,
@@ -264,7 +291,7 @@ export const getFeedReels = asyncHandler(async (req, res) => {
     .sort({ 'stats.viewsCount': -1, 'stats.likesCount': -1, createdAt: -1 })
     .skip(skip)
     .limit(limit)
-    .populate('user', 'username fullName profilePicture isVerified')
+    .populate('user', 'username fullName profilePicture isVerified downloadPrivacy')
     .populate('music.audioId')
     .lean(); // Use lean() to get plain JavaScript objects
 
@@ -328,7 +355,7 @@ export const getFollowingReels = asyncHandler(async (req, res) => {
     .sort({ createdAt: -1 })
     .skip(skip)
     .limit(limit)
-    .populate('user', 'username fullName profilePicture isVerified')
+    .populate('user', 'username fullName profilePicture isVerified downloadPrivacy')
     .populate('music.audioId')
     .lean();
 
@@ -365,7 +392,7 @@ export const getFollowingReels = asyncHandler(async (req, res) => {
  */
 export const getReel = asyncHandler(async (req, res) => {
   const reel = await Reel.findById(req.params.id)
-    .populate('user', 'username fullName profilePicture isVerified')
+    .populate('user', 'username fullName profilePicture isVerified downloadPrivacy')
     .populate('music.audioId')
     .lean();
 
@@ -686,7 +713,7 @@ export const searchReels = asyncHandler(async (req, res) => {
     .sort({ 'stats.viewsCount': -1, createdAt: -1 })
     .skip(skip)
     .limit(limit)
-    .populate('user', 'username fullName profilePicture isVerified');
+    .populate('user', 'username fullName profilePicture isVerified downloadPrivacy');
 
   const total = await Reel.countDocuments(query);
 
@@ -720,7 +747,7 @@ export const reportReel = asyncHandler(async (req, res) => {
   const existingReport = await Report.findOne({
     reportedBy: req.user._id,
     reportedItem: reelId,
-    reportType: 'reel'
+    reportType: 'Reel'
   });
 
   if (existingReport) {
@@ -732,7 +759,7 @@ export const reportReel = asyncHandler(async (req, res) => {
 
   await Report.create({
     reportedBy: req.user._id,
-    reportType: 'reel',
+    reportType: 'Reel',
     reportedItem: reelId,
     reason,
     description
@@ -770,26 +797,27 @@ export const editReel = asyncHandler(async (req, res) => {
     fs.unlinkSync(req.file.path);
   }
 
-  const updatedReel = await Reel.findByIdAndUpdate(
-    req.params.id,
-    {
-      $set: {
-        caption: caption !== undefined ? caption : reel.caption,
-        'video.thumbnail': thumbnailUrl,
-        allowComments: allowComments !== undefined ? (allowComments === 'true' || allowComments === true) : reel.allowComments,
-        allowDuet: allowDuet !== undefined ? (allowDuet === 'true' || allowDuet === true) : reel.allowDuet,
-        allowStitch: allowStitch !== undefined ? (allowStitch === 'true' || allowStitch === true) : reel.allowStitch,
-        allowDownload: allowDownload !== undefined ? (allowDownload === 'true' || allowDownload === true) : reel.allowDownload,
-        audience: audience !== undefined ? audience : reel.audience
-      }
-    },
-    { new: true, runValidators: true }
-  ).populate('user', 'username fullName profilePicture isVerified');
+  // Update fields
+  if (caption !== undefined) reel.caption = caption;
+  if (thumbnailUrl !== undefined) reel.video.thumbnail = thumbnailUrl;
+  if (allowComments !== undefined) reel.allowComments = (allowComments === 'true' || allowComments === true);
+  if (allowDuet !== undefined) reel.allowDuet = (allowDuet === 'true' || allowDuet === true);
+  if (allowStitch !== undefined) reel.allowStitch = (allowStitch === 'true' || allowStitch === true);
+  if (allowDownload !== undefined) reel.allowDownload = (allowDownload === 'true' || allowDownload === true);
+  if (audience !== undefined) reel.audience = audience;
+
+  await reel.save();
+  await reel.populate('user', 'username fullName profilePicture isVerified');
+
+  // Handle mentions (only if caption was modified)
+  if (caption !== undefined) {
+    handleMentionNotifications(reel, req.user._id);
+  }
 
   res.status(200).json({
     success: true,
     message: 'Reel updated successfully',
-    reel: updatedReel
+    reel
   });
 });
 

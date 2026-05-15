@@ -12,7 +12,8 @@ import {
   getContentStats,
   getAllSounds,
   getAllHashtags,
-  getAllLiveUsers
+  getAllLiveUsers,
+  syncAllDurations
 } from '../controllers/content.controller.js';
 import { protectAdmin, checkPermission } from '../../../middleware/adminAuth.js';
 
@@ -25,6 +26,7 @@ router.use(protectAdmin);
 router.get('/reels', getAllReels);
 router.get('/reels/:id', getReelById);
 router.delete('/reels/:id', checkPermission('delete_content'), deleteReel);
+router.post('/reels/sync-durations', syncAllDurations);
 
 // Comments management
 router.get('/comments', getAllComments);

@@ -7,7 +7,9 @@ import {
   getLikedReels,
   getSavedReels,
   searchUsers,
-  getSuggestedUsers
+  getSuggestedUsers,
+  updateFCMToken,
+  getMentionSuggestions
 } from '../controllers/user.controller.js';
 import {
   getPreferences,
@@ -21,6 +23,9 @@ import { profileUpdateValidation, validate } from '../../../middleware/validatio
 
 const router = express.Router();
 
+// Protected routes for mentions
+router.get('/mentions/suggestions', protect, getMentionSuggestions);
+
 // Public routes with optional auth
 router.get('/search', optionalAuth, searchUsers);
 router.get('/suggested', optionalAuth, getSuggestedUsers);
@@ -32,6 +37,7 @@ router.put('/profile', protect, profileUpdateValidation, validate, updateProfile
 router.post('/profile-picture', protect, uploadImage, handleMulterError, uploadProfilePicture);
 router.get('/me/liked-reels', protect, getLikedReels);
 router.get('/me/saved-reels', protect, getSavedReels);
+router.post('/fcm-token', protect, updateFCMToken);
 
 // Preference routes
 router.get('/me/preferences', protect, getPreferences);

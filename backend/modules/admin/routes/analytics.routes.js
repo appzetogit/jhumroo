@@ -3,6 +3,7 @@ import {
   getDashboardStats,
   getUserGrowth,
   getContentAnalytics,
+  getWatchTimeAnalytics,
   getTopUsers,
   getTopReels,
   getReportsAnalytics,
@@ -27,6 +28,7 @@ router.get('/top-users', getTopUsers);
 
 // Content analytics
 router.get('/content', getContentAnalytics);
+router.get('/watch-time', getWatchTimeAnalytics);
 router.get('/top-reels', getTopReels);
 
 // Reports analytics

@@ -170,14 +170,16 @@ const MoreOptionsSheet = ({
               label="Share" 
               onClick={handleShare}
             />
-            <BubbleOptionItem 
-              icon={BiDownload} 
-              label="Download" 
-              onClick={() => {
-                alert("Download started...");
-                handleClose();
-              }}
-            />
+            {((reelData?.user?.downloadPrivacy !== 'Off') && (reelData?.allowDownload !== false)) && (
+              <BubbleOptionItem 
+                icon={BiDownload} 
+                label="Download" 
+                onClick={() => {
+                  alert("Download started...");
+                  handleClose();
+                }}
+              />
+            )}
             <BubbleOptionItem 
               icon={BiFullscreen} 
               label="Fullscreen" 

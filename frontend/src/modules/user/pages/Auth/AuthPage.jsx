@@ -179,9 +179,12 @@ const AuthPage = ({ onComplete, initialMode = 'signup' }) => {
     }
 
     const isNewUser = userData?.username?.startsWith('user_') || !userData?.isVerified;
+    const needsOnboarding = !userData?.isOnboarded;
     
     if (isNewUser) {
       setStep(6);
+    } else if (needsOnboarding) {
+      onComplete(true);
     } else {
       onComplete(false);
     }
@@ -190,9 +193,22 @@ const AuthPage = ({ onComplete, initialMode = 'signup' }) => {
   /* ─── Step 6: Complete Profile ─── */
   const [fullName, setFullName] = useState('');
   const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
+  const [country, setCountry] = useState('India');
+  const [state, setState] = useState('');
   const [isCompleting, setIsCompleting] = useState(false);
   const [usernameError, setUsernameError] = useState('');
   const { completeProfile } = useAuth();
+
+  const INDIAN_STATES = [
+    'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh', 
+    'Goa', 'Gujarat', 'Haryana', 'Himachal Pradesh', 'Jharkhand', 'Karnataka', 
+    'Kerala', 'Madhya Pradesh', 'Maharashtra', 'Manipur', 'Meghalaya', 'Mizoram', 
+    'Nagaland', 'Odisha', 'Punjab', 'Rajasthan', 'Sikkim', 'Tamil Nadu', 
+    'Telangana', 'Tripura', 'Uttar Pradesh', 'Uttarakhand', 'West Bengal',
+    'Andaman and Nicobar Islands', 'Chandigarh', 'Dadra and Nagar Haveli and Daman and Diu', 
+    'Delhi', 'Jammu and Kashmir', 'Ladakh', 'Lakshadweep', 'Puducherry'
+  ];
 
   const handleCompleteProfile = async () => {
     setUsernameError('');
@@ -202,6 +218,9 @@ const AuthPage = ({ onComplete, initialMode = 'signup' }) => {
       await completeProfile({
         fullName,
         username,
+        email,
+        country,
+        state,
         dateOfBirth: selectedDate
       });
       onComplete(true);
@@ -215,9 +234,9 @@ const AuthPage = ({ onComplete, initialMode = 'signup' }) => {
   if (step === 6) {
     return (
       <BackgroundWrapper blur>
-        <div className="flex-1 flex flex-col justify-end px-4 pb-6 sm:p-6">
+        <div className="flex-1 flex flex-col justify-end px-4 pb-6 sm:p-6 overflow-y-auto">
           <AuthCard title="Complete your profile" subtitle="Choose how you'll appear on Jhumroo">
-            <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-4 max-h-[60vh] overflow-y-auto no-scrollbar py-2">
               <div className="flex flex-col gap-1.5">
                 <label className="text-xs font-bold text-gray-400 ml-1">FULL NAME</label>
                 <input
@@ -244,11 +263,48 @@ const AuthPage = ({ onComplete, initialMode = 'signup' }) => {
                   <p className="text-[#fe2c55] text-xs font-semibold ml-1 mt-1">{usernameError}</p>
                 )}
               </div>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-bold text-gray-400 ml-1">EMAIL (OPTIONAL)</label>
+                <input
+                  type="email"
+                  placeholder="email@example.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full h-[54px] bg-white/5 border border-white/10 rounded-2xl px-4 text-white outline-none focus:border-[#fe2c55] transition-all"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-bold text-gray-400 ml-1">COUNTRY</label>
+                  <select
+                    value={country}
+                    onChange={(e) => setCountry(e.target.value)}
+                    className="w-full h-[54px] bg-white/5 border border-white/10 rounded-2xl px-4 text-white outline-none focus:border-[#fe2c55] transition-all appearance-none"
+                  >
+                    <option value="India" className="bg-[#1a1a1a]">India</option>
+                    <option value="Other" className="bg-[#1a1a1a]">Other</option>
+                  </select>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-bold text-gray-400 ml-1">STATE</label>
+                  <select
+                    value={state}
+                    onChange={(e) => setState(e.target.value)}
+                    disabled={country !== 'India'}
+                    className={`w-full h-[54px] bg-white/5 border border-white/10 rounded-2xl px-4 text-white outline-none focus:border-[#fe2c55] transition-all appearance-none ${country !== 'India' ? 'opacity-50' : ''}`}
+                  >
+                    <option value="" disabled className="bg-[#1a1a1a]">Select State</option>
+                    {INDIAN_STATES.map(s => (
+                      <option key={s} value={s} className="bg-[#1a1a1a]">{s}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
             </div>
 
             <div className="mt-8">
               <PrimaryButton onClick={handleCompleteProfile} disabled={!username || username.length < 3 || isCompleting}>
-                {isCompleting ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : 'Start Watching'}
+                {isCompleting ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : 'Next'}
               </PrimaryButton>
             </div>
           </AuthCard>

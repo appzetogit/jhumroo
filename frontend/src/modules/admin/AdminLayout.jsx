@@ -9,13 +9,24 @@ import {
   BiMessageSquareDetail,
   BiBell,
   BiMusic,
-  BiFlag
+  BiFlag,
+  BiPlay,
+  BiRocket,
+  BiBookmark,
+  BiSupport,
+  BiFile
 } from 'react-icons/bi';
 import AdminDashboard from './pages/AdminDashboard';
 import AdminUsers from './pages/AdminUsers';
-import AdminContent from './pages/AdminContent';
+import AdminReels from './pages/AdminReels';
 import AdminAudio from './pages/AdminAudio';
 import AdminReports from './pages/AdminReports';
+import AdminProblemReports from './pages/AdminProblemReports';
+import AdminSupportRequests from './pages/AdminSupportRequests';
+import AdminTermsAndPolicy from './pages/AdminTermsAndPolicy';
+import AdminNotifications from './pages/AdminNotifications';
+import AdminAds from './pages/AdminAds';
+import AdminInterests from './pages/AdminInterests';
 import AdminProfile from './pages/AdminProfile';
 import { useAdminConfig } from '../../context/AdminConfigContext';
 import { useNavigate } from 'react-router-dom';
@@ -48,9 +59,15 @@ const isVeryLightHex = (hex) => {
 const NAV_ITEMS = [
   { id: 'dashboard', label: 'Dashboard', icon: BiBarChartAlt2, path: '/admin/dashboard' },
   { id: 'users', label: 'Users', icon: BiGroup, path: '/admin/users' },
-  { id: 'content', label: 'Content', icon: BiMessageSquareDetail, path: '/admin/content' },
+  { id: 'reels', label: 'Reels', icon: BiPlay, path: '/admin/reels' },
   { id: 'audio', label: 'Audio', icon: BiMusic, path: '/admin/audio' },
-  { id: 'reports', label: 'Reports', icon: BiFlag, path: '/admin/reports' },
+  { id: 'reports', label: 'Reels Reports', icon: BiFlag, path: '/admin/reports' },
+  { id: 'problem-reports', label: 'Customer Report', icon: BiMessageSquareDetail, path: '/admin/problem-reports' },
+  { id: 'support-requests', label: 'Support Requests', icon: BiSupport, path: '/admin/support-requests' },
+  { id: 'static-pages', label: 'Terms & Policy', icon: BiFile, path: '/admin/terms-and-policy' },
+  { id: 'notifications', label: 'Notifications', icon: BiBell, path: '/admin/notifications' },
+  { id: 'ads', label: 'Advertisements', icon: BiRocket, path: '/admin/ads' },
+  { id: 'interests', label: 'Interests', icon: BiBookmark, path: '/admin/interests' },
 ];
 
 const AdminLayout = () => {
@@ -114,12 +131,6 @@ const AdminLayout = () => {
           })}
         </nav>
 
-        <div className="admin-sidebar-footer">
-          <div className="admin-pill">
-            <span className="admin-pill-dot" />
-            Live preview connected
-          </div>
-        </div>
       </aside>
 
       <div className="admin-main">
@@ -153,9 +164,15 @@ const AdminLayout = () => {
             <Route path="/" element={<Navigate to="dashboard" replace />} />
             <Route path="dashboard" element={<AdminDashboard />} />
             <Route path="users" element={<AdminUsers />} />
-            <Route path="content" element={<AdminContent />} />
+            <Route path="reels" element={<AdminReels />} />
             <Route path="audio" element={<AdminAudio />} />
             <Route path="reports" element={<AdminReports />} />
+            <Route path="problem-reports" element={<AdminProblemReports />} />
+            <Route path="support-requests" element={<AdminSupportRequests />} />
+            <Route path="terms-and-policy" element={<AdminTermsAndPolicy />} />
+            <Route path="notifications" element={<AdminNotifications />} />
+            <Route path="ads" element={<AdminAds />} />
+            <Route path="interests" element={<AdminInterests />} />
             <Route path="profile" element={<AdminProfile />} />
           </Routes>
         </main>

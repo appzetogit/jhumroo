@@ -102,6 +102,19 @@ const followService = {
   },
 
   /**
+   * Get pending follow requests count
+   * @returns {Promise}
+   */
+  getFollowRequestsCount: async () => {
+    try {
+      const response = await api.get('/follows/requests/count');
+      return response;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  /**
    * Accept follow request
    * @param {string} userId
    * @returns {Promise}

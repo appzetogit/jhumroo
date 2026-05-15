@@ -8,7 +8,8 @@ import {
   getFollowRequests,
   acceptFollowRequest,
   rejectFollowRequest,
-  checkFollowStatus
+  checkFollowStatus,
+  getFollowRequestsCount
 } from '../controllers/follow.controller.js';
 import { protect, optionalAuth } from '../../../middleware/auth.js';
 
@@ -25,6 +26,7 @@ router.get('/:userId/followers', optionalAuth, getFollowers);
 router.get('/:userId/following', optionalAuth, getFollowing);
 
 // Follow requests (private accounts)
+router.get('/requests/count', protect, getFollowRequestsCount);
 router.get('/requests/pending', protect, getFollowRequests);
 router.put('/requests/:userId/accept', protect, acceptFollowRequest);
 router.delete('/requests/:userId', protect, rejectFollowRequest);

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BiFlag, BiShow, BiTrash, BiUserX, BiCheckCircle, BiXCircle } from 'react-icons/bi';
+import { BiFlag, BiShow, BiTrash, BiUserX, BiCheckCircle, BiXCircle, BiRefresh, BiX } from 'react-icons/bi';
 import adminReportService from '../../../services/adminReportService';
 
 const AdminReports = () => {
@@ -93,6 +93,16 @@ const AdminReports = () => {
           <h1 className="admin-page-title">Reports Management</h1>
           <p className="admin-page-subtitle">Review and handle user reports for reels and accounts</p>
         </div>
+        <div className="flex gap-3">
+          <button 
+            className="admin-secondary-btn flex items-center gap-2"
+            onClick={fetchReports}
+            disabled={loading}
+          >
+            <BiRefresh className={loading ? 'animate-spin' : ''} />
+            Refresh
+          </button>
+        </div>
       </div>
 
       <div className="admin-card">
@@ -107,149 +117,180 @@ const AdminReports = () => {
             <p>No reports found</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="admin-table">
-              <thead>
-                <tr>
-                  <th>Reporter</th>
-                  <th>Reason</th>
-                  <th>Reel Creator</th>
-                  <th>Reported Reel</th>
-                  <th>Status</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {reports.map((report) => (
-                  <tr key={report._id}>
-                    <td>
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-gray-200 overflow-hidden">
-                          <img 
-                            src={report.reportedBy?.profilePicture?.url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${report.reportedBy?.username}`} 
-                            alt="avatar" 
-                            className="w-full h-full object-cover"
-                          />
-                        </div>
-                        <div className="text-sm">
-                          <p className="font-bold">@{report.reportedBy?.username}</p>
-                          <p className="text-xs text-gray-500">{report.reportedBy?.fullName}</p>
-                        </div>
-                      </div>
-                    </td>
-                    <td>
-                      <span className="text-sm font-medium">{getReasonLabel(report.reason)}</span>
-                      {report.description && (
-                        <p className="text-xs text-gray-500 mt-1 truncate max-w-[150px]">{report.description}</p>
-                      )}
-                    </td>
-                    <td>
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-gray-200 overflow-hidden">
-                          <img 
-                            src={report.reportedItem?.user?.profilePicture?.url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${report.reportedItem?.user?.username}`} 
-                            alt="avatar" 
-                            className="w-full h-full object-cover"
-                          />
-                        </div>
-                        <div className="text-sm">
-                          <p className="font-bold">@{report.reportedItem?.user?.username}</p>
-                          {report.reportedItem?.user?.isBanned && (
-                            <span className="text-[10px] bg-red-100 text-red-600 px-1 rounded">BANNED</span>
-                          )}
-                        </div>
-                      </div>
-                    </td>
-                    <td>
-                      {report.reportedItem ? (
-                        <button 
-                          className="flex items-center gap-2 text-admin-primary hover:underline text-sm font-medium"
-                          onClick={() => {
-                            setSelectedReport(report);
-                            setShowVideoModal(true);
-                          }}
-                        >
-                          <BiShow size={16} />
-                          View Reel
-                        </button>
-                      ) : (
-                        <span className="text-xs text-gray-400 italic">Deleted</span>
-                      )}
-                    </td>
-                    <td>
-                      <span className={`px-2 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider ${getStatusColor(report.status)}`}>
-                        {report.status}
-                      </span>
-                    </td>
-                    <td>
-                      <div className="flex items-center gap-2">
-                        {report.status === 'pending' && (
-                          <>
-                            <button 
-                              className="admin-action-btn success" 
-                              title="Resolve / Dismiss"
-                              onClick={() => handleDismissReport(report._id)}
-                            >
-                              <BiCheckCircle size={16} />
-                            </button>
-                            <button 
-                              className="admin-action-btn danger" 
-                              title="Remove Reel"
-                              disabled={!report.reportedItem}
-                              onClick={() => handleRemoveReel(report.reportedItem?._id, report._id)}
-                            >
-                              <BiTrash size={16} />
-                            </button>
-                            <button 
-                              className="admin-action-btn warning" 
-                              title="Ban User"
-                              disabled={!report.reportedItem?.user}
-                              onClick={() => handleBanUser(report.reportedItem?.user?._id, report._id)}
-                            >
-                              <BiUserX size={16} />
-                            </button>
-                          </>
-                        )}
-                        {report.status !== 'pending' && (
-                          <span className="text-xs text-gray-400 italic">Handled</span>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="admin-table">
+            <div className="admin-table-head admin-table-head--reports">
+              <span>Reporter</span>
+              <span>Reason & Info</span>
+              <span>Reel Creator</span>
+              <span>Content</span>
+              <span>Status</span>
+              <span className="text-right">Actions</span>
+            </div>
+            
+            {reports.map((report) => (
+              <div key={report._id} className="admin-table-row admin-table-row--reports">
+                {/* Reporter */}
+                <div className="admin-user-cell">
+                  <div className="admin-avatar">
+                    <img 
+                      src={report.reportedBy?.profilePicture?.url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${report.reportedBy?.username}`} 
+                      alt="" 
+                    />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="admin-user-name truncate">@{report.reportedBy?.username}</p>
+                    <p className="admin-user-handle truncate">{report.reportedBy?.fullName}</p>
+                  </div>
+                </div>
+
+                {/* Reason */}
+                <div>
+                  <div className="flex flex-col">
+                    <span className="font-bold text-[13px] text-admin-strong">{getReasonLabel(report.reason)}</span>
+                    {report.description && (
+                      <p className="text-[11px] text-gray-500 mt-0.5 line-clamp-1" title={report.description}>
+                        {report.description}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Reel Creator */}
+                <div className="admin-user-cell">
+                  <div className="admin-avatar">
+                    <img 
+                      src={report.reportedItem?.user?.profilePicture?.url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${report.reportedItem?.user?.username}`} 
+                      alt="" 
+                    />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="admin-user-name truncate">@{report.reportedItem?.user?.username}</p>
+                    {report.reportedItem?.user?.isBanned && (
+                      <span className="text-[9px] bg-red-100 text-red-600 px-1 rounded font-bold">BANNED</span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Reported Reel */}
+                <div>
+                  {report.reportedItem ? (
+                    <button 
+                      className="flex items-center gap-1.5 text-admin-primary hover:underline text-[13px] font-bold"
+                      onClick={() => {
+                        setSelectedReport(report);
+                        setShowVideoModal(true);
+                      }}
+                    >
+                      <BiShow size={16} />
+                      View Reel
+                    </button>
+                  ) : (
+                    <span className="text-xs text-gray-400 italic">Deleted</span>
+                  )}
+                </div>
+
+                {/* Status */}
+                <div>
+                  <span className={`admin-status-pill ${
+                    report.status === 'pending' ? 'status-open' : 
+                    report.status === 'resolved' ? 'status-resolved' : 'status-investigating'
+                  }`}>
+                    {report.status}
+                  </span>
+                </div>
+
+                {/* Actions */}
+                <div className="flex items-center justify-end gap-2">
+                  {report.status === 'pending' ? (
+                    <>
+                      <button 
+                        className="admin-icon-btn success" 
+                        style={{ color: '#10b981' }}
+                        title="Resolve / Dismiss"
+                        onClick={() => handleDismissReport(report._id)}
+                      >
+                        <BiCheckCircle size={16} />
+                      </button>
+                      <button 
+                        className="admin-icon-btn" 
+                        style={{ color: '#ef4444' }}
+                        title="Remove Reel"
+                        disabled={!report.reportedItem}
+                        onClick={() => handleRemoveReel(report.reportedItem?._id, report._id)}
+                      >
+                        <BiTrash size={16} />
+                      </button>
+                      <button 
+                        className="admin-icon-btn" 
+                        style={{ color: '#f59e0b' }}
+                        title="Ban User"
+                        disabled={!report.reportedItem?.user}
+                        onClick={() => handleBanUser(report.reportedItem?.user?._id, report._id)}
+                      >
+                        <BiUserX size={18} />
+                      </button>
+                    </>
+                  ) : (
+                    <span className="text-[11px] text-gray-400 italic font-medium">Handled</span>
+                  )}
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </div>
 
       {/* Pagination */}
       {pagination.pages > 1 && (
-        <div className="flex justify-center gap-2 mt-6">
-          {[...Array(pagination.pages)].map((_, i) => (
-            <button
-              key={i}
-              className={`w-8 h-8 rounded flex items-center justify-center text-sm font-bold transition-all ${
-                page === i + 1 ? 'bg-admin-primary text-white' : 'bg-white text-gray-600 hover:bg-gray-100'
-              }`}
-              onClick={() => setPage(i + 1)}
-            >
-              {i + 1}
-            </button>
-          ))}
+        <div className="flex justify-center items-center gap-3 mt-8">
+          <button 
+            className={`px-4 py-2 rounded-xl text-sm font-bold transition-all ${page === 1 ? 'bg-gray-50 text-gray-300 cursor-not-allowed' : 'bg-white text-admin-primary border border-admin-border hover:bg-admin-primary/5'}`}
+            onClick={() => page > 1 && setPage(page - 1)}
+            disabled={page === 1}
+          >
+            Previous
+          </button>
+          <div className="flex gap-2">
+            {[...Array(pagination.pages)].map((_, i) => (
+              <button
+                key={i}
+                className={`w-10 h-10 rounded-xl flex items-center justify-center text-sm font-bold transition-all ${
+                  page === i + 1 ? 'bg-admin-primary text-white shadow-lg shadow-admin-primary/20' : 'bg-white text-gray-600 border border-admin-border hover:bg-gray-50'
+                }`}
+                onClick={() => setPage(i + 1)}
+              >
+                {i + 1}
+              </button>
+            ))}
+          </div>
+          <button 
+            className={`px-4 py-2 rounded-xl text-sm font-bold transition-all ${page === pagination.pages ? 'bg-gray-50 text-gray-300 cursor-not-allowed' : 'bg-white text-admin-primary border border-admin-border hover:bg-admin-primary/5'}`}
+            onClick={() => page < pagination.pages && setPage(page + 1)}
+            disabled={page === pagination.pages}
+          >
+            Next
+          </button>
         </div>
       )}
 
       {/* Video Modal */}
       {showVideoModal && selectedReport && (
-        <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setShowVideoModal(false)}></div>
-          <div className="relative bg-white rounded-2xl overflow-hidden max-w-md w-full animate-scale-in">
-            <div className="p-4 border-b flex justify-between items-center">
-              <h3 className="font-bold">Reel Review</h3>
-              <button onClick={() => setShowVideoModal(false)}><BiXCircle size={24} className="text-gray-400 hover:text-gray-600" /></button>
+        <div className="admin-modal-overlay" onClick={() => setShowVideoModal(false)}>
+          <div className="admin-modal !p-0 !w-[320px] overflow-hidden animate-scale-in" onClick={(e) => e.stopPropagation()}>
+            <div className="p-3 border-b flex justify-between items-center bg-white sticky top-0 z-10">
+              <div>
+                <h3 className="font-bold text-admin-strong text-[14px]">Reel Review</h3>
+                <p className="text-[10px] text-admin-muted">Reported for {getReasonLabel(selectedReport.reason)}</p>
+              </div>
+              <button 
+                className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-gray-100 transition-colors"
+                onClick={() => setShowVideoModal(false)}
+              >
+                <BiX size={24} className="text-gray-400 hover:text-gray-600" />
+              </button>
             </div>
-            <div className="aspect-[9/16] bg-black">
+            
+            <div className="aspect-[9/16] bg-black flex items-center justify-center">
               <video 
                 src={selectedReport.reportedItem?.video?.url || selectedReport.reportedItem?.url} 
                 className="w-full h-full object-contain"
@@ -257,26 +298,101 @@ const AdminReports = () => {
                 autoPlay
               />
             </div>
-            <div className="p-4 flex gap-3">
+            
+            <div className="p-4 bg-gray-50 flex flex-col gap-2.5">
+              <div className="flex gap-2">
+                <button 
+                  className="flex-1 admin-primary-btn !py-2 !text-[12px] !shadow-none !bg-red-600 hover:!bg-red-700"
+                  onClick={() => {
+                    setShowVideoModal(false);
+                    handleRemoveReel(selectedReport.reportedItem?._id, selectedReport._id);
+                  }}
+                >
+                  Remove Reel
+                </button>
+                <button 
+                  className="flex-1 admin-secondary-btn !py-2 !text-[12px]"
+                  onClick={() => setShowVideoModal(false)}
+                >
+                  Keep Reel
+                </button>
+              </div>
               <button 
-                className="flex-1 bg-red-600 text-white py-3 rounded-xl font-bold hover:bg-red-700 transition-colors"
+                className="text-[11px] font-bold text-red-600 hover:underline text-center"
                 onClick={() => {
                   setShowVideoModal(false);
-                  handleRemoveReel(selectedReport.reportedItem?._id, selectedReport._id);
+                  handleBanUser(selectedReport.reportedItem?.user?._id, selectedReport._id);
                 }}
               >
-                Remove Content
-              </button>
-              <button 
-                className="flex-1 bg-gray-100 text-gray-800 py-3 rounded-xl font-bold hover:bg-gray-200 transition-colors"
-                onClick={() => setShowVideoModal(false)}
-              >
-                Cancel
+                Ban Creator Account
               </button>
             </div>
           </div>
         </div>
       )}
+      <style dangerouslySetInnerHTML={{ __html: `
+        .admin-table-head--reports, .admin-table-row--reports {
+          grid-template-columns: 1.8fr 1.5fr 1.5fr 1.2fr 1fr 1fr;
+          align-items: center;
+          gap: 20px;
+        }
+        .admin-table-head {
+          padding: 12px 0;
+          border-bottom: 2px solid var(--admin-border);
+          margin-bottom: 8px;
+        }
+        .admin-table-row--reports {
+          padding: 16px 0;
+          transition: all 0.2s;
+        }
+        .admin-table-row--reports:hover {
+          background: rgba(254, 44, 85, 0.02);
+        }
+        .admin-user-cell {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          min-width: 0;
+        }
+        .admin-avatar {
+          width: 32px;
+          height: 32px;
+          border-radius: 10px;
+          background: #f3f4f6;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          overflow: hidden;
+          flex-shrink: 0;
+          border: 1px solid var(--admin-border);
+        }
+        .admin-avatar img {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+        }
+        .admin-user-name {
+          font-weight: 700;
+          font-size: 13px;
+          color: var(--admin-strong);
+        }
+        .admin-user-handle {
+          font-size: 11px;
+          color: var(--admin-muted);
+        }
+        .status-open {
+          background: rgba(245, 158, 11, 0.12);
+          color: #b45309;
+        }
+        .status-resolved {
+          background: rgba(16, 185, 129, 0.12);
+          color: #065f46;
+        }
+        .status-investigating {
+          background: rgba(107, 114, 128, 0.12);
+          color: #374151;
+        }
+      `}} />
     </div>
   );
 };

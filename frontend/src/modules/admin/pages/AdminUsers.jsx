@@ -289,9 +289,21 @@ const AdminUsers = () => {
               <label className="admin-form-textarea">
                 Bio
                 <textarea
-                  rows={3}
+                  rows={2}
                   value={draft.bio || ''}
                   onChange={(event) => setDraft((prev) => ({ ...prev, bio: event.target.value }))}
+                />
+              </label>
+              <label className="admin-form-textarea">
+                Interests (comma separated)
+                <textarea
+                  rows={2}
+                  value={draft.interests && Array.isArray(draft.interests) ? draft.interests.join(', ') : ''}
+                  onChange={(event) => setDraft((prev) => ({ 
+                    ...prev, 
+                    interests: event.target.value.split(',').map(i => i.trim()).filter(i => i !== '') 
+                  }))}
+                  placeholder="e.g. Comedy, Music, Travel"
                 />
               </label>
               {error && <p className="admin-error">{error}</p>}

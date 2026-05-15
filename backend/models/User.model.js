@@ -105,6 +105,14 @@ const userSchema = new mongoose.Schema(
         enum: ['ios', 'android', 'web']
       }
     }],
+    fcmTokenMobile: {
+      type: String,
+      default: ''
+    },
+    fcmToken: {
+      type: String,
+      default: ''
+    },
     // Account status
     isActive: {
       type: Boolean,
@@ -132,6 +140,13 @@ const userSchema = new mongoose.Schema(
     refreshToken: {
       type: String
     },
+    country: {
+      type: String,
+      default: 'India'
+    },
+    state: {
+      type: String
+    },
     interests: {
       type: [String],
       default: []
@@ -140,10 +155,34 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       default: false
     },
+    isOnboarded: {
+      type: Boolean,
+      default: false
+    },
     savedAudios: [{
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Audio'
-    }]
+    }],
+    commentPrivacy: {
+      type: String,
+      enum: ['everyone', 'friends', 'no_one'],
+      default: 'everyone'
+    },
+    mentionPrivacy: {
+      type: String,
+      enum: ['everyone', 'friends', 'no_one'],
+      default: 'everyone'
+    },
+    messagePrivacy: {
+      type: String,
+      enum: ['everyone', 'friends', 'no_one'],
+      default: 'everyone'
+    },
+    downloadPrivacy: {
+      type: String,
+      enum: ['On', 'Off'],
+      default: 'On'
+    }
   },
   {
     timestamps: true,

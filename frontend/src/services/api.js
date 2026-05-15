@@ -21,18 +21,20 @@ const api = axios.create({
 // Request interceptor - Add auth token to requests
 api.interceptors.request.use(
   (config) => {
-    const userToken = localStorage.getItem('jhumroo_token');
-    const adminToken = localStorage.getItem('jhumroo_admin_token');
-    const isAdminRoute = window.location.pathname.startsWith('/admin');
+    const userToken = sessionStorage.getItem('jhumroo_token');
+    const adminToken = sessionStorage.getItem('jhumroo_admin_token');
     
-    // Use admin token if we are on an admin route or calling an admin endpoint
-    if ((isAdminRoute || config.url.includes('/admin/')) && adminToken) {
-      config.headers.Authorization = `Bearer ${adminToken}`;
-    } else if (userToken) {
-      config.headers.Authorization = `Bearer ${userToken}`;
-    } else if (adminToken) {
-      // Fallback to admin token if only that is present
-      config.headers.Authorization = `Bearer ${adminToken}`;
+    // Distinguish between admin and user requests based on the API endpoint URL
+    const isAdminRequest = config.url.includes('/admin/');
+    
+    if (isAdminRequest) {
+      if (adminToken) {
+        config.headers.Authorization = `Bearer ${adminToken}`;
+      }
+    } else {
+      if (userToken) {
+        config.headers.Authorization = `Bearer ${userToken}`;
+      }
     }
     
     return config;
@@ -87,7 +89,7 @@ api.interceptors.response.use(
         isRefreshing = true;
 
         const refreshUrl = isAdminRequest ? `${API_BASE_URL}/admin/auth/refresh` : `${API_BASE_URL}/auth/refresh-token`;
-        const refreshToken = isAdminRequest ? localStorage.getItem('jhumroo_admin_refresh_token') : null;
+        const refreshToken = isAdminRequest ? sessionStorage.getItem('jhumroo_admin_refresh_token') : null;
         const refreshData = isAdminRequest ? { refreshToken } : {};
 
         return new Promise(function(resolve, reject) {
@@ -97,7 +99,7 @@ api.interceptors.response.use(
                 const newToken = data.token || data.accessToken;
                 const tokenKey = isAdminRequest ? 'jhumroo_admin_token' : 'jhumroo_token';
                 
-                localStorage.setItem(tokenKey, newToken);
+                sessionStorage.setItem(tokenKey, newToken);
                 api.defaults.headers.common['Authorization'] = 'Bearer ' + newToken;
                 originalRequest.headers['Authorization'] = 'Bearer ' + newToken;
                 processQueue(null, newToken);
@@ -109,16 +111,15 @@ api.interceptors.response.use(
             .catch((err) => {
               processQueue(err, null);
               if (isAdminRequest) {
-                localStorage.removeItem('jhumroo_admin_token');
-                localStorage.removeItem('jhumroo_admin_refresh_token');
-                localStorage.removeItem('jhumroo_admin_user');
+                sessionStorage.removeItem('jhumroo_admin_token');
+                sessionStorage.removeItem('jhumroo_admin_refresh_token');
+                sessionStorage.removeItem('jhumroo_admin_user');
                 window.location.href = '/admin/login';
               } else {
-                localStorage.removeItem('jhumroo_token');
-                localStorage.removeItem('jhumroo_user');
-                // Only redirect to welcome if we are not already on an admin route
-                if (!window.location.pathname.startsWith('/admin') && !window.location.pathname.includes('/welcome')) {
-                  window.location.href = '/welcome';
+                sessionStorage.removeItem('jhumroo_token');
+                sessionStorage.removeItem('jhumroo_user');
+                if (!window.location.pathname.includes('/auth')) {
+                  window.location.href = '/auth';
                 }
               }
               reject(err);
@@ -131,7 +132,11 @@ api.interceptors.response.use(
       
       switch (status) {
         case 403:
-          if (data.message !== 'This account is private') {
+          if (
+            data.message !== 'This account is private' && 
+            !data.message?.includes('messages not allowed') && 
+            !data.message?.includes('mutual followers')
+          ) {
             console.error('Access denied:', data.message);
           }
           break;
