@@ -13,6 +13,7 @@
     "@twick/timeline": "^0.15.31",
     "@twick/video-editor": "^0.15.31",
     "axios": "^1.6.7",
+    "hls.js": "^1.6.16",
     "instacam": "^1.16.0",
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.7",

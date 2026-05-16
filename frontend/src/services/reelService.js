@@ -8,14 +8,14 @@ import api from './api';
 const reelService = {
   /**
    * Get feed reels (for home page)
-   * @param {number} page - Page number
+   * @param {string} cursor - Pagination cursor
    * @param {number} limit - Items per page
    * @returns {Promise} Response with reels
    */
-  getFeed: async (page = 1, limit = 10) => {
+  getFeed: async (cursor = null, limit = 10) => {
     try {
       const response = await api.get('/reels/feed', {
-        params: { page, limit },
+        params: { cursor, limit },
       });
       return response;
     } catch (error) {
@@ -25,14 +25,14 @@ const reelService = {
 
   /**
    * Get following reels (reels from users being followed)
-   * @param {number} page - Page number
+   * @param {string} cursor - Pagination cursor
    * @param {number} limit - Items per page
    * @returns {Promise} Response with reels
    */
-  getFollowingReels: async (page = 1, limit = 10) => {
+  getFollowingReels: async (cursor = null, limit = 10) => {
     try {
       const response = await api.get('/reels/following/feed', {
-        params: { page, limit },
+        params: { cursor, limit },
       });
       return response;
     } catch (error) {
@@ -267,6 +267,32 @@ const reelService = {
     } catch (error) {
       // Silently fail for views to avoid impacting UX
       console.error('Failed to record view:', error);
+    }
+  },
+
+  /**
+   * Record watch time for a reel
+   * @param {string} reelId - Reel ID
+   * @param {number} duration - Duration in seconds
+   */
+  recordWatchTime: async (reelId, duration) => {
+    try {
+      const response = await api.post(`/reels/${reelId}/watch-time`, { duration });
+      return response;
+    } catch (error) {
+      console.error('Failed to record watch time:', error);
+    }
+  },
+
+  /**
+   * Submit detailed analytics for a reel
+   */
+  submitAnalytics: async (reelId, data) => {
+    try {
+      const response = await api.post(`/reels/${reelId}/analytics`, data);
+      return response;
+    } catch (error) {
+      console.error('Failed to submit analytics:', error);
     }
   },
 

@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { getCategoriesFromHashtags } from '../utils/interestMapping.js';
 
 const reelSchema = new mongoose.Schema(
   {
@@ -63,6 +64,12 @@ const reelSchema = new mongoose.Schema(
     mentions: [{
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User'
+    }],
+    // Categories for recommendation engine
+    categories: [{
+      type: String,
+      lowercase: true,
+      index: true
     }],
     // Location
     location: {
@@ -148,6 +155,11 @@ const reelSchema = new mongoose.Schema(
         min: 0
       },
       savesCount: {
+        type: Number,
+        default: 0,
+        min: 0
+      },
+      totalWatchTime: {
         type: Number,
         default: 0,
         min: 0
@@ -324,6 +336,7 @@ reelSchema.pre('save', async function (next) {
   if (this.isModified('caption')) {
     this.extractHashtags();
     await this.extractMentions();
+    this.categories = getCategoriesFromHashtags(this.hashtags);
   }
   next();
 });

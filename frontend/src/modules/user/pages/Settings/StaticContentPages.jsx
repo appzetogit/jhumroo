@@ -3,7 +3,7 @@ import SettingsSubPageLayout from './SettingsSubPageLayout';
 import adminStaticPageService from '../../../../services/adminStaticPageService';
 import { BiLoaderAlt } from 'react-icons/bi';
 
-const StaticContentPage = ({ slug, defaultTitle }) => {
+const StaticContentPage = ({ slug, defaultTitle, backTo }) => {
   const [page, setPage] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -25,7 +25,7 @@ const StaticContentPage = ({ slug, defaultTitle }) => {
 
   if (loading) {
     return (
-      <SettingsSubPageLayout title={defaultTitle}>
+      <SettingsSubPageLayout title={defaultTitle} backTo={backTo}>
         <div className="flex flex-col items-center justify-center py-20 opacity-40">
           <BiLoaderAlt className="animate-spin mb-2 text-white" size={32} />
           <p className="text-[14px] text-white">Loading...</p>
@@ -35,7 +35,7 @@ const StaticContentPage = ({ slug, defaultTitle }) => {
   }
 
   return (
-    <SettingsSubPageLayout title={page?.title || defaultTitle}>
+    <SettingsSubPageLayout title={page?.title || defaultTitle} backTo={backTo}>
       <div className="space-y-6 text-white/70 text-[14px] leading-relaxed px-1 pb-10">
         {page?.content ? (
           <div 
@@ -50,10 +50,10 @@ const StaticContentPage = ({ slug, defaultTitle }) => {
   );
 };
 
-export const TermsAndConditionPage = () => {
-  return <StaticContentPage slug="terms-and-condition" defaultTitle="Terms & Condition" />;
+export const TermsAndConditionPage = ({ backTo }) => {
+  return <StaticContentPage slug="terms-and-condition" defaultTitle="Terms & Condition" backTo={backTo} />;
 };
 
-export const PrivacyPolicyPage = () => {
-  return <StaticContentPage slug="privacy-policy" defaultTitle="Privacy Policy" />;
+export const PrivacyPolicyPage = ({ backTo }) => {
+  return <StaticContentPage slug="privacy-policy" defaultTitle="Privacy Policy" backTo={backTo} />;
 };

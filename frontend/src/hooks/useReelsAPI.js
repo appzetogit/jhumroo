@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import reelService from '../services/reelService';
 
 export const useReelsAPI = () => {
@@ -7,20 +7,35 @@ export const useReelsAPI = () => {
   const [error, setError] = useState(null);
   const [hasMore, setHasMore] = useState(true);
 
-  const fetchFeed = useCallback(async (feedType = 'foryou', page = 1, limit = 10) => {
+  const [nextCursor, setNextCursor] = useState(null);
+  const nextCursorRef = useRef(null);
+  const hasMoreRef = useRef(true);
+
+  useEffect(() => {
+    nextCursorRef.current = nextCursor;
+  }, [nextCursor]);
+
+  useEffect(() => {
+    hasMoreRef.current = hasMore;
+  }, [hasMore]);
+
+  const fetchFeed = useCallback(async (feedType = 'foryou', isInitial = false, limit = 10) => {
+    if (!hasMoreRef.current && !isInitial) return;
+    
     setLoading(true);
+    const cursor = isInitial ? null : nextCursorRef.current;
+
     try {
       let response;
       if (feedType === 'following') {
-        response = await reelService.getFollowingReels(page, limit);
+        response = await reelService.getFollowingReels(cursor, limit);
       } else if (feedType === 'trending') {
-        response = await reelService.getTrending(page, limit);
+        response = await reelService.getTrending(cursor, limit);
       } else {
-        response = await reelService.getFeed(page, limit);
+        response = await reelService.getFeed(cursor, limit);
       }
 
       if (response.success) {
-        // Transform data to match frontend format
         const normalizedReels = response.reels.map(reel => ({
           ...reel,
           id: reel._id,
@@ -35,8 +50,16 @@ export const useReelsAPI = () => {
           isSaved: reel.isSaved || false
         }));
 
-        setReels(prev => page === 1 ? normalizedReels : [...prev, ...normalizedReels]);
-        setHasMore(response.pagination?.hasMore || false);
+        setReels(prev => {
+          if (isInitial) return normalizedReels;
+          // Filter duplicates
+          const existingIds = new Set(prev.map(r => r.id));
+          const uniqueNewReels = normalizedReels.filter(r => !existingIds.has(r.id));
+          return [...prev, ...uniqueNewReels];
+        });
+        
+        setNextCursor(response.nextCursor);
+        setHasMore(response.hasMore || false);
       }
     } catch (err) {
       console.error('Error fetching reels:', err);

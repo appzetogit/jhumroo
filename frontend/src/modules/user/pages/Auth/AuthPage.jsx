@@ -360,7 +360,7 @@ const AuthPage = ({ onComplete, initialMode = 'signup' }) => {
               Sign Up
             </button>
             <p className="text-[11px] sm:text-[12px] text-gray-400 text-center px-2 sm:px-4 mt-2 sm:mt-4 leading-snug">
-              By continuing you agree to our <span className="text-white font-semibold">Terms</span> and <span className="text-white font-semibold">Privacy</span>
+              By continuing you agree to our <span onClick={() => navigate('/settings/terms-and-condition')} className="text-white font-semibold cursor-pointer hover:underline">Terms</span> and <span onClick={() => navigate('/settings/privacy-policy')} className="text-white font-semibold cursor-pointer hover:underline">Privacy</span>
             </p>
           </div>
         </div>

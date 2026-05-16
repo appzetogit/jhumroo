@@ -2,7 +2,7 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { BiChevronLeft } from 'react-icons/bi';
 
-const SettingsSubPageLayout = ({ title, children }) => {
+const SettingsSubPageLayout = ({ title, children, backTo }) => {
   const navigate = useNavigate();
 
   return (
@@ -10,7 +10,7 @@ const SettingsSubPageLayout = ({ title, children }) => {
       <div className="theme-page-header flex items-center justify-between px-4 pt-6 pb-6 shrink-0 relative">
         <div
           className="theme-icon-button w-10 h-10 rounded-full flex items-center justify-center cursor-pointer active:scale-95 transition-transform z-10"
-          onClick={() => navigate(-1)}
+          onClick={() => backTo ? navigate(backTo) : navigate(-1)}
         >
           <BiChevronLeft size={24} className="theme-text-primary" />
         </div>

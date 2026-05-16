@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import { BiChevronLeft } from 'react-icons/bi';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../../../context/AuthContext';
 
 const PhoneInput = ({ onNext, onBack, mode = 'signup', isThemed = false }) => {
+  const navigate = useNavigate();
   const { sendOTP } = useAuth();
   const [phoneNumber, setPhoneNumber] = useState('');
   const [loading, setLoading] = useState(false);
@@ -94,7 +96,7 @@ const PhoneInput = ({ onNext, onBack, mode = 'signup', isThemed = false }) => {
            </div>
          )}
          {!error && <p className={`text-[11px] leading-relaxed mb-6 sm:mb-8 ${isThemed ? 'text-white/50' : 'text-gray-400'}`}>
-            By continuing, you agree to our Terms and Cookies Policy. Standard data rates may apply.
+            By continuing, you agree to our <span onClick={() => navigate('/settings/terms-and-condition')} className={`${isThemed ? 'text-white' : 'text-black'} font-semibold cursor-pointer hover:underline`}>Terms</span> and <span onClick={() => navigate('/settings/privacy-policy')} className={`${isThemed ? 'text-white' : 'text-black'} font-semibold cursor-pointer hover:underline`}>Policy</span>. Standard data rates may apply.
          </p>}
 
          <button

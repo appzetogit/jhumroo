@@ -2616,7 +2616,7 @@ const CreatePage = () => {
 
       {recordStatus !== 'recorded' && (
         <div className={themedModeTabsClass}>
-          {['camera', 'story'].map((mode) => (
+          {['camera'].map((mode) => (
             <button
               key={mode}
               type="button"

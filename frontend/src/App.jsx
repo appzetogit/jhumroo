@@ -222,6 +222,8 @@ const AppContent = () => {
                                 <Route path="/welcome" element={<AuthPage key="welcome" onComplete={handleAuthComplete} initialMode="signup" />} />
                                 <Route path="/login" element={<AuthPage key="login" onComplete={handleAuthComplete} initialMode="login" />} />
                                 <Route path="/signup" element={<AuthPage key="signup" onComplete={handleAuthComplete} initialMode="signup" />} />
+                                <Route path="/settings/terms-and-condition" element={<TermsAndConditionPage backTo="/welcome" />} />
+                                <Route path="/settings/privacy-policy" element={<PrivacyPolicyPage backTo="/welcome" />} />
                                 <Route path="*" element={<Navigate to="/welcome" replace />} />
                             </>
                         ) : appState === 'onboarding' ? (

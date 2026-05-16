@@ -1,395 +1,197 @@
 import React, { useRef, useState, useEffect } from 'react';
+import Hls from 'hls.js';
 import VideoOverlay from './VideoOverlay';
 import AddToFavoritesModal from '../modals/AddToFavoritesModal';
 import reelService from '../../../../services/reelService';
 import adService from '../../../../services/adService';
 
 const VideoCard = ({ videoData, isActive }) => {
+  const videoRef = useRef(null);
+  const hlsRef = useRef(null);
+  const watchStartTimeRef = useRef(null);
+  const replayCountRef = useRef(0);
+  const lastTimeRef = useRef(0);
+  
   const [playing, setPlaying] = useState(false);
   const [showHeart, setShowHeart] = useState(false);
   const [showFavoritesModal, setShowFavoritesModal] = useState(false);
   const [showSavedToast, setShowSavedToast] = useState(false);
-  const [isMuted, setIsMuted] = useState(() => {
-    return localStorage.getItem('isReelsMuted') === 'true';
-  });
+  const [isMuted, setIsMuted] = useState(() => localStorage.getItem('isReelsMuted') === 'true');
   const [showMuteOverlay, setShowMuteOverlay] = useState(false);
   const [localVideoData, setLocalVideoData] = useState(videoData);
 
+  // Sync data
   useEffect(() => {
-    // Only update local state if the video ID actually changed to avoid resetting optimistic updates
     const prevId = localVideoData?._id || localVideoData?.id;
     const nextId = videoData?._id || videoData?.id;
-    
     if (prevId !== nextId) {
       setLocalVideoData(videoData);
     }
-  }, [videoData, localVideoData?._id, localVideoData?.id]);
-  
-
+  }, [videoData]);
 
   const reelId = String(localVideoData._id || localVideoData.id || '');
-  
-  // ─── Interactive States ───
-  // These are synced with localVideoData for UI display
   const [isLiked, setIsLiked] = useState(() => !!localVideoData.isLiked);
-  const [likesCount, setLikesCount] = useState(() => {
-    const stats = localVideoData.stats || {};
-    const baseCount = Number(stats.likesCount ?? localVideoData.likes ?? 0);
-    // If liked, the count must be at least 1 for display
-    return Math.max(isLiked ? 1 : 0, baseCount);
-  });
+  const [likesCount, setLikesCount] = useState(() => Number(localVideoData.stats?.likesCount ?? localVideoData.likes ?? 0));
   const [isSaved, setIsSaved] = useState(() => !!localVideoData.isSaved);
 
-  // Sync states whenever localVideoData changes
   useEffect(() => {
-    const liked = !!localVideoData.isLiked;
-    setIsLiked(liked);
+    setIsLiked(!!localVideoData.isLiked);
     setIsSaved(!!localVideoData.isSaved);
-    const stats = localVideoData.stats || {};
-    const baseCount = Number(stats.likesCount ?? localVideoData.likes ?? 0);
-    // Safety check: if liked is true, count should be at least 1
-    setLikesCount(Math.max(liked ? 1 : 0, baseCount));
+    setLikesCount(Number(localVideoData.stats?.likesCount ?? localVideoData.likes ?? 0));
   }, [localVideoData]);
 
-  const videoRef = useRef(null);
-  const lastTapRef = useRef(0);
-  const savedToastTimeoutRef = useRef(null);
-  const audioRef = useRef(null);
-
-  // Play/pause logic based on scroll visibility
+  // HLS and Playback Logic
   useEffect(() => {
-    let viewTimer;
-    let syncInterval;
+    const video = videoRef.current;
+    if (!video) return;
+
+    const videoSrc = localVideoData.hlsUrl || localVideoData.video?.url || localVideoData.url;
+    if (!videoSrc) return;
+
+    // Initialize HLS if needed
+    if (videoSrc.includes('.m3u8')) {
+      if (Hls.isSupported()) {
+        if (!hlsRef.current) {
+          const hls = new Hls({
+            capLevelToPlayerSize: true,
+            autoStartLoad: true,
+          });
+          hls.loadSource(videoSrc);
+          hls.attachMedia(video);
+          hlsRef.current = hls;
+        }
+      } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+        video.src = videoSrc;
+      }
+    } else {
+      video.src = videoSrc;
+    }
+
+    // Event listener for replays
+    const handleEnded = () => {
+      replayCountRef.current += 1;
+    };
+    video.addEventListener('ended', handleEnded);
 
     if (isActive) {
-      if (videoRef.current) {
-        const video = videoRef.current;
-        const videoSrc = localVideoData.video?.url || localVideoData.url;
-        
-        if (!videoSrc) {
-           console.warn("Video source missing for reel:", reelId);
-           return;
-        }
-
-        // Start video
-        const playPromise = video.play();
-        if (playPromise !== undefined) {
-          playPromise.then(() => {
-            if (!video.paused) {
-              setPlaying(true);
-              video.muted = isMuted;
-              video.volume = isMuted ? 0 : 1;
-              
-              // Record view after 3 seconds of active play
-              viewTimer = setTimeout(async () => {
-                 try {
-                    if (localVideoData.isAd) {
-                       await adService.trackView(reelId);
-                    } else {
-                       await reelService.recordView(reelId);
-                    }
-                 } catch (err) {
-                    console.error("Error recording view:", err);
-                 }
-              }, 3000);
-            }
-          }).catch(err => {
-            if (err.name !== 'AbortError') {
-              console.warn("Autoplay prevented or interrupted:", err);
-            }
-            setPlaying(false);
-          });
-        }
-
-        // Start music if available via the audio ref
-        if (audioRef.current && (localVideoData.music?.url || localVideoData.music?.audioUrl) && localVideoData.status !== 'completed') {
-          const audio = audioRef.current;
+      const playPromise = video.play();
+      if (playPromise !== undefined) {
+        playPromise.then(() => {
+          setPlaying(true);
+          watchStartTimeRef.current = Date.now();
           
-          const startAudio = () => {
-            if (!isActive || !audio) return;
-            
-            try {
-              audio.currentTime = localVideoData.music.startTime || 0;
-              audio.volume = isMuted ? 0 : 1.0;
-              audio.muted = isMuted;
-              
-              const audioPlayPromise = audio.play();
-              if (audioPlayPromise !== undefined) {
-                audioPlayPromise.catch(err => {
-                  if (err.name !== 'AbortError') {
-                    console.warn("Music playback failed:", err);
-                  }
-                });
-              }
-            } catch (err) {
-              console.error("Error in startAudio:", err);
+          // Initial view count record
+          setTimeout(() => {
+            if (isActive) {
+              if (localVideoData.isAd) adService.trackView(reelId);
+              else reelService.recordView(reelId);
             }
-          };
-
-          if (audio.readyState >= 2) {
-            startAudio();
-          } else {
-            audio.load();
-            audio.addEventListener('canplay', startAudio, { once: true });
-          }
-          
-          syncInterval = setInterval(() => {
-            if (video && audio && !video.paused) {
-              if (video.currentTime < 0.5 && audio.currentTime > (localVideoData.music.startTime || 0) + 1) {
-                audio.currentTime = localVideoData.music.startTime || 0;
-                audio.play().catch(() => {});
-              }
-            }
-          }, 400);
-        }
+          }, 3000);
+        }).catch(() => setPlaying(false));
       }
     } else {
-      if (videoRef.current) {
-        videoRef.current.pause();
-        videoRef.current.muted = true;
-        setPlaying(false);
-      }
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current.muted = true;
-      }
+      handlePauseAndRecord();
     }
-    
-    // Apply mute state whenever isMuted or isActive changes
-    if (isActive && videoRef.current) {
-      videoRef.current.muted = isMuted;
-      videoRef.current.volume = isMuted ? 0 : 1;
-    }
-    if (isActive && audioRef.current) {
-      audioRef.current.muted = isMuted;
-      audioRef.current.volume = isMuted ? 0 : 1;
-    }
-    
+
     return () => {
-      if (syncInterval) clearInterval(syncInterval);
-      if (viewTimer) clearTimeout(viewTimer);
-      
-      // Cleanup: explicitly pause and clear on unmount
-      if (videoRef.current) {
-        videoRef.current.pause();
-        videoRef.current.muted = true;
-      }
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current.muted = true;
+      handlePauseAndRecord();
+      if (video) video.removeEventListener('ended', handleEnded);
+      if (hlsRef.current) {
+        hlsRef.current.destroy();
+        hlsRef.current = null;
       }
     };
-  }, [isActive, reelId, videoData.music, videoData.status, isMuted]);
+  }, [isActive, localVideoData.hlsUrl, localVideoData.video?.url, localVideoData.url]);
 
-  const onVideoPress = () => {
-    if (playing) {
-      if (videoRef.current) videoRef.current.pause();
-      if (audioRef.current && localVideoData.status !== 'completed') audioRef.current.pause();
+  const handlePauseAndRecord = () => {
+    const video = videoRef.current;
+    if (video) {
+      video.pause();
       setPlaying(false);
-    } else {
-      if (videoRef.current) {
-        const playPromise = videoRef.current.play();
-        if (playPromise !== undefined) {
-          playPromise.then(() => {
-            setPlaying(true);
-          }).catch(err => {
-            if (err.name !== 'AbortError') console.warn("Video play failed:", err);
-            setPlaying(false);
+      
+      if (watchStartTimeRef.current) {
+        const watchDuration = (Date.now() - watchStartTimeRef.current) / 1000;
+        const totalDuration = video.duration || 0;
+        const completionPercentage = totalDuration > 0 ? (video.currentTime / totalDuration) * 100 : 0;
+        const isFullWatch = completionPercentage >= 95;
+        
+        if (watchDuration > 0.5 && !localVideoData.isAd) {
+          reelService.submitAnalytics(reelId, {
+            watchDuration,
+            completionPercentage,
+            replayCount: replayCountRef.current,
+            isFullWatch,
+            swipeTiming: watchDuration, // Simplified: how long before they swiped
+            deviceInfo: { platform: 'web', appVersion: '1.0.0' }
           });
         }
-        videoRef.current.muted = isMuted;
-        videoRef.current.volume = isMuted ? 0 : 1;
-      }
-      if (audioRef.current && localVideoData.status !== 'completed') {
-        audioRef.current.volume = isMuted ? 0 : 1.0;
-        audioRef.current.muted = isMuted;
-        const audioPlayPromise = audioRef.current.play();
-        if (audioPlayPromise !== undefined) {
-          audioPlayPromise.catch(err => {
-            if (err.name !== 'AbortError') console.warn("Audio play failed:", err);
-          });
-        }
+        
+        watchStartTimeRef.current = null;
+        replayCountRef.current = 0;
       }
     }
   };
 
-  const isLikingRef = useRef(false);
-  const lastLikeClickRef = useRef(0);
+  const handleScreenTap = () => {
+    if (playing) {
+      handlePauseAndRecord();
+    } else {
+      videoRef.current?.play().then(() => {
+        setPlaying(true);
+        watchStartTimeRef.current = Date.now();
+      });
+    }
+  };
+
+  const handleDoubleClick = () => {
+    if (!isLiked) handleLikeClick();
+    setShowHeart(true);
+    setTimeout(() => setShowHeart(false), 1000);
+  };
 
   const handleLikeClick = async (e) => {
-    if (e && e.stopPropagation) e.stopPropagation();
-    
-    const now = Date.now();
-    if (now - lastLikeClickRef.current < 300) return;
-    lastLikeClickRef.current = now;
-
-    if (isLikingRef.current) return;
-    isLikingRef.current = true;
-
+    if (e) e.stopPropagation();
     const wasLiked = isLiked;
-    const prevCount = likesCount;
-    
-    // 1. Optimistic Update
     const nextLiked = !wasLiked;
-    const nextCount = nextLiked ? prevCount + 1 : Math.max(0, prevCount - 1);
+    const nextCount = nextLiked ? likesCount + 1 : Math.max(0, likesCount - 1);
 
-    // Update both individual states and localVideoData
     setIsLiked(nextLiked);
     setLikesCount(nextCount);
-    setLocalVideoData(prev => ({
-      ...prev,
-      isLiked: nextLiked,
-      stats: { ...(prev.stats || {}), likesCount: nextCount }
-    }));
 
-    // 2. API Call
     try {
       const response = await reelService.toggleLike(reelId);
       if (response?.success) {
-        // Update with server truth
-        const serverCount = Number(response.likesCount);
-        const serverLiked = response.isLiked;
-        
-        setIsLiked(serverLiked);
-        setLikesCount(serverCount);
-        setLocalVideoData(prev => ({
-          ...prev,
-          isLiked: serverLiked,
-          stats: { ...(prev.stats || {}), likesCount: serverCount }
-        }));
+        setLikesCount(response.likesCount);
+        setIsLiked(response.isLiked);
       }
     } catch (err) {
-      console.error("[Like] Error:", err);
-      // Rollback individual states
       setIsLiked(wasLiked);
-      setLikesCount(prevCount);
-      // Rollback localVideoData
-      setLocalVideoData(prev => ({
-        ...prev,
-        isLiked: wasLiked,
-        stats: { ...(prev.stats || {}), likesCount: prevCount }
-      }));
-    } finally {
-      isLikingRef.current = false;
+      setLikesCount(likesCount);
     }
   };
 
-  const handleDoubleClick = async (e) => {
-      // Double-tap always likes (TikTok style)
-      if (!isLiked) {
-          const prevCount = likesCount;
-          
-          // Optimistic Like
-          setIsLiked(true);
-          setLikesCount(prevCount + 1);
-          setLocalVideoData(prev => ({
-            ...prev,
-            isLiked: true,
-            stats: { ...(prev.stats || {}), likesCount: prevCount + 1 }
-          }));
-
-          try {
-            const response = await reelService.toggleLike(reelId);
-            if (response?.success) {
-               const serverCount = Number(response.likesCount);
-               setIsLiked(true);
-               setLikesCount(serverCount);
-               setLocalVideoData(prev => ({
-                 ...prev,
-                 isLiked: true,
-                 stats: { ...(prev.stats || {}), likesCount: serverCount }
-               }));
-            }
-          } catch (err) {
-            console.error("[DoubleTap Like] Error:", err);
-            // Rollback
-            setIsLiked(false);
-            setLikesCount(prevCount);
-            setLocalVideoData(prev => ({
-              ...prev,
-              isLiked: false,
-              stats: { ...(prev.stats || {}), likesCount: prevCount }
-            }));
-          }
-      }
-      
-      setShowHeart(true);
-      setTimeout(() => setShowHeart(false), 1000);
-      
-      // Ensure video plays
-      if (!playing && videoRef.current) {
-          videoRef.current.play();
-          setPlaying(true);
-      }
-  };
-
-  const tapTimeoutRef = useRef(null);
-
-  // Custom tap handler to support both single tap play/pause and fast double tap like
-  const handleScreenTap = (e) => {
-    const now = Date.now();
-    const DOUBLE_PRESS_DELAY = 500;
-    
-    if (now - lastTapRef.current < DOUBLE_PRESS_DELAY) {
-      // Double tap detected - Clear single tap timeout
-      if (tapTimeoutRef.current) {
-        clearTimeout(tapTimeoutRef.current);
-        tapTimeoutRef.current = null;
-      }
-      handleDoubleClick(e);
-      lastTapRef.current = 0; // reset
-    } else {
-      // Potential single tap - wait to see if it's a double tap
-      lastTapRef.current = now;
-      tapTimeoutRef.current = setTimeout(() => {
-        onVideoPress();
-        tapTimeoutRef.current = null;
-      }, DOUBLE_PRESS_DELAY);
-    }
-  };
-
-  // --- Save / Favorites Logic ---
-  const addToFavorites = async () => {
-    setIsSaved(true);
-    
-    // API Persistence
-    try {
-      await reelService.toggleSave(reelId);
-    } catch (err) {
-      console.error("Save persistence failed:", err);
-      setIsSaved(false); // Rollback
-    }
-
-    setShowSavedToast(true);
-    clearTimeout(savedToastTimeoutRef.current);
-    savedToastTimeoutRef.current = setTimeout(() => setShowSavedToast(false), 2500);
-  };
-
-  const removeFromFavorites = async () => {
-    setIsSaved(false);
-
-    // API Persistence
-    try {
-      await reelService.toggleSave(reelId);
-    } catch (err) {
-      console.error("Unsave persistence failed:", err);
-      setIsSaved(true); // Rollback
-    }
-
-    setShowSavedToast(false);
-    clearTimeout(savedToastTimeoutRef.current);
-  };
-
-  const handleSaveClick = () => {
+  const handleSaveClick = async () => {
     if (isSaved) {
-      removeFromFavorites();
+      setIsSaved(false);
+      try { await reelService.toggleSave(reelId); } catch { setIsSaved(true); }
       return;
     }
+
     const hasSeen = localStorage.getItem('hasSeenFavoritesPopup');
     if (!hasSeen) {
       setShowFavoritesModal(true);
-    } else {
-      addToFavorites();
+      return;
+    }
+
+    setIsSaved(true);
+    setShowSavedToast(true);
+    setTimeout(() => setShowSavedToast(false), 2500);
+    
+    try {
+      await reelService.toggleSave(reelId);
+    } catch (err) {
+      setIsSaved(false);
+      setShowSavedToast(false);
     }
   };
 
@@ -397,61 +199,27 @@ const VideoCard = ({ videoData, isActive }) => {
     const nextMuted = !isMuted;
     setIsMuted(nextMuted);
     localStorage.setItem('isReelsMuted', String(nextMuted));
-    
-    // Show temporary overlay
     setShowMuteOverlay(true);
     setTimeout(() => setShowMuteOverlay(false), 800);
   };
 
-  useEffect(() => {
-    return () => {
-      clearTimeout(savedToastTimeoutRef.current);
-      clearTimeout(tapTimeoutRef.current);
-    };
-  }, []);
-
-  const handleUpdate = (updatedData) => {
-    setLocalVideoData(prev => ({ ...prev, ...updatedData }));
-  };
-
   return (
-    <div className="h-full w-full relative snap-start bg-black flex justify-center items-center overflow-hidden">
-      {localVideoData.video?.type === 'image' || localVideoData.media?.type === 'image' ? (
-        <img
-          src={localVideoData.video?.url || localVideoData.url}
-          className="w-full h-full object-cover bg-black"
-          alt=""
-        />
-      ) : (
-        <video
-          ref={videoRef}
-          className="w-full h-full object-cover bg-black"
-          loop
-          playsInline
-          preload="auto"
-          muted={!isActive}
-          src={localVideoData.video?.url || localVideoData.url}
-          poster={localVideoData.video?.thumbnail || localVideoData.poster}
-        ></video>
-      )}
-
-      {/* Hidden audio element for library music (only for non-processed reels) */}
-      {localVideoData.music && (localVideoData.music.url || localVideoData.music.audioUrl) && localVideoData.status !== 'completed' && (
-        <audio
-          ref={audioRef}
-          src={localVideoData.music.url || localVideoData.music.audioUrl}
-          loop
-          preload="auto"
-        />
-      )}
-
-      {/* Transparent Layer for Taps (Single for play/pause, Double for like) */}
-      <div 
-        className="absolute inset-0 z-[25] cursor-pointer"
-        onClick={handleScreenTap}
+    <div className="h-full w-full relative snap-start bg-black flex justify-center items-center overflow-hidden" style={{ contain: 'strict' }}>
+      <video
+        ref={videoRef}
+        className="w-full h-full object-cover bg-black"
+        style={{ willChange: 'transform' }}
+        loop
+        playsInline
+        preload="auto"
+        muted={isMuted}
+        poster={localVideoData.video?.thumbnail || localVideoData.poster}
+        onClick={(e) => {
+          if (e.detail === 2) handleDoubleClick();
+          else handleScreenTap();
+        }}
       />
-      
-      {/* Overlay controls */}
+
       <VideoOverlay 
         reelId={reelId}
         username={localVideoData.user?.username || localVideoData.username || 'user'}
@@ -465,51 +233,30 @@ const VideoCard = ({ videoData, isActive }) => {
         onSaveClick={handleSaveClick}
         onLikeClick={handleLikeClick}
         videoData={localVideoData}
-        onUpdate={handleUpdate}
         isMuted={isMuted}
         onMuteToggle={handleMuteToggle}
         isPlaying={playing}
       />
 
-      {/* Mute/Unmute Overlay Icon */}
       {showMuteOverlay && (
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[35] bg-black/40 rounded-full p-6 flex items-center justify-center pointer-events-none animate-scale-in">
            {isMuted ? (
-             <svg xmlns="http://www.w3.org/2000/svg" width="60" height="60" viewBox="0 0 24 24" fill="white">
-               <path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/>
-             </svg>
+             <svg width="60" height="60" viewBox="0 0 24 24" fill="white"><path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/></svg>
            ) : (
-             <svg xmlns="http://www.w3.org/2000/svg" width="60" height="60" viewBox="0 0 24 24" fill="white">
-               <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
-             </svg>
+             <svg width="60" height="60" viewBox="0 0 24 24" fill="white"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>
            )}
         </div>
       )}
 
-      {/* Play Icon when paused */}
       {!playing && isActive && !showMuteOverlay && (
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[35] bg-black/30 rounded-full p-4 flex items-center justify-center pointer-events-none transition-opacity duration-200">
-           <svg xmlns="http://www.w3.org/2000/svg" width="60" height="60" viewBox="0 0 24 24" fill="rgba(255,255,255,0.7)" stroke="transparent" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-               <polygon points="5 3 19 12 5 21 5 3"></polygon>
-           </svg>
+           <svg width="60" height="60" viewBox="0 0 24 24" fill="rgba(255,255,255,0.7)"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
         </div>
       )}
 
-      {/* Big Heart animation on double tap */}
       {showHeart && (
-         <div 
-           key={Date.now()} 
-           className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[100] animate-heart-beat pointer-events-none drop-shadow-[0_0_15px_rgba(254,44,85,0.5)]"
-         >
-             <svg width="120" height="120" viewBox="0 0 24 24" fill="url(#heartGradient)" stroke="white" strokeWidth="0.3">
-                 <defs>
-                   <linearGradient id="heartGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                     <stop offset="0%" stopColor="#FF4B7E" />
-                     <stop offset="100%" stopColor="#FE2C55" />
-                   </linearGradient>
-                 </defs>
-                 <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
-             </svg>
+         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[100] animate-heart-beat pointer-events-none drop-shadow-[0_0_15px_rgba(254,44,85,0.5)]">
+             <svg width="120" height="120" viewBox="0 0 24 24" fill="#FE2C55"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
          </div>
       )}
 
@@ -520,7 +267,7 @@ const VideoCard = ({ videoData, isActive }) => {
         onConfirm={() => {
           localStorage.setItem('hasSeenFavoritesPopup', 'true');
           setShowFavoritesModal(false);
-          addToFavorites();
+          handleSaveClick();
         }}
       />
 
@@ -528,9 +275,7 @@ const VideoCard = ({ videoData, isActive }) => {
       {showSavedToast && (
         <div className="absolute bottom-[calc(var(--bottom-nav-height)+16px)] left-0 right-0 mx-4 z-50 flex items-center justify-between bg-black/85 backdrop-blur-sm rounded-lg px-4 py-3 animate-scale-in">
           <div className="flex items-center gap-2">
-            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="20 6 9 17 4 12"></polyline>
-            </svg>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
             <span className="text-white text-[14px] font-semibold">Added to Favorites</span>
           </div>
           <button className="text-white text-[13px] font-bold opacity-80">Manage &gt;</button>

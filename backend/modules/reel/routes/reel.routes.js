@@ -15,7 +15,9 @@ import {
   editReel,
   getSavedCollections,
   getTrendingReels,
-  shareReel
+  shareReel,
+  recordWatchTime,
+  submitReelAnalytics
 } from '../controllers/reel.controller.js';
 import { protect, optionalAuth } from '../../../middleware/auth.js';
 import { uploadVideo, handleMulterError, uploadThumbnail } from '../../../middleware/upload.js';
@@ -31,6 +33,8 @@ router.get('/search', optionalAuth, searchReels);
 router.get('/:id', optionalAuth, getReel);
 router.post('/:id/view', optionalAuth, addView);
 router.post('/:id/share', optionalAuth, shareReel);
+router.post('/:id/watch-time', optionalAuth, recordWatchTime);
+router.post('/:id/analytics', optionalAuth, submitReelAnalytics);
 
 // Protected routes
 router.post('/', protect, uploadRateLimiter, uploadVideo, handleMulterError, reelCreateValidation, validate, createReel);

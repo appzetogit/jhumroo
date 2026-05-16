@@ -12,6 +12,8 @@ import { asyncHandler } from '../../../middleware/errorHandler.js';
 import { uploadToS3, getPresignedUploadUrl, getFileUrl } from '../../../utils/s3.js';
 import { processReelWithAudio } from '../../../utils/videoProcessor.js';
 import { deleteFile } from '../../../config/cloudinary.js';
+import RecommendationEngine from '../../../utils/recommendationEngine.js';
+import WatchAnalytics from '../../../models/WatchAnalytics.model.js';
 import fs from 'fs';
 
 /**
@@ -264,24 +266,37 @@ export const createReel = asyncHandler(async (req, res) => {
  */
 
 export const getFeedReels = asyncHandler(async (req, res) => {
-  const page = parseInt(req.query.page) || 1;
-  const limit = parseInt(req.query.limit) || 10;
-  const skip = (page - 1) * limit;
+  const limit = Math.min(parseInt(req.query.limit) || 10, 20);
+  const cursor = req.query.cursor; // Format: base64(score_id)
 
-  let query = { isActive: true };
-  
+  let lastScore = undefined;
+  let lastId = null;
+  if (cursor) {
+    try {
+      const decoded = Buffer.from(cursor, 'base64').toString('ascii');
+      const [s, id] = decoded.split('_');
+      lastScore = parseFloat(s);
+      lastId = id;
+    } catch (e) {
+      console.error('[getFeedReels] Cursor decoding failed:', e);
+    }
+  }
+
+  // 1. Personalized Content (80%)
+  const personalizedLimit = Math.ceil(limit * 0.8);
+  const explorationLimit = limit - personalizedLimit;
+
+  // Build query based on audience privacy
+  let baseQuery = { isActive: true, status: 'completed' };
   if (!req.user) {
-    query.audience = 'everyone';
+    baseQuery.audience = 'everyone';
   } else {
-    // Get users that current user is following (to see their 'followers' only reels)
     const following = await Follow.find({ follower: req.user._id, status: 'accepted' }).select('following');
     const followingIds = following.map(f => f.following);
-    
-    // Get users that follow current user (to see their 'following' only reels)
     const followers = await Follow.find({ following: req.user._id, status: 'accepted' }).select('follower');
     const followerIds = followers.map(f => f.follower);
 
-    query.$or = [
+    baseQuery.$or = [
       { audience: 'everyone' },
       { user: req.user._id },
       { user: { $in: followingIds }, audience: 'followers' },
@@ -289,95 +304,95 @@ export const getFeedReels = asyncHandler(async (req, res) => {
     ];
   }
 
-  const reels = await Reel.find(query)
-    .sort({ 'stats.viewsCount': -1, 'stats.likesCount': -1, createdAt: -1 })
-    .skip(skip)
-    .limit(limit)
-    .populate('user', 'username fullName profilePicture isVerified downloadPrivacy')
-    .populate('music.audioId')
-    .lean();
+  // Generate Personalized Pipeline
+  const personalizedPipeline = await RecommendationEngine.getRecommendationPipeline(
+    req.user?._id, 
+    { limit: personalizedLimit + 1, lastScore, lastId, query: baseQuery, isExploration: false }
+  );
 
-  // Fetch and inject ads if user is authenticated
-  if (req.user) {
-    const userState = req.user.state;
-    const adQuery = { isActive: true };
-    if (userState) {
-      adQuery.$or = [
-        { targetStates: { $size: 0 } },
-        { targetStates: userState }
-      ];
+  // Generate Exploration Pipeline (20%)
+  const explorationPipeline = await RecommendationEngine.getRecommendationPipeline(
+    req.user?._id,
+    { limit: explorationLimit, query: baseQuery, isExploration: true }
+  );
+
+  const [personalizedResults, explorationResults] = await Promise.all([
+    Reel.aggregate(personalizedPipeline),
+    Reel.aggregate(explorationPipeline)
+  ]);
+
+  // Combine and deduplicate
+  const seenIds = new Set();
+  const combinedResults = [];
+  
+  // Interleave results or just append exploration
+  personalizedResults.slice(0, personalizedLimit).forEach(r => {
+    combinedResults.push(r);
+    seenIds.add(r._id.toString());
+  });
+
+  explorationResults.forEach(r => {
+    if (!seenIds.has(r._id.toString())) {
+      combinedResults.push(r);
+      seenIds.add(r._id.toString());
     }
+  });
 
-    const ads = await Ad.find(adQuery)
+  // Populate user data
+  const reels = await Reel.populate(combinedResults.slice(0, limit), [
+    { path: 'user', select: 'username fullName profilePicture isVerified downloadPrivacy' },
+    { path: 'music.audioId' }
+  ]);
+
+  const hasMore = personalizedResults.length > personalizedLimit;
+  let nextCursor = null;
+  if (hasMore) {
+    const lastReel = reels[reels.length - 1];
+    nextCursor = Buffer.from(`${lastReel.finalScore}_${lastReel._id}`).toString('base64');
+  }
+
+  // Inject Ads and Like/Save status
+  if (reels.length > 0) {
+    const ads = await Ad.find({ isActive: true })
       .populate('user', 'username profilePicture isVerified')
-      .limit(2)
+      .limit(1)
       .lean();
 
     if (ads.length > 0) {
-      ads.forEach((ad, index) => {
-        const formattedAd = {
-          ...ad,
-          _id: ad._id.toString(),
-          isAd: true,
-          onModel: ad.onModel || 'User',
-          video: {
-            url: ad.media.url,
-            type: ad.media.type,
-            thumbnail: ad.media.thumbnail || ad.media.url
-          },
-          stats: {
-            likesCount: ad.stats?.likesCount || 0,
-            viewsCount: ad.stats?.viewsCount || 0,
-            commentsCount: ad.stats?.commentsCount || 0,
-            sharesCount: ad.stats?.sharesCount || 0,
-            savesCount: ad.stats?.savesCount || 0
-          }
-        };
-        // Inject ad at positions (e.g., 3rd and 7th)
-        const insertIndex = index === 0 ? 3 : 7;
-        if (reels.length >= insertIndex) {
-          reels.splice(insertIndex, 0, formattedAd);
-        } else if (reels.length > 0 && index === 0) {
-          reels.push(formattedAd);
-        }
+      const ad = ads[0];
+      reels.splice(Math.floor(reels.length / 2), 0, {
+        ...ad,
+        _id: ad._id.toString(),
+        isAd: true,
+        video: { url: ad.media.url, type: ad.media.type, thumbnail: ad.media.thumbnail || ad.media.url },
+        stats: { likesCount: ad.stats?.likesCount || 0, viewsCount: ad.stats?.viewsCount || 0 }
       });
     }
 
-    // Add liked and saved status
-    const reelIds = reels.filter(r => !r.isAd).map(r => r._id);
-    const adIds = reels.filter(r => r.isAd).map(r => r._id);
+    if (req.user) {
+      const reelIds = reels.filter(r => !r.isAd).map(r => r._id);
+      const [likes, saves] = await Promise.all([
+        Like.find({ user: req.user._id, reel: { $in: reelIds } }),
+        SavedReel.find({ user: req.user._id, reel: { $in: reelIds } })
+      ]);
+      
+      const likedSet = new Set(likes.map(l => l.reel.toString()));
+      const savedSet = new Set(saves.map(s => s.reel.toString()));
 
-    const [likes, adLikes, saves, adSaves] = await Promise.all([
-      Like.find({ user: req.user._id, reel: { $in: reelIds } }),
-      Like.find({ user: req.user._id, ad: { $in: adIds } }),
-      SavedReel.find({ user: req.user._id, reel: { $in: reelIds } }),
-      SavedReel.find({ user: req.user._id, ad: { $in: adIds } })
-    ]);
-    
-    const likedReelIds = new Set(likes.map(l => l.reel.toString()));
-    const likedAdIds = new Set(adLikes.map(l => l.ad.toString()));
-    const savedReelIds = new Set(saves.map(s => s.reel.toString()));
-    const savedAdIds = new Set(adSaves.map(s => s.ad.toString()));
- 
-    for (const item of reels) {
-      if (item.isAd) {
-        item.isLiked = likedAdIds.has(item._id.toString());
-        item.isSaved = savedAdIds.has(item._id.toString());
-      } else {
-        item.isLiked = likedReelIds.has(item._id.toString());
-        item.isSaved = savedReelIds.has(item._id.toString());
-      }
+      reels.forEach(r => {
+        if (!r.isAd) {
+          r.isLiked = likedSet.has(r._id.toString());
+          r.isSaved = savedSet.has(r._id.toString());
+        }
+      });
     }
   }
 
   res.status(200).json({
     success: true,
     reels,
-    pagination: {
-      page,
-      limit,
-      hasMore: reels.length >= limit
-    }
+    nextCursor,
+    hasMore
   });
 });
 
@@ -387,37 +402,37 @@ export const getFeedReels = asyncHandler(async (req, res) => {
  * @access  Private
  */
 export const getFollowingReels = asyncHandler(async (req, res) => {
-  const page = parseInt(req.query.page) || 1;
-  const limit = parseInt(req.query.limit) || 10;
-  const skip = (page - 1) * limit;
+  const limit = Math.min(parseInt(req.query.limit) || 10, 20);
+  const cursor = req.query.cursor; // last_id
 
-  // Get users that current user is following
-  const following = await Follow.find({ follower: req.user._id, status: 'accepted' })
-    .select('following');
+  const following = await Follow.find({ follower: req.user._id, status: 'accepted' }).select('following');
   const followingIds = following.map(f => f.following);
 
-  // Get users that follow current user (to see their 'following' only reels)
   const followers = await Follow.find({ following: req.user._id, status: 'accepted' }).select('follower');
   const followerIds = followers.map(f => f.follower);
 
-  // Get reels from followed users that current user is allowed to see
-  const reels = await Reel.find({ 
+  let query = { 
     user: { $in: followingIds },
     isActive: true,
+    status: 'completed',
     $or: [
       { audience: 'everyone' },
       { audience: 'followers' },
       { user: { $in: followerIds }, audience: 'following' }
     ]
-  })
-    .sort({ createdAt: -1 })
-    .skip(skip)
+  };
+
+  if (cursor) {
+    query._id = { $lt: new mongoose.Types.ObjectId(cursor) };
+  }
+
+  const reels = await Reel.find(query)
+    .sort({ _id: -1 })
     .limit(limit)
     .populate('user', 'username fullName profilePicture isVerified downloadPrivacy')
     .populate('music.audioId')
     .lean();
 
-  // Add liked and saved status
   const reelIds = reels.map(r => r._id);
   const [likes, saves] = await Promise.all([
     Like.find({ user: req.user._id, reel: { $in: reelIds } }),
@@ -432,15 +447,195 @@ export const getFollowingReels = asyncHandler(async (req, res) => {
     reel.isSaved = savedReelIds.has(reel._id.toString());
   }
 
+  const hasMore = reels.length === limit;
+  const nextCursor = hasMore ? reels[reels.length - 1]._id : null;
+
   res.status(200).json({
     success: true,
     reels,
-    pagination: {
-      page,
-      limit,
-      hasMore: reels.length === limit
+    nextCursor,
+    hasMore
+  });
+});
+
+/**
+ * @desc    Record watch time for a reel
+ * @route   POST /api/reels/:id/watch-time
+ * @access  Public
+ */
+export const recordWatchTime = asyncHandler(async (req, res) => {
+  const { id: reelId } = req.params;
+  const { duration } = req.body; // seconds watched
+
+  if (!duration || isNaN(duration)) {
+    return res.status(400).json({ success: false, message: 'Valid duration is required' });
+  }
+
+  await Reel.findByIdAndUpdate(reelId, {
+    $inc: { 'stats.totalWatchTime': duration }
+  });
+
+  res.status(200).json({ success: true });
+});
+
+/**
+ * @desc    Share a reel
+ * @route   POST /api/reels/:id/share
+ * @access  Private
+ */
+export const shareReel = asyncHandler(async (req, res) => {
+  const { id: reelId } = req.params;
+
+  // Increment share count
+  await Reel.findByIdAndUpdate(reelId, {
+    $inc: { 'stats.sharesCount': 1 }
+  });
+
+  // Update user interest profile if logged in
+  if (req.user) {
+    RecommendationEngine.updateUserInterests(req.user._id, reelId, 'share');
+  }
+
+  res.status(200).json({ success: true });
+});
+
+/**
+ * @desc    Get trending reels
+ * @route   GET /api/reels/trending
+ * @access  Public
+ */
+export const getTrendingReels = asyncHandler(async (req, res) => {
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 10;
+  const skip = (page - 1) * limit;
+
+  // Trending algorithm: (EngagementVelocity * 0.6) + (WatchRetention * 0.4) - TimeDecay
+  const pipeline = [
+    { $match: { isActive: true, status: 'completed', audience: 'everyone' } },
+    {
+      $addFields: {
+        ageInHours: {
+          $divide: [{ $subtract: [new Date(), "$createdAt"] }, 3600000]
+        },
+        engagement: {
+          $add: [
+            { $multiply: [{ $ifNull: ["$stats.likesCount", 0] }, 2] },
+            { $multiply: [{ $ifNull: ["$stats.commentsCount", 0] }, 3] },
+            { $multiply: [{ $ifNull: ["$stats.sharesCount", 0] }, 5] }
+          ]
+        }
+      }
+    },
+    {
+      $addFields: {
+        velocity: { $divide: ["$engagement", { $add: ["$ageInHours", 2] }] },
+        retention: {
+          $cond: [
+            { $gt: ["$stats.viewsCount", 0] },
+            { $multiply: [{ $divide: ["$stats.totalWatchTime", { $multiply: ["$stats.viewsCount", { $ifNull: ["$video.duration", 15] }] }] }, 100] },
+            0
+          ]
+        }
+      }
+    },
+    {
+      $addFields: {
+        trendingScore: {
+          $divide: [
+            { $add: [{ $multiply: ["$velocity", 0.6] }, { $multiply: ["$retention", 0.4] }] },
+            { $pow: [{ $add: ["$ageInHours", 2] }, 1.8] }
+          ]
+        }
+      }
+    },
+    { $sort: { trendingScore: -1, createdAt: -1 } },
+    { $skip: skip },
+    { $limit: limit }
+  ];
+
+  const results = await Reel.aggregate(pipeline);
+  const reels = await Reel.populate(results, [
+    { path: 'user', select: 'username fullName profilePicture isVerified' },
+    { path: 'music.audioId' }
+  ]);
+
+  // Add liked/saved status
+  if (req.user && reels.length > 0) {
+    const reelIds = reels.map(r => r._id);
+    const [likes, saves] = await Promise.all([
+      Like.find({ user: req.user._id, reel: { $in: reelIds } }),
+      SavedReel.find({ user: req.user._id, reel: { $in: reelIds } })
+    ]);
+    
+    const likedSet = new Set(likes.map(l => l.reel.toString()));
+    const savedSet = new Set(saves.map(s => s.reel.toString()));
+
+    reels.forEach(r => {
+      r.isLiked = likedSet.has(r._id.toString());
+      r.isSaved = savedSet.has(r._id.toString());
+    });
+  }
+
+  res.status(200).json({
+    success: true,
+    reels,
+    page,
+    limit
+  });
+});
+
+/**
+ * @desc    Submit detailed reel analytics (watch behavior)
+ * @route   POST /api/reels/:id/analytics
+ * @access  Public (Tracked for logged in users)
+ */
+export const submitReelAnalytics = asyncHandler(async (req, res) => {
+  const { id: reelId } = req.params;
+  const { 
+    watchDuration, 
+    completionPercentage, 
+    replayCount, 
+    isFullWatch, 
+    swipeTiming,
+    deviceInfo 
+  } = req.body;
+
+  const reel = await Reel.findById(reelId);
+  if (!reel) {
+    return res.status(404).json({ success: false, message: 'Reel not found' });
+  }
+
+  // Record aggregate stats
+  await Reel.findByIdAndUpdate(reelId, {
+    $inc: { 
+      'stats.totalWatchTime': watchDuration || 0,
+      'stats.viewsCount': (watchDuration > 1) ? 1 : 0 
     }
   });
+
+  // Record detailed analytics if user is logged in
+  if (req.user) {
+    await WatchAnalytics.create({
+      user: req.user._id,
+      reel: reelId,
+      watchDuration,
+      completionPercentage,
+      replayCount,
+      isFullWatch,
+      swipeTiming,
+      deviceInfo
+    });
+
+    // Update user interest profile
+    await RecommendationEngine.updateUserInterests(req.user._id, reelId, 'watch', {
+      watchDuration,
+      completionPercentage,
+      replayCount,
+      isFullWatch
+    });
+  }
+
+  res.status(200).json({ success: true });
 });
 
 /**
@@ -644,6 +839,11 @@ export const toggleLike = asyncHandler(async (req, res) => {
       }
     }
 
+    // Update user interest profile
+    if (req.user && !isAd) {
+      RecommendationEngine.updateUserInterests(uId, cId, 'like');
+    }
+
     return res.status(200).json({
       success: true,
       isLiked: true,
@@ -700,6 +900,11 @@ export const toggleSave = asyncHandler(async (req, res) => {
       ad: isAd ? cId : undefined,
       collection
     });
+
+    // Update interests for save action
+    if (req.user && !isAd) {
+      RecommendationEngine.updateUserInterests(userId, cId, 'save');
+    }
 
     return res.status(200).json({
       success: true,
@@ -923,78 +1128,5 @@ export const getSavedCollections = asyncHandler(async (req, res) => {
   });
 });
 
-/**
- * @desc    Share reel (increment share count)
- * @route   POST /api/reels/:id/share
- * @access  Public
- */
-export const shareReel = asyncHandler(async (req, res) => {
-  const { id: reelId } = req.params;
-
-  const reel = await Reel.findById(reelId);
-  if (!reel) {
-    return res.status(404).json({ success: false, message: 'Reel not found' });
-  }
-
-  // Increment share count
-  const updatedReel = await Reel.findByIdAndUpdate(
-    reelId,
-    { $inc: { 'stats.sharesCount': 1 } },
-    { new: true }
-  );
-
-  res.status(200).json({
-    success: true,
-    message: 'Reel shared successfully',
-    sharesCount: updatedReel.stats.sharesCount
-  });
-});
-
-/**
- * @desc    Get trending reels (Most popular)
- * @route   GET /api/reels/trending
- * @access  Public
- */
-export const getTrendingReels = asyncHandler(async (req, res) => {
-  const page = parseInt(req.query.page) || 1;
-  const limit = parseInt(req.query.limit) || 10;
-  const skip = (page - 1) * limit;
-
-  // Trending sorts primarily by views and likes, then recency
-  const reels = await Reel.find({ isActive: true, audience: 'everyone' })
-    .sort({ 'stats.viewsCount': -1, 'stats.likesCount': -1, createdAt: -1 })
-    .skip(skip)
-    .limit(limit)
-    .populate('user', 'username fullName profilePicture isVerified')
-    .populate('music.audioId')
-    .lean();
-
-  // Add liked and saved status if user is authenticated
-  if (req.user) {
-    const reelIds = reels.map(r => r._id);
-    const [likes, saves] = await Promise.all([
-      Like.find({ user: req.user._id, reel: { $in: reelIds } }),
-      SavedReel.find({ user: req.user._id, reel: { $in: reelIds } })
-    ]);
-    
-    const likedReelIds = new Set(likes.map(l => l.reel.toString()));
-    const savedReelIds = new Set(saves.map(s => s.reel.toString()));
-
-    for (const reel of reels) {
-      reel.isLiked = likedReelIds.has(reel._id.toString());
-      reel.isSaved = savedReelIds.has(reel._id.toString());
-    }
-  }
-
-  res.status(200).json({
-    success: true,
-    reels,
-    pagination: {
-      page,
-      limit,
-      hasMore: reels.length === limit
-    }
-  });
-});
 
 

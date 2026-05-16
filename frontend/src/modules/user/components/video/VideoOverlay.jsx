@@ -199,8 +199,10 @@ const VideoOverlay = ({ reelId, username, caption, musicName, isLiked, likes, co
                 style={{ pointerEvents: 'auto' }}
               >
                  <IoIosMusicalNote size={14} className="mr-2" />
-                 <div className="w-[150px] overflow-hidden whitespace-nowrap">
-                   <span className="inline-block select-none">{musicName?.name || musicName} - Original Audio</span>
+                 <div className="w-[180px] overflow-hidden whitespace-nowrap relative">
+                   <span className="inline-block select-none animate-marquee pl-4">
+                     {musicName?.name || musicName} - Original Audio
+                   </span>
                  </div>
               </div>
             )}
