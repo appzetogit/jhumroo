@@ -702,7 +702,7 @@ const CreatePage = () => {
   const [selectedCountdown, setSelectedCountdown] = useState('3s');
   const [countdownLength, setCountdownLength] = useState(8.9);
   const [captureMode, setCaptureMode] = useState('camera');
-  const [facingMode, setFacingMode] = useState('user');
+  const [facingMode, setFacingMode] = useState('environment');
   const [activeFilterGroup, setActiveFilterGroup] = useState('instacam');
   const [selectedFilter, setSelectedFilter] = useState('Normal');
   const [selectedSounds, setSelectedSounds] = useState(() => {
@@ -1331,13 +1331,28 @@ const CreatePage = () => {
   const startCamera = async (overrideMode) => {
     if (!canvasRef.current) return;
 
+    const activeMode = overrideMode || facingMode;
+    const isUser = activeMode === 'user';
+
+    // Intercept and optimize navigator.mediaDevices.getUserMedia for portrait wide-angle video
+    const originalGetUserMedia = navigator.mediaDevices.getUserMedia;
+    navigator.mediaDevices.getUserMedia = async (constraints) => {
+      const optimizedConstraints = {
+        ...constraints,
+        video: constraints.video ? {
+          facingMode: isUser ? 'user' : 'environment',
+          width: { ideal: 1080 },
+          height: { ideal: 1920 },
+          aspectRatio: { ideal: 9 / 16 }
+        } : false
+      };
+      return originalGetUserMedia.call(navigator.mediaDevices, optimizedConstraints);
+    };
+
     try {
       if (instacamRef.current) {
         instacamRef.current.stop();
       }
-
-      const activeMode = overrideMode || facingMode;
-      const isUser = activeMode === 'user';
       
       // Use standard high-definition 9:16 portrait resolution (720x1280)
       // instead of viewport resolution to avoid digital crop/zoom by the browser.
@@ -1374,14 +1389,52 @@ const CreatePage = () => {
       });
     } catch (err) {
       console.error('Error starting Instacam:', err);
+    } finally {
+      // Restore original getUserMedia immediately after synchronous initialization
+      navigator.mediaDevices.getUserMedia = originalGetUserMedia;
     }
   };
 
   const stopCamera = () => {
     if (instacamRef.current) {
-      instacamRef.current.stop();
+      try {
+        instacamRef.current.stop();
+      } catch (err) {
+        console.warn('Error stopping instacam:', err);
+      }
       instacamRef.current = null;
     }
+
+    // Clean up DOM elements created by Instacam to prevent nested wrapper leaks
+    if (canvasRef.current) {
+      const canvas = canvasRef.current;
+      const parent = canvas.parentElement;
+      
+      // If the parent is the Instacam wrapper, unwrap the canvas
+      if (parent && parent.hasAttribute('data-instacam')) {
+        const grandParent = parent.parentElement;
+        if (grandParent) {
+          grandParent.insertBefore(canvas, parent);
+          grandParent.removeChild(parent);
+        }
+      }
+      
+      // Look for any other orphaned instacam elements in the container
+      const container = canvas.parentElement;
+      if (container) {
+        const elements = container.querySelectorAll('[data-instacam], [data-instacam-viewport], [data-instacam-stream], [data-instacam-blend]');
+        elements.forEach(el => {
+          if (el !== canvas && container.contains(el)) {
+            el.remove();
+          }
+        });
+      }
+      
+      // Reset custom canvas styles if any
+      canvas.removeAttribute('data-instacam-viewport');
+      canvas.style.transform = '';
+    }
+
     streamRef.current = null;
   };
 
@@ -1664,20 +1717,9 @@ const CreatePage = () => {
   };
 
   const startCameraManual = async (mode) => {
-    if (instacamRef.current) {
-      try {
-        instacamRef.current.mode = mode === 'user' ? 'front' : 'back';
-        instacamRef.current.mirror = (mode === 'user');
-        // Let's also ensure the internal video track/stream updates streamRef.current
-        streamRef.current = instacamRef.current.v;
-        console.log('Instacam camera mode flipped successfully to:', mode);
-      } catch (err) {
-        console.error('Error flipping instacam mode directly, restarting camera instead:', err);
-        startCamera(mode);
-      }
-    } else {
-      startCamera(mode);
-    }
+    console.log('Flipping camera to mode:', mode);
+    stopCamera();
+    await startCamera(mode);
   };
 
   const saveFile = (url, name, shouldRevoke = false) => {

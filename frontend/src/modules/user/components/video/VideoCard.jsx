@@ -195,6 +195,21 @@ const VideoCard = ({ videoData, isActive }) => {
     }
   };
 
+  const handleUpdate = (updatedData) => {
+    if (!updatedData) return;
+    setLocalVideoData(prev => {
+      const mergedStats = updatedData.stats 
+        ? { ...(prev?.stats || {}), ...updatedData.stats }
+        : prev?.stats;
+
+      return {
+        ...prev,
+        ...updatedData,
+        ...(mergedStats ? { stats: mergedStats } : {})
+      };
+    });
+  };
+
   const handleMuteToggle = () => {
     const nextMuted = !isMuted;
     setIsMuted(nextMuted);
@@ -233,6 +248,7 @@ const VideoCard = ({ videoData, isActive }) => {
         onSaveClick={handleSaveClick}
         onLikeClick={handleLikeClick}
         videoData={localVideoData}
+        onUpdate={handleUpdate}
         isMuted={isMuted}
         onMuteToggle={handleMuteToggle}
         isPlaying={playing}

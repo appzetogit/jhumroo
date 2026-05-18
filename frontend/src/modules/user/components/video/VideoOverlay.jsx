@@ -90,7 +90,9 @@ const VideoOverlay = ({ reelId, username, caption, musicName, isLiked, likes, co
     try {
       // Optimistic update
       const newSharesCount = (shares || 0) + 1;
-      onUpdate({ stats: { ...(videoData.stats || {}), sharesCount: newSharesCount } });
+      if (typeof onUpdate === 'function') {
+        onUpdate({ stats: { ...(videoData.stats || {}), sharesCount: newSharesCount } });
+      }
 
       let shared = false;
       if (platform === 'whatsapp') {
@@ -127,7 +129,7 @@ const VideoOverlay = ({ reelId, username, caption, musicName, isLiked, likes, co
   return (
     <>
       <div className="absolute inset-0 pointer-events-none flex flex-col justify-end bg-gradient-to-t from-black/80 via-black/20 to-transparent z-[30]">
-        <div className="flex justify-between items-end p-4 pb-[calc(var(--bottom-nav-height)+60px)]">
+        <div className="flex justify-between items-end p-4 pb-[calc(var(--bottom-nav-height)+16px)]">
           {/* Left: User info */}
           <div className="flex-1 pr-12 text-left text-white pointer-events-auto flex flex-col items-start">
             {/* Ad Action Button - Moved above name */}

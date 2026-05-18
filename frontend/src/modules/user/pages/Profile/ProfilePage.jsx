@@ -439,79 +439,66 @@ const ProfilePage = () => {
           </div>
 
           {/* Action Buttons */}
-          <div className="flex items-center gap-2 w-full max-w-[340px] mb-6">
-            {isOwnProfile ? (
-              <>
+          {!isOwnProfile && (
+            <div className="flex items-center gap-2 w-full max-w-[340px] mb-6">
+              {isBlocked ? (
                 <button
-                  onClick={() => navigate('/settings/edit-profile')}
-                  className="flex-1 h-[44px] bg-gray-100 text-black text-[15px] font-bold rounded-lg active:scale-95 transition-all flex items-center justify-center"
+                  onClick={handleBlockToggle}
+                  className="flex-1 h-[44px] bg-[#FE2C55] text-white text-[15px] font-bold rounded-lg active:scale-95 transition-all shadow-lg shadow-pink-100"
                 >
-                  Edit profile
+                  Unblock
                 </button>
-                <button
-                  onClick={() => {}} // Share logic
-                  className="w-[120px] h-[44px] bg-gray-100 text-black text-[15px] font-bold rounded-lg active:scale-95 transition-all flex items-center justify-center"
-                >
-                  Share profile
-                </button>
-              </>
-            ) : isBlocked ? (
-              <button
-                onClick={handleBlockToggle}
-                className="flex-1 h-[44px] bg-[#FE2C55] text-white text-[15px] font-bold rounded-lg active:scale-95 transition-all shadow-lg shadow-pink-100"
-              >
-                Unblock
-              </button>
-            ) : (
-              <>
-                {incomingFollowStatus === 'pending' ? (
-                  <div className="flex-1 flex gap-2">
+              ) : (
+                <>
+                  {incomingFollowStatus === 'pending' ? (
+                    <div className="flex-1 flex gap-2">
+                      <button
+                        onClick={handleAcceptRequest}
+                        className="flex-1 h-[44px] bg-[#FE2C55] text-white text-[15px] font-bold rounded-lg active:scale-95 transition-all"
+                      >
+                        Accept
+                      </button>
+                      <button
+                        onClick={handleRejectRequest}
+                        className="flex-1 h-[44px] bg-gray-100 text-black text-[15px] font-bold rounded-lg border border-gray-200 active:scale-95 transition-all"
+                      >
+                        Reject
+                      </button>
+                    </div>
+                  ) : (
                     <button
-                      onClick={handleAcceptRequest}
-                      className="flex-1 h-[44px] bg-[#FE2C55] text-white text-[15px] font-bold rounded-lg active:scale-95 transition-all"
+                      onClick={handleFollow}
+                      className={`flex-1 h-[44px] rounded-lg text-[15px] font-bold transition-all active:scale-95 ${
+                        followStatus === 'accepted' 
+                          ? 'bg-gray-100 text-black border border-gray-200'
+                          : followStatus === 'pending'
+                            ? 'bg-gray-100 text-gray-500 border border-gray-200'
+                            : 'bg-[#FE2C55] text-white shadow-lg shadow-pink-100'
+                      }`}
                     >
-                      Accept
+                      {getFollowButtonLabel()}
                     </button>
-                    <button
-                      onClick={handleRejectRequest}
-                      className="flex-1 h-[44px] bg-gray-100 text-black text-[15px] font-bold rounded-lg border border-gray-200 active:scale-95 transition-all"
-                    >
-                      Reject
-                    </button>
-                  </div>
-                ) : (
+                  )}
                   <button
-                    onClick={handleFollow}
-                    className={`flex-1 h-[44px] rounded-lg text-[15px] font-bold transition-all active:scale-95 ${
-                      followStatus === 'accepted' 
-                        ? 'bg-gray-100 text-black border border-gray-200'
-                        : followStatus === 'pending'
-                          ? 'bg-gray-100 text-gray-500 border border-gray-200'
-                          : 'bg-[#FE2C55] text-white shadow-lg shadow-pink-100'
-                    }`}
+                    onClick={handleOpenChat}
+                    className="w-[110px] h-[44px] bg-gray-100 text-black text-[15px] font-bold rounded-lg flex items-center justify-center active:scale-95 transition-all"
                   >
-                    {getFollowButtonLabel()}
+                    Message
                   </button>
-                )}
-                <button
-                  onClick={handleOpenChat}
-                  className="w-[110px] h-[44px] bg-gray-100 text-black text-[15px] font-bold rounded-lg flex items-center justify-center active:scale-95 transition-all"
-                >
-                  Message
-                </button>
-                <button
-                  onClick={handleToggleSuggested}
-                  className="w-[44px] h-[44px] bg-gray-100 rounded-lg flex items-center justify-center text-black active:bg-gray-200 transition-colors"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"
-                    className={`transition-transform duration-200 ${showSuggested ? 'rotate-180' : ''}`}
+                  <button
+                    onClick={handleToggleSuggested}
+                    className="w-[44px] h-[44px] bg-gray-100 rounded-lg flex items-center justify-center text-black active:bg-gray-200 transition-colors"
                   >
-                    <path d="M19 9l-7 7-7-7" />
-                  </svg>
-                </button>
-              </>
-            )}
-          </div>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"
+                      className={`transition-transform duration-200 ${showSuggested ? 'rotate-180' : ''}`}
+                    >
+                      <path d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                </>
+              )}
+            </div>
+          )}
 
           {!showSuggested && (
             <div className="px-6">

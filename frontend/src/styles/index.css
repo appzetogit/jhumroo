@@ -25,7 +25,7 @@
   --safe-area-bottom: env(safe-area-inset-bottom, 0px);
 
   /* Layout */
-  --bottom-nav-height: 60px;
+  --bottom-nav-height: 52px;
 
   /* Theme Tokens */
   --theme-app-shell-bg: #000000;

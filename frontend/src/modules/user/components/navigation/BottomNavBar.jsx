@@ -17,7 +17,7 @@ const iconMap = {
 const NavItem = ({ item, isActive, isDarkMode }) => {
   if (item.type === 'create') {
     return (
-      <NavLink to={item.path} className="flex-1 flex flex-col items-center justify-center pt-1 transition-transform active:scale-95 duration-200 will-change-transform">
+      <NavLink to={item.path} className="flex-1 flex flex-col items-center justify-end pb-[7px] transition-transform active:scale-95 duration-200 will-change-transform">
         <div className="relative w-[45px] h-[28px] flex items-center justify-center">
           <div className="absolute left-0 w-[38px] h-full bg-tiktok-cyan rounded-[8px] z-[1]" />
           <div className="absolute right-0 w-[38px] h-full bg-tiktok-red rounded-[8px] z-[1]" />
@@ -35,10 +35,10 @@ const NavItem = ({ item, isActive, isDarkMode }) => {
   return (
     <NavLink
       to={item.path}
-      className={`flex-1 flex flex-col items-center justify-center py-2 transition-opacity group ${!isActive ? 'active:opacity-70' : ''}`}
+      className={`flex-1 flex flex-col items-center justify-end pb-1 transition-opacity group ${!isActive ? 'active:opacity-70' : ''}`}
     >
       <div
-        className={`relative w-9 h-9 flex items-center justify-center rounded-full transition-transform duration-300 ease-in-out will-change-transform ${isActive ? 'scale-[1.2]' : 'group-active:scale-95'
+        className={`relative w-9 h-9 flex items-center justify-center rounded-full transition-transform duration-300 ease-in-out will-change-transform ${isActive ? 'scale-[1.15]' : 'group-active:scale-95'
           }`}
       >
         <SafeIcon
@@ -163,8 +163,8 @@ const BottomNavBar = ({ isDarkTheme = true }) => {
       className={containerClasses}
       style={{
         bottom: '-1px',
-        minHeight: 'calc(var(--bottom-nav-height) + env(safe-area-inset-bottom, 0px))',
-        paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+        minHeight: 'calc(var(--bottom-nav-height) + calc(env(safe-area-inset-bottom, 0px) * 0.35))',
+        paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) * 0.35)',
       }}
     >
       {/* Sliding Tab Indicator */}
