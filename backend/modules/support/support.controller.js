@@ -36,13 +36,27 @@ export const createSupportRequest = async (req, res) => {
  */
 export const getAllSupportRequests = async (req, res) => {
   try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = Math.min(parseInt(req.query.limit) || 20, 100);
+    const skip = (page - 1) * limit;
+
     const requests = await SupportRequest.find()
       .populate('userId', 'username profilePicture')
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit);
+
+    const total = await SupportRequest.countDocuments();
 
     res.status(200).json({
       success: true,
-      requests
+      requests,
+      pagination: {
+        page,
+        limit,
+        total,
+        pages: Math.ceil(total / limit)
+      }
     });
   } catch (error) {
     console.error('Error fetching support requests:', error);
@@ -85,12 +99,26 @@ export const updateSupportRequestStatus = async (req, res) => {
 export const getMySupportRequests = async (req, res) => {
   try {
     const userId = req.user._id;
+    const page = parseInt(req.query.page) || 1;
+    const limit = Math.min(parseInt(req.query.limit) || 10, 50);
+    const skip = (page - 1) * limit;
+
     const requests = await SupportRequest.find({ userId })
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit);
+
+    const total = await SupportRequest.countDocuments({ userId });
 
     res.status(200).json({
       success: true,
-      requests
+      requests,
+      pagination: {
+        page,
+        limit,
+        total,
+        pages: Math.ceil(total / limit)
+      }
     });
   } catch (error) {
     console.error('Error fetching my support requests:', error);

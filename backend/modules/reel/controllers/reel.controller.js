@@ -304,16 +304,37 @@ export const getFeedReels = asyncHandler(async (req, res) => {
     ];
   }
 
+  // Optimize: Retrieve a candidate pool of the 300 most recent active reels matching the privacy rules
+  // This avoids a full collection scan during the complex scoring aggregation pipeline.
+  const candidateReels = await Reel.find(baseQuery)
+    .sort({ createdAt: -1 })
+    .limit(300)
+    .select('_id')
+    .lean();
+
+  const candidateIds = candidateReels.map(r => r._id);
+
+  if (candidateIds.length === 0) {
+    return res.status(200).json({
+      success: true,
+      reels: [],
+      nextCursor: null,
+      hasMore: false
+    });
+  }
+
+  const queryWithCandidates = { _id: { $in: candidateIds } };
+
   // Generate Personalized Pipeline
   const personalizedPipeline = await RecommendationEngine.getRecommendationPipeline(
     req.user?._id, 
-    { limit: personalizedLimit + 1, lastScore, lastId, query: baseQuery, isExploration: false }
+    { limit: personalizedLimit + 1, lastScore, lastId, query: queryWithCandidates, isExploration: false }
   );
 
   // Generate Exploration Pipeline (20%)
   const explorationPipeline = await RecommendationEngine.getRecommendationPipeline(
     req.user?._id,
-    { limit: explorationLimit, query: baseQuery, isExploration: true }
+    { limit: explorationLimit, query: queryWithCandidates, isExploration: true }
   );
 
   const [personalizedResults, explorationResults] = await Promise.all([
@@ -509,9 +530,28 @@ export const getTrendingReels = asyncHandler(async (req, res) => {
   const limit = parseInt(req.query.limit) || 10;
   const skip = (page - 1) * limit;
 
+  // Optimize: Retrieve a candidate pool of the 300 most recent active public reels
+  // This avoids a full collection scan for dynamic engagement calculations.
+  const candidateReels = await Reel.find({ isActive: true, status: 'completed', audience: 'everyone' })
+    .sort({ createdAt: -1 })
+    .limit(300)
+    .select('_id')
+    .lean();
+
+  const candidateIds = candidateReels.map(r => r._id);
+
+  if (candidateIds.length === 0) {
+    return res.status(200).json({
+      success: true,
+      reels: [],
+      page,
+      limit
+    });
+  }
+
   // Trending algorithm: (EngagementVelocity * 0.6) + (WatchRetention * 0.4) - TimeDecay
   const pipeline = [
-    { $match: { isActive: true, status: 'completed', audience: 'everyone' } },
+    { $match: { _id: { $in: candidateIds } } },
     {
       $addFields: {
         ageInHours: {

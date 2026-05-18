@@ -202,6 +202,9 @@ const AppContent = () => {
 
     useEffect(() => {
         if (appState === 'launch') {
+            // Wait for auth to finish loading first
+            if (isLoading) return;
+
             const timer = setTimeout(() => {
                 const isAdminRoute = location.pathname.startsWith('/admin');
                 
@@ -220,10 +223,10 @@ const AppContent = () => {
                       navigate('/welcome', { replace: true });
                     }
                 }
-            }, 1800); 
+            }, 400); // 400ms minimum splash delay for smooth transition
             return () => clearTimeout(timer);
         }
-    }, [appState, navigate, location.pathname, isAuthenticated]);
+    }, [appState, navigate, location.pathname, isAuthenticated, isLoading, user]);
 
     const handleAuthComplete = (needsOnboarding = false) => {
         if (needsOnboarding) {

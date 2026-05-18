@@ -6,7 +6,7 @@ import PhoneInput from './components/PhoneInput';
 import OtpScreen from './components/OtpScreen';
 
 // Import background image
-import loginBg from '../../../../assets/loginPage/LoginPageImage.png';
+import loginBg from '../../../../assets/loginPage/LoginPageImage.webp';
 import logo from '../../../../assets/loginPage/Logo.png';
 import { useAppContent } from '../../../../hooks/useAppContent';
 import { useAuth } from '../../../../context/AuthContext';

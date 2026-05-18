@@ -35,13 +35,27 @@ export const createProblemReport = async (req, res) => {
  */
 export const getAllProblemReports = async (req, res) => {
   try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = Math.min(parseInt(req.query.limit) || 20, 100);
+    const skip = (page - 1) * limit;
+
     const reports = await ProblemReport.find()
       .populate('userId', 'username fullName profilePicture phoneNumber email')
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit);
+
+    const total = await ProblemReport.countDocuments();
 
     res.status(200).json({
       success: true,
-      reports
+      reports,
+      pagination: {
+        page,
+        limit,
+        total,
+        pages: Math.ceil(total / limit)
+      }
     });
   } catch (error) {
     console.error('Error fetching problem reports:', error);
@@ -85,13 +99,28 @@ export const getMyProblemReports = async (req, res) => {
   try {
     const userId = req.user._id;
     console.log('Fetching reports for user:', userId);
+    
+    const page = parseInt(req.query.page) || 1;
+    const limit = Math.min(parseInt(req.query.limit) || 10, 50);
+    const skip = (page - 1) * limit;
+
     const reports = await ProblemReport.find({ userId })
-      .sort({ createdAt: -1 });
-    console.log('Found reports count:', reports.length);
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit);
+    
+    console.log('Found reports count in page:', reports.length);
+    const total = await ProblemReport.countDocuments({ userId });
 
     res.status(200).json({
       success: true,
-      reports
+      reports,
+      pagination: {
+        page,
+        limit,
+        total,
+        pages: Math.ceil(total / limit)
+      }
     });
   } catch (error) {
     console.error('Error fetching my problem reports:', error);

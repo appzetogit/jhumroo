@@ -15,6 +15,9 @@ import fs from 'fs';
  */
 export const getConversations = asyncHandler(async (req, res) => {
   const userId = req.user._id;
+  const page = parseInt(req.query.page) || 1;
+  const limit = Math.min(parseInt(req.query.limit) || 15, 50);
+  const skip = (page - 1) * limit;
 
   const conversations = await Conversation.find({
     participants: userId,
@@ -23,7 +26,9 @@ export const getConversations = asyncHandler(async (req, res) => {
   })
     .populate('participants', 'username fullName profilePicture isVerified')
     .populate('lastMessage.sender', 'username')
-    .sort({ 'lastMessage.timestamp': -1 });
+    .sort({ 'lastMessage.timestamp': -1 })
+    .skip(skip)
+    .limit(limit);
 
   const formattedConversations = conversations.map(conv => {
     const otherParticipant = conv.participants.find(
@@ -48,9 +53,21 @@ export const getConversations = asyncHandler(async (req, res) => {
     return 0;
   });
 
+  const total = await Conversation.countDocuments({
+    participants: userId,
+    isActive: true,
+    deletedBy: { $ne: userId }
+  });
+
   res.status(200).json({
     success: true,
-    conversations: formattedConversations
+    conversations: formattedConversations,
+    pagination: {
+      page,
+      limit,
+      total,
+      pages: Math.ceil(total / limit)
+    }
   });
 });
 
