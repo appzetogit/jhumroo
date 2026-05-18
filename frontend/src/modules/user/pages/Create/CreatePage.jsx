@@ -595,6 +595,9 @@ const CreatePage = () => {
   const overlayInputRef = useRef(null);
   const canvasRef = useRef(null);
   const instacamRef = useRef(null);
+  const pressStartTimeRef = useRef(0);
+  const isPressingRef = useRef(false);
+  const lastTouchTimeRef = useRef(0);
   const createFlow = config?.createFlow || {};
   const DURATION_OPTIONS = createFlow.durations || ['15s', '30s', '60s'];
   const SPEED_OPTIONS = createFlow.speeds || ['0.3x', '0.5x', '1x', '2x', '3x'];
@@ -1337,13 +1340,16 @@ const CreatePage = () => {
     // Intercept and optimize navigator.mediaDevices.getUserMedia for portrait wide-angle video
     const originalGetUserMedia = navigator.mediaDevices.getUserMedia;
     navigator.mediaDevices.getUserMedia = async (constraints) => {
+      // Check if mobile device or if the viewport is physically in portrait
+      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerHeight > window.innerWidth;
+      
       const optimizedConstraints = {
         ...constraints,
         video: constraints.video ? {
           facingMode: isUser ? 'user' : 'environment',
-          width: { ideal: 1080 },
-          height: { ideal: 1920 },
-          aspectRatio: { ideal: 9 / 16 }
+          width: { ideal: isMobile ? 1080 : 1920 },
+          height: { ideal: isMobile ? 1920 : 1080 },
+          aspectRatio: { ideal: isMobile ? 9 / 16 : 16 / 9 }
         } : false
       };
       return originalGetUserMedia.call(navigator.mediaDevices, optimizedConstraints);
@@ -1370,16 +1376,20 @@ const CreatePage = () => {
         done: () => {
           console.log('Instacam ready');
           // Get the stream for recording
-          const stream = instacamRef.current.v; // Accessing internal stream
-          streamRef.current = stream;
+          if (instacamRef.current) {
+            const stream = instacamRef.current.v; // Accessing internal stream
+            streamRef.current = stream;
+          }
           
           // Ensure the generated wrapper is full screen
-          const wrapper = canvasRef.current.parentElement;
-          if (wrapper && wrapper.hasAttribute('data-instacam')) {
-            wrapper.style.width = '100%';
-            wrapper.style.height = '100%';
-            wrapper.style.position = 'absolute';
-            wrapper.style.inset = '0';
+          if (canvasRef.current) {
+            const wrapper = canvasRef.current.parentElement;
+            if (wrapper && wrapper.hasAttribute('data-instacam')) {
+              wrapper.style.width = '100%';
+              wrapper.style.height = '100%';
+              wrapper.style.position = 'absolute';
+              wrapper.style.inset = '0';
+            }
           }
         },
         fail: (err) => {
@@ -1592,6 +1602,56 @@ const CreatePage = () => {
     }
 
     navigate('/');
+  };
+
+  const handleRecordPressStart = (e) => {
+    if (e && e.type === 'touchstart') {
+      lastTouchTimeRef.current = Date.now();
+    }
+    
+    // Ignore emulated mouse events on touch devices
+    if (e && e.type === 'mousedown' && Date.now() - lastTouchTimeRef.current < 500) {
+      return;
+    }
+    
+    if (recordStatus === 'recorded') return;
+    
+    if (recordStatus === 'recording') {
+      handleStartOrStopRecording();
+      isPressingRef.current = false;
+      return;
+    }
+    
+    pressStartTimeRef.current = Date.now();
+    isPressingRef.current = true;
+    handleStartOrStopRecording();
+  };
+
+  const handleRecordPressEnd = (e) => {
+    if (e && e.type === 'touchend') {
+      lastTouchTimeRef.current = Date.now();
+    }
+
+    // Ignore emulated mouse events on touch devices
+    if (e && e.type === 'mouseup' && Date.now() - lastTouchTimeRef.current < 500) {
+      return;
+    }
+
+    if (!isPressingRef.current) return;
+    isPressingRef.current = false;
+    
+    const pressDuration = Date.now() - pressStartTimeRef.current;
+    
+    if (pressDuration > 350 && recordStatus === 'recording') {
+      handleStartOrStopRecording();
+    }
+  };
+
+  const handleRecordPressLeave = () => {
+    if (isPressingRef.current && recordStatus === 'recording') {
+      isPressingRef.current = false;
+      handleStartOrStopRecording();
+    }
   };
 
   const handleStartOrStopRecording = (autoConfirm = false) => {
@@ -2625,8 +2685,12 @@ const CreatePage = () => {
               </span>
               <button
                 type="button"
-                onClick={handleStartOrStopRecording}
-                className={`relative flex items-center justify-center active:scale-95 ${
+                onMouseDown={handleRecordPressStart}
+                onMouseUp={handleRecordPressEnd}
+                onMouseLeave={handleRecordPressLeave}
+                onTouchStart={handleRecordPressStart}
+                onTouchEnd={handleRecordPressEnd}
+                className={`relative flex items-center justify-center select-none active:scale-95 ${
                   isFiltersTrayOpen ? 'h-20 w-20' : 'h-24 w-24'
                 }`}
               >
