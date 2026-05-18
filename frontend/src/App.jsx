@@ -51,6 +51,7 @@ import ChatPage from './modules/user/pages/Inbox/ChatPage';
 import ChatMediaPage from './modules/user/pages/Inbox/ChatMediaPage';
 import FollowRequestsPage from './modules/user/pages/Profile/FollowRequestsPage';
 import PendingRequestsPage from './modules/user/pages/Profile/PendingRequestsPage';
+import PremiumPage from './modules/user/pages/Profile/PremiumPage';
 import { ThemeProvider, useTheme } from './context/ThemeContext';
 import { AdminConfigProvider } from './context/AdminConfigContext';
 import { SocketProvider } from './context/SocketContext';
@@ -83,6 +84,7 @@ const MainLayout = ({ onLogout }) => {
       location.pathname.includes('/sound/') || 
       location.pathname === '/create' ||
       location.pathname.startsWith('/user/') || 
+      location.pathname === '/profile/premium' ||
       isSettingsPage ||
       isSearchDetailPage ||
       isChatSubPage ||
@@ -108,6 +110,7 @@ const MainLayout = ({ onLogout }) => {
 
 
         <Route path="/profile" element={<ProfilePage />} />
+        <Route path="/profile/premium" element={<PremiumPage />} />
         <Route path="/settings" element={<SettingsPage onLogout={onLogout} />} />
         <Route path="/settings/edit-profile" element={<EditProfilePage />} />
         <Route path="/settings/interests" element={<OnboardingPage onComplete={() => window.history.back()} />} />

@@ -20,12 +20,17 @@ export const getPlatformHealth = async () => {
   return await api.get('/admin/analytics/health');
 };
 
+export const getTopUsers = async (metric = 'reels', limit = 5) => {
+  return await api.get(`/admin/analytics/top-users?metric=${metric}&limit=${limit}`);
+};
+
 const adminAnalyticsService = {
   getDashboardStats,
   getUserGrowth,
   getContentAnalytics,
   getWatchTimeAnalytics,
-  getPlatformHealth
+  getPlatformHealth,
+  getTopUsers
 };
 
 export default adminAnalyticsService;

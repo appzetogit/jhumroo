@@ -9,7 +9,8 @@ import {
   BiCloudUpload, 
   BiUserPlus,
   BiTimeFive,
-  BiBarChartAlt2
+  BiBarChartAlt2,
+  BiCheckCircle
 } from 'react-icons/bi';
 import { 
   LineChart, 
@@ -47,21 +48,26 @@ const AdminDashboard = () => {
   const [userGrowth, setUserGrowth] = useState([]);
   const [contentAnalytics, setContentAnalytics] = useState([]);
   const [watchTimeAnalytics, setWatchTimeAnalytics] = useState([]);
+  const [topCreators, setTopCreators] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
         setLoading(true);
-        const [dashStats, growth, content, watchTime] = await Promise.all([
+        const [dashStats, growth, content, watchTime, creators] = await Promise.all([
           adminAnalyticsService.getDashboardStats(),
           adminAnalyticsService.getUserGrowth(7),
           adminAnalyticsService.getContentAnalytics(7),
-          adminAnalyticsService.getWatchTimeAnalytics(7)
+          adminAnalyticsService.getWatchTimeAnalytics(7),
+          adminAnalyticsService.getTopUsers('reels', 5)
         ]);
 
         setStats(dashStats.stats);
         setUserGrowth(growth.data);
+        if (creators && creators.users) {
+          setTopCreators(creators.users);
+        }
         
         // Transform content analytics for easier charting
         const combinedContent = content.data.reels.map(item => {
@@ -290,15 +296,16 @@ const AdminDashboard = () => {
         </div>
       </div>
 
-      {/* Trending Hashtags Section */}
+      {/* Trending & Top Creators Section */}
       <div className="admin-columns" style={{ marginTop: '2rem' }}>
+        {/* Trending Hashtags */}
         <div className="admin-card admin-column">
           <div className="admin-card-header">
             <h2>Trending Hashtags</h2>
             <BiTrendingUp color="var(--admin-accent)" />
           </div>
           <div className="admin-hashtag-list">
-            {stats.trendingHashtags.length > 0 ? (
+            {stats.trendingHashtags && stats.trendingHashtags.length > 0 ? (
               stats.trendingHashtags.map((item, index) => (
                 <div key={item.tag} className="admin-hashtag-item">
                   <div className="hashtag-rank">#{index + 1}</div>
@@ -316,6 +323,45 @@ const AdminDashboard = () => {
               ))
             ) : (
               <p className="admin-empty-state">No hashtags trending yet.</p>
+            )}
+          </div>
+        </div>
+
+        {/* Top 5 Reel Creators */}
+        <div className="admin-card admin-column">
+          <div className="admin-card-header">
+            <h2>Top 5 Reel Creators</h2>
+            <BiVideo color="var(--admin-accent)" />
+          </div>
+          <div className="admin-creator-list">
+            {topCreators && topCreators.length > 0 ? (
+              topCreators.map((creator, index) => (
+                <div key={creator._id} className="admin-creator-item">
+                  <div className="creator-rank">#{index + 1}</div>
+                  <img 
+                    src={creator.profilePicture?.url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${creator.username}`} 
+                    alt="" 
+                    className="creator-avatar"
+                  />
+                  <div className="creator-info">
+                    <span className="creator-name">
+                      {creator.fullName || creator.username}
+                      {creator.isVerified && (
+                        <BiCheckCircle className="verified-badge" color="#3b82f6" style={{ display: 'inline', marginLeft: '4px', verticalAlign: 'middle' }} />
+                      )}
+                    </span>
+                    <span className="creator-count">@{creator.username} • {creator.stats?.reelsCount || 0} reels</span>
+                  </div>
+                  <div className="creator-bar-bg">
+                    <div 
+                      className="creator-bar-fill" 
+                      style={{ width: `${((creator.stats?.reelsCount || 0) / (topCreators[0]?.stats?.reelsCount || 1)) * 100}%` }}
+                    ></div>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <p className="admin-empty-state">No creators found.</p>
             )}
           </div>
         </div>
@@ -446,6 +492,64 @@ const AdminDashboard = () => {
           height: 100%;
           background: linear-gradient(90deg, var(--admin-primary), var(--admin-accent));
           border-radius: 3px;
+        }
+        .admin-creator-list {
+          display: flex;
+          flex-direction: column;
+          gap: 1.25rem;
+          padding: 1rem 0;
+        }
+        .admin-creator-item {
+          display: grid;
+          grid-template-columns: 40px 48px 1fr 100px;
+          align-items: center;
+          gap: 1rem;
+        }
+        .creator-rank {
+          font-weight: 700;
+          color: var(--admin-muted);
+          font-size: 1.1rem;
+          opacity: 0.6;
+        }
+        .creator-avatar {
+          width: 40px;
+          height: 40px;
+          border-radius: 50%;
+          object-fit: cover;
+          border: 1px solid var(--admin-border);
+        }
+        .creator-info {
+          display: flex;
+          flex-direction: column;
+          min-width: 0;
+        }
+        .creator-name {
+          font-weight: 600;
+          color: var(--admin-text);
+          display: flex;
+          align-items: center;
+          font-size: 0.95rem;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        .creator-count {
+          font-size: 0.8rem;
+          color: var(--admin-muted);
+        }
+        .creator-bar-bg {
+          height: 6px;
+          background: rgba(0, 0, 0, 0.05);
+          border-radius: 3px;
+          overflow: hidden;
+        }
+        .creator-bar-fill {
+          height: 100%;
+          background: linear-gradient(90deg, var(--admin-primary), var(--admin-secondary));
+          border-radius: 3px;
+        }
+        .verified-badge {
+          flex-shrink: 0;
         }
         .admin-health-metrics {
           display: flex;

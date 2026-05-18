@@ -94,7 +94,7 @@ const SettingsPage = ({ onLogout }) => {
             <div className={`scrollable flex-1 px-4 pb-8 ${showLogoutModal ? 'overflow-hidden' : ''}`}>
                 {/* User Profile Section */}
                 <div 
-                  className="theme-panel-card rounded-[18px] p-4 flex items-center justify-between mb-8 cursor-pointer active:opacity-90 transition-all shadow-sm"
+                  className="theme-panel-card rounded-[18px] p-4 flex items-center justify-between mb-4 cursor-pointer active:opacity-90 transition-all shadow-sm"
                   onClick={() => navigate('/profile')}
                 >
                     <div className="flex items-center gap-3">
@@ -111,6 +111,51 @@ const SettingsPage = ({ onLogout }) => {
                         </div>
                     </div>
                     <BiChevronRight size={22} className="theme-text-faint" />
+                </div>
+
+                {/* Upgrade to Premium Card */}
+                <div 
+                  onClick={() => navigate('/profile/premium')}
+                  className="w-full bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-600 rounded-[18px] p-4 text-white flex items-center justify-between shadow-md shadow-yellow-100/50 cursor-pointer active:scale-[0.98] transition-all border border-white/20 hover:brightness-105 mb-8"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center shrink-0 border border-white/30 backdrop-blur-md">
+                      <svg 
+                        xmlns="http://www.w3.org/2000/svg" 
+                        width="22" 
+                        height="22" 
+                        viewBox="0 0 24 24" 
+                        fill="currentColor" 
+                        className="text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.2)] animate-pulse"
+                      >
+                        <path d="M2 19h20v2H2zm1-4h18v2H3zm9-12.2L16.2 8l4.8-4.8L19 13.8H5L3 3.2 7.8 8z"/>
+                      </svg>
+                    </div>
+                    <div className="text-left text-white">
+                      <h4 className="text-[14px] font-bold tracking-wide drop-shadow-[0_1px_2px_rgba(0,0,0,0.15)] flex items-center gap-1.5 leading-tight text-white">
+                        Upgrade to Premium
+                        <span className="bg-white/30 text-[8px] font-black uppercase px-1.5 py-0.5 rounded-full tracking-wider border border-white/20 text-white">PRO</span>
+                      </h4>
+                      <p className="text-[11px] text-white/90 font-medium mt-0.5 text-white/90">Get verified crown, ultra HD uploads & more!</p>
+                    </div>
+                  </div>
+                  
+                  <div className="w-7 h-7 rounded-full bg-white/20 flex items-center justify-center border border-white/30 shrink-0">
+                    <svg 
+                      xmlns="http://www.w3.org/2000/svg" 
+                      width="14" 
+                      height="14" 
+                      viewBox="0 0 24 24" 
+                      fill="none" 
+                      stroke="currentColor" 
+                      strokeWidth="3" 
+                      strokeLinecap="round" 
+                      strokeLinejoin="round" 
+                      className="text-white"
+                    >
+                      <polyline points="9 18 15 12 9 6"/>
+                    </svg>
+                  </div>
                 </div>
 
                 {sections.map((section, idx) => (

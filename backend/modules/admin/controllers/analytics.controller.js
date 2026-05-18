@@ -269,8 +269,8 @@ export const getTopUsers = asyncHandler(async (req, res) => {
       break;
 
     case 'reels':
-      users = await User.find()
-        .select('username fullName profilePicture isVerified')
+      users = await User.find({ 'stats.reelsCount': { $gt: 0 } })
+        .select('username fullName profilePicture stats.reelsCount isVerified')
         .sort({ 'stats.reelsCount': -1 })
         .limit(parseInt(limit));
       break;
