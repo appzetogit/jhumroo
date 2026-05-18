@@ -22,9 +22,10 @@ const ShareSheet = ({ isOpen, onClose, reelData, onShare }) => {
 
   return (
     <div
-      className={`absolute inset-0 z-[2000] flex flex-col justify-end ${
+      className={`absolute inset-0 z-[2000] flex flex-col justify-end share-sheet-backdrop ${
         isDarkMode ? 'bg-black/50' : 'bg-black/30 backdrop-blur-[2px]'
       }`}
+      data-modal-open="true"
       onClick={onClose}
     >
       <div 

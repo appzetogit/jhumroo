@@ -78,9 +78,30 @@ const BottomNavBar = ({ isDarkTheme = true }) => {
   const location = useLocation();
   const [activeIndex, setActiveIndex] = useState(0);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [isModalOpen, setIsModalOpen] = useState(false);
   
   const isHomePage = location.pathname === '/';
   const usesDarkNavAppearance = isDarkMode || isHomePage;
+
+  // Watch for active full-screen modal sheets in Jhumroo
+  useEffect(() => {
+    const checkModal = () => {
+      const hasOpenSheet = !!document.querySelector('[data-modal-open="true"]');
+      setIsModalOpen(hasOpenSheet);
+    };
+
+    checkModal();
+
+    const observer = new MutationObserver(checkModal);
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['class', 'style', 'data-modal-open']
+    });
+
+    return () => observer.disconnect();
+  }, []);
 
   const fetchUnreadCount = async () => {
     try {
@@ -148,7 +169,7 @@ const BottomNavBar = ({ isDarkTheme = true }) => {
     }
   }, [location.pathname, navItems]);
 
-  const containerClasses = `absolute left-0 w-full z-[1000] flex justify-around items-center transition-all duration-300 ${isHomePage
+  const containerClasses = `absolute left-0 w-full z-[1000] flex justify-around items-stretch transition-all duration-300 ${isHomePage
       ? 'bg-black text-white/90 border-t border-white/10 shadow-[0_-5px_15px_rgba(0,0,0,0.45)]'
       : isDarkTheme && isDarkMode
         ? 'bg-black/85 backdrop-blur-md border-t border-white/10 text-white/70 shadow-[0_-5px_15px_rgba(0,0,0,0.5)]'
@@ -157,6 +178,8 @@ const BottomNavBar = ({ isDarkTheme = true }) => {
           : 'theme-bottom-nav bg-white text-black/80 border-t border-black/10 shadow-[0_-5px_18px_rgba(15,23,42,0.08)]'
     }`;
   const navCount = navItems.length || 5;
+
+  if (isModalOpen) return null;
 
   return (
     <nav

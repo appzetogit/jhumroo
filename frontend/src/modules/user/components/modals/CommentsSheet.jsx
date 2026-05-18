@@ -258,9 +258,10 @@ const CommentsSheet = ({ isOpen, onClose, commentCount = 0, reelId }) => {
 
   return (
     <div
-      className={`absolute inset-0 z-[2000] flex flex-col justify-end touch-none ${
+      className={`absolute inset-0 z-[2000] flex flex-col justify-end touch-none comments-sheet-backdrop ${
         isDarkMode ? 'bg-black/50' : 'bg-black/30 backdrop-blur-[2px]'
       }`}
+      data-modal-open="true"
       onClick={onClose}
     >
       <div 
