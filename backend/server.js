@@ -39,6 +39,7 @@ dotenv.config();
 
 // Initialize Express app
 const app = express();
+app.set('trust proxy', 1); // Trust reverse proxy (Nginx, Cloudflare, PM2, etc.) for rate limiters
 const server = createServer(app);
 const PORT = process.env.PORT || 5000;
 
