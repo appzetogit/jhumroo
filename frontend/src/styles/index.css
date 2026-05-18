@@ -67,6 +67,10 @@
     -webkit-tap-highlight-color: transparent;
   }
 
+  html, body, #root {
+    touch-action: pan-x pan-y;
+  }
+
   body {
     background-color: var(--theme-app-shell-bg);
     color: var(--theme-text-primary);
@@ -146,6 +150,7 @@
     height: 100%;
     padding-bottom: var(--bottom-nav-height);
     position: relative;
+    overflow-x: hidden;
   }
 
   .scrollable {

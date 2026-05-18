@@ -84,7 +84,7 @@ const PremiumPage = () => {
   };
 
   return (
-    <div className="page-container bg-[#0F0F14] text-white flex flex-col min-h-screen relative overflow-y-auto no-scrollbar pb-10">
+    <div className="page-container bg-[#0F0F14] text-white flex flex-col min-h-screen relative overflow-x-hidden overflow-y-auto no-scrollbar pb-10">
       {/* Background Neon Glow Effects */}
       <div className="absolute top-[-100px] left-1/2 -translate-x-1/2 w-[300px] h-[300px] bg-amber-500/10 rounded-full blur-[100px] pointer-events-none" />
       <div className="absolute bottom-[100px] right-[-100px] w-[250px] h-[250px] bg-purple-500/10 rounded-full blur-[80px] pointer-events-none" />
