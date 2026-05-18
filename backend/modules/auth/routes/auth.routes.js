@@ -9,6 +9,7 @@ import {
   checkUsername,
   updateInterests
 } from '../controllers/auth.controller.js';
+import { updateFCMToken } from '../../user/controllers/user.controller.js';
 import { protect } from '../../../middleware/auth.js';
 import { 
   otpRequestValidation, 
@@ -33,7 +34,6 @@ router.post('/logout', protect, logout);
 router.post('/interests', protect, updateInterests);
 
 // FCM token update reference route
-import { updateFCMToken } from '../../user/controllers/user.controller.js';
 router.post('/fcm-token', protect, updateFCMToken);
 
 export default router;
