@@ -37,6 +37,11 @@ import AdAnalyticsPage from './modules/user/pages/Settings/AdAnalyticsPage';
 import Splash from './modules/user/components/common/Splash';
 import AuthPage from './modules/user/pages/Auth/AuthPage';
 import OnboardingPage from './modules/user/pages/Auth/components/OnboardingPage';
+import loginBg from './assets/loginPage/LoginPageImage.webp';
+
+// Pre-load the critical welcome background image globally to cache it immediately
+const preloadBgImage = new Image();
+preloadBgImage.src = loginBg;
 import SoundPage from './modules/user/pages/Sound/SoundPage';
 import FollowersPage from './modules/user/pages/Profile/FollowersPage';
 import NewFollowersPage from './modules/user/pages/Inbox/NewFollowersPage';
@@ -218,9 +223,9 @@ const AppContent = () => {
                     }
                 } else {
                     setAppState('auth');
-                    // Force navigate to welcome after splash only for regular app root
-                    if (location.pathname === '/') {
-                      navigate('/welcome', { replace: true });
+                    // Redirect legacy /welcome to / if they land on it
+                    if (location.pathname === '/welcome') {
+                      navigate('/', { replace: true });
                     }
                 }
             }, 400); // 400ms minimum splash delay for smooth transition
@@ -246,7 +251,7 @@ const AppContent = () => {
         removeFcmToken().catch(() => {});
         logout();
         setAppState('auth');
-        navigate('/welcome', { replace: true });
+        navigate('/', { replace: true });
     };
 
     // Global suspended check for regular users
@@ -263,12 +268,12 @@ const AppContent = () => {
                     <Routes>
                         {appState === 'auth' ? (
                             <>
-                                <Route path="/welcome" element={<AuthPage key="welcome" onComplete={handleAuthComplete} initialMode="signup" />} />
+                                <Route path="/" element={<AuthPage key="welcome" onComplete={handleAuthComplete} initialMode="signup" />} />
                                 <Route path="/login" element={<AuthPage key="login" onComplete={handleAuthComplete} initialMode="login" />} />
                                 <Route path="/signup" element={<AuthPage key="signup" onComplete={handleAuthComplete} initialMode="signup" />} />
-                                <Route path="/settings/terms-and-condition" element={<TermsAndConditionPage backTo="/welcome" />} />
-                                <Route path="/settings/privacy-policy" element={<PrivacyPolicyPage backTo="/welcome" />} />
-                                <Route path="*" element={<Navigate to="/welcome" replace />} />
+                                <Route path="/settings/terms-and-condition" element={<TermsAndConditionPage backTo="/" />} />
+                                <Route path="/settings/privacy-policy" element={<PrivacyPolicyPage backTo="/" />} />
+                                <Route path="*" element={<Navigate to="/" replace />} />
                             </>
                         ) : appState === 'onboarding' ? (
                             <Route path="/*" element={<OnboardingPage onComplete={handleOnboardingComplete} />} />

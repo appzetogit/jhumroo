@@ -13,18 +13,53 @@ import { useAuth } from '../../../../context/AuthContext';
 
 /* ──────────────── Reusable UI Components ──────────────── */
 
-const BackgroundWrapper = ({ children, blur = false }) => (
-  <div className="relative h-full min-h-0 w-full overflow-hidden bg-black">
-    <div
-      className={`absolute inset-0 bg-cover bg-center transition-all duration-700 ${blur ? 'blur-[8px] scale-110' : 'blur-0 scale-100'}`}
-      style={{ backgroundImage: `url(${loginBg})` }}
-    />
-    <div className="absolute inset-0 bg-black/75" />
-    <div className="relative z-10 h-full w-full flex flex-col">
-      {children}
+const useProgressiveImage = (src) => {
+  const [loadedSource, setLoadedSource] = useState(null);
+
+  useEffect(() => {
+    if (!src) return;
+    
+    // Check if the image is already cached/loaded
+    const img = new Image();
+    img.src = src;
+    if (img.complete) {
+      setLoadedSource(src);
+      return;
+    }
+
+    img.onload = () => {
+      setLoadedSource(src);
+    };
+  }, [src]);
+
+  return loadedSource;
+};
+
+const BackgroundWrapper = ({ children, blur = false }) => {
+  const loadedBg = useProgressiveImage(loginBg);
+
+  return (
+    <div className="relative h-full min-h-0 w-full overflow-hidden bg-[#18110f]">
+      {/* Warm gradient placeholder that renders instantly */}
+      <div className="absolute inset-0 bg-gradient-to-br from-[#2c1a17] to-[#140d0c]" />
+      
+      {/* The high-res background image, fading in smoothly when loaded */}
+      <div
+        className={`absolute inset-0 bg-cover bg-center transition-all duration-[800ms] ease-out ${
+          blur ? 'blur-[8px] scale-110' : 'blur-0 scale-100'
+        } ${loadedBg ? 'opacity-100' : 'opacity-0'}`}
+        style={{ 
+          backgroundImage: loadedBg ? `url(${loadedBg})` : 'none',
+          willChange: 'opacity, transform' 
+        }}
+      />
+      <div className="absolute inset-0 bg-black/75" />
+      <div className="relative z-10 h-full w-full flex flex-col">
+        {children}
+      </div>
     </div>
-  </div>
-);
+  );
+};
 
 const AuthCard = ({ children, title, subtitle }) => (
   <div className="w-full bg-white/10 backdrop-blur-xl border border-white/20 rounded-[28px] p-5 sm:rounded-[32px] sm:p-8 flex flex-col shadow-2xl animate-scale-in">
