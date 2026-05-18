@@ -1328,7 +1328,7 @@ const CreatePage = () => {
     };
   }, [stage]);
 
-  const startCamera = async () => {
+  const startCamera = async (overrideMode) => {
     if (!canvasRef.current) return;
 
     try {
@@ -1336,14 +1336,19 @@ const CreatePage = () => {
         instacamRef.current.stop();
       }
 
-      const isUser = facingMode === 'user';
-      const width = window.innerWidth;
-      const height = window.innerHeight;
+      const activeMode = overrideMode || facingMode;
+      const isUser = activeMode === 'user';
+      
+      // Use standard high-definition 9:16 portrait resolution (720x1280)
+      // instead of viewport resolution to avoid digital crop/zoom by the browser.
+      const streamWidth = 720;
+      const streamHeight = 1280;
+      const streamRatio = 9 / 16;
       
       instacamRef.current = new Instacam(canvasRef.current, {
-        width: width,
-        height: height,
-        ratio: width / height,
+        width: streamWidth,
+        height: streamHeight,
+        ratio: streamRatio,
         mode: isUser ? 'front' : 'back',
         mirror: isUser,
         autostart: true,
@@ -1659,8 +1664,20 @@ const CreatePage = () => {
   };
 
   const startCameraManual = async (mode) => {
-    // startCamera already uses facingMode, so we just call it
-    startCamera();
+    if (instacamRef.current) {
+      try {
+        instacamRef.current.mode = mode === 'user' ? 'front' : 'back';
+        instacamRef.current.mirror = (mode === 'user');
+        // Let's also ensure the internal video track/stream updates streamRef.current
+        streamRef.current = instacamRef.current.v;
+        console.log('Instacam camera mode flipped successfully to:', mode);
+      } catch (err) {
+        console.error('Error flipping instacam mode directly, restarting camera instead:', err);
+        startCamera(mode);
+      }
+    } else {
+      startCamera(mode);
+    }
   };
 
   const saveFile = (url, name, shouldRevoke = false) => {

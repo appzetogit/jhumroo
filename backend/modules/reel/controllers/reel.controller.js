@@ -376,11 +376,12 @@ export const getFeedReels = asyncHandler(async (req, res) => {
   if (reels.length > 0) {
     const ads = await Ad.find({ isActive: true })
       .populate('user', 'username profilePicture isVerified')
-      .limit(1)
       .lean();
 
-    if (ads.length > 0) {
-      const ad = ads[0];
+    const activeUserAds = ads.filter(ad => ad.user);
+
+    if (activeUserAds.length > 0) {
+      const ad = activeUserAds[0];
       reels.splice(Math.floor(reels.length / 2), 0, {
         ...ad,
         _id: ad._id.toString(),

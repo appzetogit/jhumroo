@@ -140,7 +140,7 @@ export const getAdAnalytics = asyncHandler(async (req, res) => {
     ad = await Ad.findOne({ _id: req.params.id, user: req.user._id });
   }
 
-  if (!ad) {
+  if (!ad || (req.admin && !ad.user)) {
     return res.status(404).json({ success: false, message: 'Ad not found' });
   }
   res.json({ success: true, ad });
@@ -198,9 +198,11 @@ export const getAllAds = asyncHandler(async (req, res) => {
     .populate('user', 'username profilePicture fullName email')
     .sort({ createdAt: -1 });
 
+  const activeAdminAds = ads.filter(ad => ad.user);
+
   res.status(200).json({
     success: true,
-    ads
+    ads: activeAdminAds
   });
 });
 
@@ -229,9 +231,11 @@ export const getUserAds = asyncHandler(async (req, res) => {
     .populate('user', 'username profilePicture fullName email')
     .sort({ createdAt: -1 });
 
+  const activeUserAds = ads.filter(ad => ad.user);
+
   res.status(200).json({
     success: true,
-    ads
+    ads: activeUserAds
   });
 });
 
@@ -254,9 +258,11 @@ export const getAdsForFeed = asyncHandler(async (req, res) => {
 
   const ads = await Ad.find(query).populate('user', 'username profilePicture').limit(5);
 
+  const activeAds = ads.filter(ad => ad.user);
+
   res.status(200).json({
     success: true,
-    ads
+    ads: activeAds
   });
 });
 
