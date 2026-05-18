@@ -459,10 +459,18 @@ export const getSuggestedUsers = asyncHandler(async (req, res) => {
  * @access  Private
  */
 export const updateFCMToken = asyncHandler(async (req, res) => {
-  const { fcmTokenMobile, fcmToken } = req.body;
+  const { fcmTokenMobile, fcmToken, token, platform } = req.body;
 
   if (fcmTokenMobile) req.user.fcmTokenMobile = fcmTokenMobile;
   if (fcmToken) req.user.fcmToken = fcmToken;
+
+  if (token) {
+    if (platform === 'app' || platform === 'mobile') {
+      req.user.fcmTokenMobile = token;
+    } else {
+      req.user.fcmToken = token;
+    }
+  }
 
   await req.user.save();
 
@@ -616,4 +624,83 @@ export const reportUser = asyncHandler(async (req, res) => {
     message: 'Thank you for reporting. We will review it shortly.'
   });
 });
+
+/**
+ * @desc    Delete user account and all associated data
+ * @route   DELETE /api/users/profile
+ * @access  Private
+ */
+export const deleteAccount = asyncHandler(async (req, res) => {
+  const userId = req.user._id;
+
+  // 1. Delete user profile picture from Cloudinary if exists
+  if (req.user.profilePicture && req.user.profilePicture.publicId) {
+    try {
+      await deleteFile(req.user.profilePicture.publicId, 'image');
+    } catch (err) {
+      console.error('Account Delete: Cloudinary user picture delete failed:', err.message);
+    }
+  }
+
+  // 2. Find and delete all user's reels (including Cloudinary video, likes, saves and comments on each reel)
+  const userReels = await Reel.find({ user: userId });
+  for (const reel of userReels) {
+    if (reel.video && reel.video.publicId) {
+      try {
+        await deleteFile(reel.video.publicId, 'video');
+      } catch (err) {
+        console.error(`Account Delete: Cloudinary video delete failed for reel ${reel._id}:`, err.message);
+      }
+    }
+    // Delete likes, saves, and comments for this reel
+    await Like.deleteMany({ reel: reel._id });
+    await SavedReel.deleteMany({ reel: reel._id });
+    const Comment = (await import('../../../models/Comment.model.js')).default;
+    await Comment.deleteMany({ reel: reel._id });
+    await reel.deleteOne();
+  }
+
+  // 3. Delete user's comments on other reels
+  const Comment = (await import('../../../models/Comment.model.js')).default;
+  await Comment.deleteMany({ user: userId });
+
+  // 4. Delete user's likes and saves
+  await Like.deleteMany({ user: userId });
+  await SavedReel.deleteMany({ user: userId });
+
+  // 5. Delete all follows (both follower and following)
+  await Follow.deleteMany({
+    $or: [{ follower: userId }, { following: userId }]
+  });
+
+  // 6. Delete notifications (sent or received)
+  const Notification = (await import('../../../models/Notification.model.js')).default;
+  await Notification.deleteMany({
+    $or: [{ recipient: userId }, { sender: userId }]
+  });
+
+  // 7. Delete user preference
+  const UserPreference = (await import('../../../models/UserPreference.model.js')).default;
+  await UserPreference.deleteMany({ user: userId });
+
+  // 8. Delete user reports
+  await Report.deleteMany({
+    $or: [{ reportedBy: userId }, { reportedItem: userId }]
+  });
+
+  // 9. Clean conversations and messages
+  const Conversation = (await import('../../../models/Conversation.model.js')).default;
+  const Message = (await import('../../../models/Message.model.js')).default;
+  await Message.deleteMany({ sender: userId });
+  await Conversation.deleteMany({ participants: userId });
+
+  // 10. Finally, delete the User record itself
+  await req.user.deleteOne();
+
+  res.status(200).json({
+    success: true,
+    message: 'Your account and all associated data have been permanently deleted.'
+  });
+});
+
 

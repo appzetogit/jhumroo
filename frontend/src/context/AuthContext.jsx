@@ -100,7 +100,7 @@ export const AuthProvider = ({ children }) => {
 
   const updateUser = (userData) => {
     setUser(userData);
-    sessionStorage.setItem('jhumroo_user', JSON.stringify(userData));
+    localStorage.setItem('jhumroo_user', JSON.stringify(userData));
   };
 
   const updateInterests = async (interests) => {

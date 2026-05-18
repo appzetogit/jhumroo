@@ -21,8 +21,8 @@ const api = axios.create({
 // Request interceptor - Add auth token to requests
 api.interceptors.request.use(
   (config) => {
-    const userToken = sessionStorage.getItem('jhumroo_token');
-    const adminToken = sessionStorage.getItem('jhumroo_admin_token');
+    const userToken = localStorage.getItem('jhumroo_token');
+    const adminToken = localStorage.getItem('jhumroo_admin_token');
     
     // Distinguish between admin and user requests based on the API endpoint URL
     const isAdminRequest = config.url.includes('/admin/');
@@ -89,7 +89,7 @@ api.interceptors.response.use(
         isRefreshing = true;
 
         const refreshUrl = isAdminRequest ? `${API_BASE_URL}/admin/auth/refresh` : `${API_BASE_URL}/auth/refresh-token`;
-        const refreshToken = isAdminRequest ? sessionStorage.getItem('jhumroo_admin_refresh_token') : null;
+        const refreshToken = isAdminRequest ? localStorage.getItem('jhumroo_admin_refresh_token') : null;
         const refreshData = isAdminRequest ? { refreshToken } : {};
 
         return new Promise(function(resolve, reject) {
@@ -99,7 +99,7 @@ api.interceptors.response.use(
                 const newToken = data.token || data.accessToken;
                 const tokenKey = isAdminRequest ? 'jhumroo_admin_token' : 'jhumroo_token';
                 
-                sessionStorage.setItem(tokenKey, newToken);
+                localStorage.setItem(tokenKey, newToken);
                 api.defaults.headers.common['Authorization'] = 'Bearer ' + newToken;
                 originalRequest.headers['Authorization'] = 'Bearer ' + newToken;
                 processQueue(null, newToken);
@@ -111,13 +111,13 @@ api.interceptors.response.use(
             .catch((err) => {
               processQueue(err, null);
               if (isAdminRequest) {
-                sessionStorage.removeItem('jhumroo_admin_token');
-                sessionStorage.removeItem('jhumroo_admin_refresh_token');
-                sessionStorage.removeItem('jhumroo_admin_user');
+                localStorage.removeItem('jhumroo_admin_token');
+                localStorage.removeItem('jhumroo_admin_refresh_token');
+                localStorage.removeItem('jhumroo_admin_user');
                 window.location.href = '/admin/login';
               } else {
-                sessionStorage.removeItem('jhumroo_token');
-                sessionStorage.removeItem('jhumroo_user');
+                localStorage.removeItem('jhumroo_token');
+                localStorage.removeItem('jhumroo_user');
                 if (!window.location.pathname.includes('/auth')) {
                   window.location.href = '/auth';
                 }

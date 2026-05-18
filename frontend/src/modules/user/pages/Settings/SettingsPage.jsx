@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { BiChevronLeft, BiChevronRight, BiUser, BiLockAlt, BiShieldAlt, BiBell, BiMoon, BiGlobe, BiQuestionMark, BiLogOut, BiFile } from 'react-icons/bi';
+import { BiChevronLeft, BiChevronRight, BiUser, BiLockAlt, BiShieldAlt, BiBell, BiMoon, BiGlobe, BiQuestionMark, BiLogOut, BiFile, BiTrash } from 'react-icons/bi';
 import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../../../../context/ThemeContext';
 import { useAuth } from '../../../../context/AuthContext';
 import { useAppContent } from '../../../../hooks/useAppContent';
+import { userService } from '../../../../services';
 
 const SettingsPage = ({ onLogout }) => {
     const navigate = useNavigate();
@@ -11,6 +12,9 @@ const SettingsPage = ({ onLogout }) => {
     const { isDarkMode, toggleTheme } = useTheme();
     const { config } = useAppContent();
     const [showLogoutModal, setShowLogoutModal] = useState(false);
+    const [showDeleteModal, setShowDeleteModal] = useState(false);
+    const [isDeleting, setIsDeleting] = useState(false);
+
     const iconMap = {
       user: BiUser,
       lock: BiLockAlt,
@@ -21,27 +25,55 @@ const SettingsPage = ({ onLogout }) => {
       help: BiQuestionMark,
       logout: BiLogOut,
       file: BiFile,
+      trash: BiTrash,
     };
 
-    const sections = (config?.settings?.sections || []).map((section) => ({
-      ...section,
-      items: (section.items || []).map((item) => {
-        const Icon = item.icon ? iconMap[item.icon] : null;
-        return {
-          ...item,
-          label: item.isToggle ? (isDarkMode ? 'Dark mode' : 'Light mode') : item.label,
-          icon: Icon ? <Icon size={20} /> : null,
-        };
-      }),
-    }));
+    const sections = (config?.settings?.sections || []).map((section) => {
+      let items = section.items || [];
+      const logoutIndex = items.findIndex(item => item.isLogout);
+      if (logoutIndex !== -1 && !items.some(item => item.isDeleteAccount)) {
+        items = [
+          ...items.slice(0, logoutIndex + 1),
+          { icon: 'trash', label: 'Delete Account', color: '#FF3B30', isDeleteAccount: true },
+          ...items.slice(logoutIndex + 1)
+        ];
+      }
+      return {
+        ...section,
+        items: items.map((item) => {
+          const Icon = item.icon ? iconMap[item.icon] : null;
+          return {
+            ...item,
+            label: item.isToggle ? (isDarkMode ? 'Dark mode' : 'Light mode') : item.label,
+            icon: Icon ? <Icon size={20} /> : null,
+          };
+        }),
+      };
+    });
 
     const handleItemClick = (item) => {
         if (item.isToggle) {
             toggleTheme();
         } else if (item.isLogout) {
             setShowLogoutModal(true);
+        } else if (item.isDeleteAccount) {
+            setShowDeleteModal(true);
         } else if (item.route) {
             navigate(item.route);
+        }
+    };
+
+    const handleDeleteAccount = async () => {
+        try {
+            setIsDeleting(true);
+            await userService.deleteAccount();
+            setShowDeleteModal(false);
+            onLogout?.();
+        } catch (error) {
+            console.error('[Settings] Delete account failed:', error);
+            alert(error?.response?.data?.message || error?.message || 'Failed to delete account. Please try again.');
+        } finally {
+            setIsDeleting(false);
         }
     };
 
@@ -166,6 +198,56 @@ const SettingsPage = ({ onLogout }) => {
                               }}
                             >
                                 OK
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {showDeleteModal && (
+                <div
+                  className="absolute inset-0 z-[1200] flex items-center justify-center bg-black/50 backdrop-blur-[2px] px-5"
+                  onClick={() => !isDeleting && setShowDeleteModal(false)}
+                >
+                    <div
+                      className={`w-full max-w-sm rounded-[24px] overflow-hidden shadow-2xl ${
+                        isDarkMode ? 'bg-[#1b1f31] border border-white/10' : 'bg-white border border-black/[0.08]'
+                      }`}
+                      onClick={(event) => event.stopPropagation()}
+                    >
+                        <div className="px-6 pt-7 pb-5 text-center">
+                            <h3 className={`text-[18px] font-bold mb-2 ${isDarkMode ? 'text-white' : 'text-[#FF3B30]'}`}>Delete account?</h3>
+                            <p className={`text-[13px] leading-relaxed ${isDarkMode ? 'text-white/55' : 'text-black/55'}`}>
+                                This will permanently delete your profile, reels, comments, and all account data. This action is irreversible.
+                            </p>
+                        </div>
+
+                        <div className={`h-px ${isDarkMode ? 'bg-white/8' : 'bg-black/[0.08]'}`} />
+
+                        <div className="flex p-4 gap-3">
+                            <button
+                              type="button"
+                              disabled={isDeleting}
+                              onClick={() => setShowDeleteModal(false)}
+                              className={`flex-1 min-h-[52px] rounded-[14px] border text-[15px] font-semibold transition-all active:scale-[0.98] disabled:opacity-50 ${
+                                isDarkMode
+                                  ? 'border-white/12 bg-white/6 text-white/75 active:bg-white/10'
+                                  : 'border-[#d1d5db] bg-[#f7f8fb] text-black/65 active:bg-black/[0.04]'
+                              }`}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                              type="button"
+                              disabled={isDeleting}
+                              onClick={handleDeleteAccount}
+                              className="flex-1 min-h-[52px] rounded-[14px] text-[15px] font-bold text-white transition-all active:scale-[0.98] disabled:opacity-50 flex items-center justify-center"
+                              style={{
+                                background: 'linear-gradient(180deg, #ff4d55 0%, #FF3B30 100%)',
+                                boxShadow: '0 12px 24px rgba(255, 59, 48, 0.22)',
+                              }}
+                            >
+                                {isDeleting ? 'Deleting...' : 'Delete'}
                             </button>
                         </div>
                     </div>

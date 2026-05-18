@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { registerFcmToken, onForegroundMessage, removeFcmToken } from './lib/fcmService';
 import { BrowserRouter as Router, Routes, Route, useLocation, Navigate, useNavigate } from 'react-router-dom';
 import BottomNavBar from './modules/user/components/navigation/BottomNavBar';
 import HomePage from './modules/user/pages/Home/HomePage';
@@ -160,6 +161,45 @@ const AppContent = () => {
         };
     }, [location.pathname]);
 
+    // Sync FCM Token and set up foreground listener when authenticated
+    useEffect(() => {
+        if (isAuthenticated && appState === 'main') {
+            const syncFcm = async () => {
+                try {
+                    await registerFcmToken();
+                } catch (error) {
+                    console.warn('[FCM] Auto-sync failed:', error);
+                }
+            };
+            
+            const timer = setTimeout(syncFcm, 1000); // Small buffer to ensure session is stable
+
+            // Setup foreground messaging listener
+            let unsubscribe = () => {};
+            onForegroundMessage((payload) => {
+                console.log('[FCM] Foreground notification payload:', payload);
+                
+                // Show browser Notification if permitted
+                if (Notification.permission === 'granted') {
+                  const title = payload.notification?.title || payload.data?.title || 'Jhumroo';
+                  const body = payload.notification?.body || payload.data?.body || '';
+                  new Notification(title, {
+                    body: body,
+                    icon: '/favicon.svg',
+                    tag: payload.data?.tag || payload.data?.reelId || 'jhumroo_foreground',
+                  });
+                }
+            }).then(unsub => {
+                unsubscribe = unsub;
+            });
+
+            return () => {
+                clearTimeout(timer);
+                if (unsubscribe) unsubscribe();
+            };
+        }
+    }, [isAuthenticated, appState]);
+
     useEffect(() => {
         if (appState === 'launch') {
             const timer = setTimeout(() => {
@@ -200,6 +240,7 @@ const AppContent = () => {
     };
 
     const handleLogout = () => {
+        removeFcmToken().catch(() => {});
         logout();
         setAppState('auth');
         navigate('/welcome', { replace: true });

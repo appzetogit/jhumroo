@@ -32,4 +32,8 @@ router.get('/me', protect, getMe);
 router.post('/logout', protect, logout);
 router.post('/interests', protect, updateInterests);
 
+// FCM token update reference route
+import { updateFCMToken } from '../../user/controllers/user.controller.js';
+router.post('/fcm-token', protect, updateFCMToken);
+
 export default router;

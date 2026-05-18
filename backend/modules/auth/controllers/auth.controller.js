@@ -77,7 +77,7 @@ export const sendOTP = asyncHandler(async (req, res) => {
  * @access  Public
  */
 export const verifyOTP = asyncHandler(async (req, res) => {
-  const { phoneNumber, otp, fcmTokenMobile, fcmToken } = req.body;
+  const { phoneNumber, otp, fcmTokenMobile, fcmToken, token, platform } = req.body;
 
   // Find user
   const user = await User.findOne({ phoneNumber });
@@ -100,6 +100,14 @@ export const verifyOTP = asyncHandler(async (req, res) => {
   // Store FCM tokens if provided
   if (fcmTokenMobile) user.fcmTokenMobile = fcmTokenMobile;
   if (fcmToken) user.fcmToken = fcmToken;
+
+  if (token) {
+    if (platform === 'app' || platform === 'mobile') {
+      user.fcmTokenMobile = token;
+    } else {
+      user.fcmToken = token;
+    }
+  }
 
   // Clear OTP and update last login
   user.clearOTP();

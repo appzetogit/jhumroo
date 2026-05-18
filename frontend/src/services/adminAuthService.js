@@ -5,9 +5,9 @@ const adminAuthService = {
     try {
       const response = await api.post('/admin/auth/login', { email, password });
       if (response.success && response.accessToken) {
-        sessionStorage.setItem('jhumroo_admin_token', response.accessToken);
-        sessionStorage.setItem('jhumroo_admin_refresh_token', response.refreshToken);
-        sessionStorage.setItem('jhumroo_admin_user', JSON.stringify(response.admin));
+        localStorage.setItem('jhumroo_admin_token', response.accessToken);
+        localStorage.setItem('jhumroo_admin_refresh_token', response.refreshToken);
+        localStorage.setItem('jhumroo_admin_user', JSON.stringify(response.admin));
       }
       return response;
     } catch (error) {
@@ -17,14 +17,14 @@ const adminAuthService = {
 
   logout: async () => {
     try {
-      const refreshToken = sessionStorage.getItem('jhumroo_admin_refresh_token');
+      const refreshToken = localStorage.getItem('jhumroo_admin_refresh_token');
       await api.post('/admin/auth/logout', { refreshToken });
     } catch (error) {
       console.error('Admin logout error:', error);
     } finally {
-      sessionStorage.removeItem('jhumroo_admin_token');
-      sessionStorage.removeItem('jhumroo_admin_refresh_token');
-      sessionStorage.removeItem('jhumroo_admin_user');
+      localStorage.removeItem('jhumroo_admin_token');
+      localStorage.removeItem('jhumroo_admin_refresh_token');
+      localStorage.removeItem('jhumroo_admin_user');
     }
   },
 
@@ -32,7 +32,7 @@ const adminAuthService = {
     try {
       const response = await api.get('/admin/auth/me');
       if (response.success && response.admin) {
-        sessionStorage.setItem('jhumroo_admin_user', JSON.stringify(response.admin));
+        localStorage.setItem('jhumroo_admin_user', JSON.stringify(response.admin));
       }
       return response;
     } catch (error) {
@@ -49,15 +49,15 @@ const adminAuthService = {
   },
 
   isAdminAuthenticated: () => {
-    return !!sessionStorage.getItem('jhumroo_admin_token');
+    return !!localStorage.getItem('jhumroo_admin_token');
   },
 
   getAdminToken: () => {
-    return sessionStorage.getItem('jhumroo_admin_token');
+    return localStorage.getItem('jhumroo_admin_token');
   },
 
   getAdminUser: () => {
-    const user = sessionStorage.getItem('jhumroo_admin_user');
+    const user = localStorage.getItem('jhumroo_admin_user');
     return user ? JSON.parse(user) : null;
   }
 };

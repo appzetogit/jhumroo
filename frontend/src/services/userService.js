@@ -311,6 +311,19 @@ const userService = {
       throw error;
     }
   },
+
+  /**
+   * Delete user account permanently
+   * @returns {Promise} Response
+   */
+  deleteAccount: async () => {
+    try {
+      const response = await api.delete('/users/profile');
+      return response;
+    } catch (error) {
+      throw error;
+    }
+  },
 };
 
 export default userService;

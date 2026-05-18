@@ -11,7 +11,8 @@ import {
   updateFCMToken,
   getMentionSuggestions,
   toggleBlockUser,
-  reportUser
+  reportUser,
+  deleteAccount
 } from '../controllers/user.controller.js';
 import {
   getPreferences,
@@ -40,6 +41,7 @@ router.post('/profile-picture', protect, uploadImage, handleMulterError, uploadP
 router.get('/me/liked-reels', protect, getLikedReels);
 router.get('/me/saved-reels', protect, getSavedReels);
 router.post('/fcm-token', protect, updateFCMToken);
+router.delete('/profile', protect, deleteAccount);
 
 // Preference routes
 router.get('/me/preferences', protect, getPreferences);
