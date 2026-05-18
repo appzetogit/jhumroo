@@ -25,7 +25,8 @@ const savedReelSchema = new mongoose.Schema(
     }
   },
   {
-    timestamps: true
+    timestamps: true,
+    suppressReservedKeysWarning: true
   }
 );
 

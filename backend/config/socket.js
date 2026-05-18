@@ -14,7 +14,30 @@ const userSockets = new Map(); // socketId -> userId
 export const initSocket = (server) => {
   io = new Server(server, {
     cors: {
-      origin: process.env.CLIENT_URL || 'http://localhost:5173',
+      origin: function (origin, callback) {
+        if (!origin) return callback(null, true);
+        const isDevelopment = process.env.NODE_ENV === 'development';
+        const isLocalIp = /^http:\/\/(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+)(:\d+)?$/.test(origin);
+        const allowedOrigins = [
+          'http://localhost:5173',
+          'http://localhost:5174',
+          'http://localhost:5003',
+          'http://localhost:3000',
+          'https://jhumroo.in',
+          'https://www.jhumroo.in',
+          process.env.CLIENT_URL
+        ].filter(o => o);
+        
+        if (
+          allowedOrigins.indexOf(origin) !== -1 || 
+          allowedOrigins.includes(origin) ||
+          (isDevelopment && isLocalIp)
+        ) {
+          callback(null, true);
+        } else {
+          callback(new Error('Not allowed by CORS'));
+        }
+      },
       credentials: true
     },
     pingTimeout: 60000,

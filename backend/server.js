@@ -67,7 +67,14 @@ app.use(cors({
     // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
     
-    if (allowedOrigins.indexOf(origin) !== -1 || allowedOrigins.includes(origin)) {
+    const isDevelopment = process.env.NODE_ENV === 'development';
+    const isLocalIp = /^http:\/\/(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+)(:\d+)?$/.test(origin);
+    
+    if (
+      allowedOrigins.indexOf(origin) !== -1 || 
+      allowedOrigins.includes(origin) ||
+      (isDevelopment && isLocalIp)
+    ) {
       callback(null, true);
     } else {
       callback(new Error('Not allowed by CORS'));
