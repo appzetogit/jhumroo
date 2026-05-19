@@ -9,7 +9,7 @@ import Follow from '../../../models/Follow.model.js';
 import Report from '../../../models/Report.model.js';
 import { createNotification } from '../../../utils/notificationService.js';
 import { asyncHandler } from '../../../middleware/errorHandler.js';
-import { uploadToS3, getPresignedUploadUrl, getFileUrl } from '../../../utils/s3.js';
+import { uploadToS3, getPresignedUploadUrl, getFileUrl, getPresignedDownloadUrl } from '../../../utils/s3.js';
 import { processReelWithAudio } from '../../../utils/videoProcessor.js';
 import { deleteFile } from '../../../config/cloudinary.js';
 import RecommendationEngine from '../../../utils/recommendationEngine.js';
@@ -1192,6 +1192,33 @@ export const downloadReel = asyncHandler(async (req, res) => {
     return res.status(404).json({ success: false, message: 'Video URL not found' });
   }
 
+  const filename = `jhumroo-reel-${reel._id}.mp4`;
+  let s3DownloadUrl = null;
+
+  // Generate S3 presigned URL if publicId exists (meaning it's on S3)
+  if (reel.video?.publicId) {
+    try {
+      s3DownloadUrl = await getPresignedDownloadUrl(reel.video.publicId, filename);
+    } catch (err) {
+      console.error('[downloadReel] Error generating S3 presigned URL:', err);
+    }
+  }
+
+  // If frontend requests JSON response containing the direct download url
+  if (req.query.json === 'true') {
+    return res.status(200).json({
+      success: true,
+      downloadUrl: s3DownloadUrl || videoUrl
+    });
+  }
+
+  // Otherwise, fallback / traditional direct access:
+  // If S3, redirect directly to S3 forced download URL
+  if (s3DownloadUrl) {
+    return res.redirect(s3DownloadUrl);
+  }
+
+  // If not on S3, stream it directly as proxy to bypass CORS
   try {
     const response = await axios({
       method: 'get',
@@ -1199,7 +1226,6 @@ export const downloadReel = asyncHandler(async (req, res) => {
       responseType: 'stream'
     });
 
-    const filename = `jhumroo-reel-${reel._id}.mp4`;
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.setHeader('Content-Type', response.headers['content-type'] || 'video/mp4');
 

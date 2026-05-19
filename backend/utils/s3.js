@@ -63,6 +63,25 @@ export const getSignedReadUrl = async (key) => {
 };
 
 /**
+ * Generate a signed URL with response-content-disposition for forced download
+ */
+export const getPresignedDownloadUrl = async (key, filename) => {
+  const command = new GetObjectCommand({
+    Bucket: process.env.AWS_BUCKET_NAME,
+    Key: key,
+    ResponseContentDisposition: `attachment; filename="${filename}"`,
+  });
+
+  try {
+    const url = await getSignedUrl(s3Client, command, { expiresIn: 3600 });
+    return url;
+  } catch (err) {
+    console.error("Signed Download URL Error:", err);
+    return null;
+  }
+};
+
+/**
  * Get URL for an object (Synchronous version for CloudFront)
  */
 export const getSyncFileUrl = (key) => {
