@@ -31,40 +31,17 @@ const ShareSheet = ({ isOpen, onClose, reelData, onShare }) => {
 
     setIsDownloading(true);
     try {
-      // 1. Fetch direct download URL (S3 presigned URL or direct local/Cloudinary URL)
-      const data = await api.get(`/reels/${reelData._id}/download?json=true`);
-      
-      if (data && data.downloadUrl) {
-        // 2. Trigger direct browser download using anchor element
-        const link = document.createElement('a');
-        link.href = data.downloadUrl;
-        
-        // Since S3 presigned URL sets ResponseContentDisposition: attachment, it forces download immediately.
-        link.setAttribute('download', `jhumroo-reel-${reelData._id}.mp4`);
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-      } else {
-        throw new Error("Download URL not found in API response");
-      }
+      // Direct native browser download request. Bypasses CORS, JS blocks, and popup blockers completely!
+      window.location.href = `${api.defaults.baseURL}/reels/${reelData._id}/download`;
     } catch (err) {
-      console.error("Error downloading reel via proxy:", err);
-      // Fallback: direct download as a last resort
-      const videoUrl = reelData?.video?.url || reelData?.url;
-      if (videoUrl) {
-        const link = document.createElement('a');
-        link.href = videoUrl;
-        link.target = '_blank';
-        link.setAttribute('download', `jhumroo-reel-${reelData._id}.mp4`);
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-      } else {
-        alert("Error downloading video. Please try again.");
-      }
+      console.error("Error initiating download:", err);
+      alert("Error initiating download. Please try again.");
     } finally {
-      setIsDownloading(false);
-      onClose();
+      // Small timeout to allow the browser to register the download request
+      setTimeout(() => {
+        setIsDownloading(false);
+        onClose();
+      }, 1000);
     }
   };
 
