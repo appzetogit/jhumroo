@@ -35,10 +35,11 @@ const ReportSheet = ({ isOpen, onClose, reelId }) => {
   return (
     <div 
       className={`fixed inset-0 z-[6000] flex flex-col justify-end ${isDarkMode ? 'bg-black/60' : 'bg-black/40'}`}
+      data-modal-open={isOpen ? "true" : "false"}
       onClick={onClose}
     >
       <div 
-        className={`w-full max-h-[70vh] rounded-t-[20px] pb-[calc(var(--safe-area-bottom)+20px)] animate-slide-up ${
+        className={`w-full max-h-[70vh] rounded-t-[20px] pb-[calc(var(--safe-area-bottom)+40px)] animate-slide-up ${
           isDarkMode ? 'bg-[#161823] text-white' : 'bg-white text-black'
         }`}
         onClick={(e) => e.stopPropagation()}

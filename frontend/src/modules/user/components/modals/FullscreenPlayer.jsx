@@ -54,7 +54,8 @@ const FullscreenPlayer = ({ isOpen, onClose, videoUrl, posterUrl }) => {
         ref={videoRef}
         src={videoUrl}
         poster={posterUrl}
-        className="w-full h-full object-cover"
+        className="absolute inset-0 w-full h-full object-cover"
+        style={{ objectFit: 'cover' }}
         loop
         controls={false}
         playsInline

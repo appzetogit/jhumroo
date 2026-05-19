@@ -55,7 +55,7 @@ const HomePage = () => {
           }
         });
       },
-      { threshold: 0.7 }
+      { threshold: 0.5 }
     );
 
     const elements = document.querySelectorAll('.video-card-wrapper');
@@ -117,31 +117,66 @@ const HomePage = () => {
       {/* Vertical Feed */}
       <div
         ref={containerRef}
-        className="h-[100dvh] w-full overflow-y-auto snap-y snap-mandatory no-scrollbar overscroll-none"
-        style={{ scrollSnapStop: 'always', WebkitOverflowScrolling: 'touch' }}
+        className="h-full w-full overflow-y-auto snap-y snap-mandatory no-scrollbar overscroll-none"
+        style={{ scrollSnapStop: 'always', WebkitOverflowScrolling: 'touch', scrollBehavior: 'auto' }}
       >
-        {displayedVideos.map((video, index) => {
-          const isVisible = Math.abs(index - activeVideoIndex) <= 2;
-          
-          return (
-            <div
-              key={video.id}
-              data-index={index}
-              className="video-card-wrapper h-full w-full snap-start snap-always relative"
-            >
-              {isVisible ? (
-                <VideoCard
-                  videoData={video}
-                  isActive={index === activeVideoIndex && onboardingStep !== 2}
-                />
-              ) : (
-                <div className="h-full w-full bg-black flex items-center justify-center">
-                   <div className="w-10 h-10 border-4 border-white/10 border-t-white/30 rounded-full animate-spin" />
+        {displayedVideos.length === 0 && !loading ? (
+          <div className="h-full w-full flex flex-col items-center justify-center bg-black px-6 text-center select-none">
+            {/* Glowing Icon Container */}
+            <div className="relative mb-6">
+              <div className="absolute inset-0 bg-[#fe2c55]/20 rounded-full blur-2xl animate-pulse" />
+              <div className="relative w-24 h-24 bg-gradient-to-tr from-[#fe2c55] to-[#25f4ee] rounded-full p-[2px] shadow-2xl flex items-center justify-center">
+                <div className="w-full h-full bg-black rounded-full flex items-center justify-center">
+                  <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="url(#empty-gradient)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="animate-pulse">
+                    <defs>
+                      <linearGradient id="empty-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" stopColor="#fe2c55" />
+                        <stop offset="100%" stopColor="#25f4ee" />
+                      </linearGradient>
+                    </defs>
+                    <path d="M23 7l-7 5 7 5V7z" />
+                    <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
+                  </svg>
                 </div>
-              )}
+              </div>
             </div>
-          );
-        })}
+            {/* Typography */}
+            <h3 className="text-2xl font-bold text-white tracking-wide mb-2">No reels uploaded</h3>
+            <p className="text-[14px] text-white/50 max-w-xs leading-relaxed mb-8">
+              Be the first to share your beautiful moment with the world!
+            </p>
+            {/* Glowing Create CTA Button */}
+            <button
+              onClick={() => navigate('/create')}
+              className="relative inline-flex items-center justify-center px-8 py-3.5 text-[15px] font-bold text-white bg-gradient-to-r from-[#fe2c55] to-[#25f4ee] rounded-full shadow-lg hover:shadow-2xl transition-all duration-300 transform active:scale-95 cursor-pointer z-50"
+            >
+              Create Reel
+            </button>
+          </div>
+        ) : (
+          displayedVideos.map((video, index) => {
+            const isVisible = Math.abs(index - activeVideoIndex) <= 2;
+            
+            return (
+              <div
+                key={video.id}
+                data-index={index}
+                className="video-card-wrapper h-full w-full snap-start snap-always relative"
+              >
+                {isVisible ? (
+                  <VideoCard
+                    videoData={video}
+                    isActive={index === activeVideoIndex && onboardingStep !== 2}
+                  />
+                ) : (
+                  <div className="h-full w-full bg-black flex items-center justify-center">
+                     <div className="w-10 h-10 border-4 border-white/10 border-t-white/30 rounded-full animate-spin" />
+                  </div>
+                )}
+              </div>
+            );
+          })
+        )}
         
         {loading && (
           <div className="h-full w-full flex items-center justify-center bg-black">

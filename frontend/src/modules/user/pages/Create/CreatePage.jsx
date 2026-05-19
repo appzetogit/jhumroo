@@ -1373,12 +1373,25 @@ const CreatePage = () => {
         mode: isUser ? 'front' : 'back',
         mirror: isUser,
         autostart: true,
-        done: () => {
+        done: async () => {
           console.log('Instacam ready');
           // Get the stream for recording
           if (instacamRef.current) {
-            const stream = instacamRef.current.v; // Accessing internal stream
-            streamRef.current = stream;
+            const videoStream = instacamRef.current.v; // Accessing internal stream
+            try {
+              // Request microphone audio stream
+              const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+              // Combine video tracks from canvas and audio tracks from microphone
+              const combinedStream = new MediaStream([
+                ...videoStream.getVideoTracks(),
+                ...audioStream.getAudioTracks()
+              ]);
+              streamRef.current = combinedStream;
+              console.log('Successfully combined canvas video with microphone audio stream!');
+            } catch (audioErr) {
+              console.warn('Microphone access failed or denied, using video-only stream:', audioErr);
+              streamRef.current = videoStream;
+            }
           }
           
           // Ensure the generated wrapper is full screen
@@ -1406,6 +1419,13 @@ const CreatePage = () => {
   };
 
   const stopCamera = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => {
+        try { track.stop(); } catch (e) {}
+      });
+      streamRef.current = null;
+    }
+
     if (instacamRef.current) {
       try {
         instacamRef.current.stop();
@@ -1801,6 +1821,17 @@ const CreatePage = () => {
     }
   };
 
+  const handleNextClick = () => {
+    const hasEdits = overlayText || activeStickers.length > 0 || selectedFilter !== 'Normal' || editorSettings.rotation !== 0 || clipSequence.length > 1;
+    if (!hasEdits) {
+      console.log('No edits detected. Bypassing canvas render for direct upload.');
+      setMergedVideoBlob(null);
+      pushStage('post');
+    } else {
+      performMergeSave(false);
+    }
+  };
+
   const performMergeSave = async (isExportOnly = true) => {
     if (isRendering) return;
     
@@ -1814,8 +1845,30 @@ const CreatePage = () => {
       canvas.height = 1280;
       const ctx = canvas.getContext('2d');
       
+      const renderVideo = document.createElement('video');
+      renderVideo.playsInline = true;
+
+      // Setup Web Audio routing to capture video audio silently
+      let audioTrack = null;
+      let audioCtx = null;
+      try {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const sourceNode = audioCtx.createMediaElementSource(renderVideo);
+        const destNode = audioCtx.createMediaStreamDestination();
+        sourceNode.connect(destNode);
+        audioTrack = destNode.stream.getAudioTracks()[0];
+      } catch (err) {
+        console.warn("Web Audio API failed, falling back to silent video:", err);
+      }
+
       const stream = canvas.captureStream(30);
-      const recorder = new MediaRecorder(stream, {
+      const combinedTracks = [...stream.getVideoTracks()];
+      if (audioTrack) {
+        combinedTracks.push(audioTrack);
+      }
+      const combinedStream = new MediaStream(combinedTracks);
+
+      const recorder = new MediaRecorder(combinedStream, {
         mimeType: 'video/webm;codecs=vp9',
         videoBitsPerSecond: 8000000 
       });
@@ -1844,9 +1897,9 @@ const CreatePage = () => {
 
       recorder.start();
 
-      const renderVideo = document.createElement('video');
-      renderVideo.muted = true;
-      renderVideo.playsInline = true;
+      if (audioCtx && audioCtx.state === 'suspended') {
+        await audioCtx.resume();
+      }
 
       for (let i = 0; i < clipSequence.length; i++) {
         const clip = clipSequence[i];
@@ -3873,7 +3926,7 @@ const CreatePage = () => {
           </button>
           <button
             type="button"
-            onClick={() => performMergeSave(false)}
+            onClick={handleNextClick}
             className="flex h-[48px] items-center justify-center gap-2 rounded-full bg-[#4d70ff] px-8 text-[15px] font-bold text-white shadow-lg transition-all active:scale-95"
           >
             <span>Next</span>

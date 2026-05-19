@@ -20,7 +20,12 @@ export const SocketProvider = ({ children }) => {
   useEffect(() => {
     if (isAuthenticated && token) {
       // Connect to socket server
-      const newSocket = io(import.meta.env.VITE_API_URL || 'http://localhost:5000', {
+      const rawApiUrl = import.meta.env.VITE_API_URL || '';
+      const socketUrl = rawApiUrl.startsWith('http') 
+        ? rawApiUrl 
+        : window.location.origin;
+
+      const newSocket = io(socketUrl, {
         auth: {
           token
         }

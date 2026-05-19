@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { BiX, BiLinkAlt, BiFlag, BiDownload, BiMessageSquareDetail } from 'react-icons/bi';
 import { FaWhatsapp, FaInstagram, FaFacebookMessenger } from 'react-icons/fa';
 import { useTheme } from '../../../../context/ThemeContext';
@@ -7,6 +7,7 @@ import reelService from '../../../../services/reelService';
 
 const ShareSheet = ({ isOpen, onClose, reelData, onShare }) => {
   const { isDarkMode } = useTheme();
+  const [isDownloading, setIsDownloading] = useState(false);
 
   if (!isOpen) return null;
 
@@ -18,6 +19,47 @@ const ShareSheet = ({ isOpen, onClose, reelData, onShare }) => {
   const handleCopyLink = async () => {
     onShare?.('copy');
     onClose();
+  };
+
+  const handleDownload = async (e) => {
+    e.stopPropagation();
+    const videoUrl = reelData?.video?.url || reelData?.url;
+    if (!videoUrl) {
+      alert("Video URL not found.");
+      return;
+    }
+
+    setIsDownloading(true);
+    try {
+      const response = await fetch(videoUrl);
+      if (!response.ok) throw new Error("Failed to fetch video file");
+      
+      const blob = await response.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+      
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      const filename = `jhumroo-reel-${reelData?._id || 'video'}.mp4`;
+      link.setAttribute('download', filename);
+      document.body.appendChild(link);
+      link.click();
+      
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(blobUrl);
+    } catch (err) {
+      console.error("Error downloading reel:", err);
+      // Fallback
+      const link = document.createElement('a');
+      link.href = videoUrl;
+      link.target = '_blank';
+      link.setAttribute('download', `jhumroo-reel-${reelData?._id || 'video'}.mp4`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } finally {
+      setIsDownloading(false);
+      onClose();
+    }
   };
 
   return (
@@ -105,9 +147,16 @@ const ShareSheet = ({ isOpen, onClose, reelData, onShare }) => {
                    <span className="text-[10px] font-bold">Not interested</span>
                 </div>
                 {((reelData?.user?.downloadPrivacy !== 'Off') && (reelData?.allowDownload !== false)) && (
-                  <div className={`flex-1 flex flex-col items-center gap-2 tap-effect cursor-pointer group ${isDarkMode ? 'text-white' : 'text-black/80'}`}>
-                    <BiDownload size={20} className="group-hover:text-success transition-colors" />
-                    <span className="text-[10px] font-bold">Save video</span>
+                  <div 
+                    onClick={handleDownload}
+                    className={`flex-1 flex flex-col items-center gap-2 tap-effect cursor-pointer group ${isDarkMode ? 'text-white' : 'text-black/80'} ${isDownloading ? 'opacity-50 pointer-events-none' : ''}`}
+                  >
+                    {isDownloading ? (
+                      <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <BiDownload size={20} className="group-hover:text-success transition-colors" />
+                    )}
+                    <span className="text-[10px] font-bold">{isDownloading ? "Saving..." : "Save video"}</span>
                   </div>
                 )}
             </div>

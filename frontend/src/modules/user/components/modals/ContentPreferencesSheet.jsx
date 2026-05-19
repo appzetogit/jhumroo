@@ -68,6 +68,7 @@ const ContentPreferencesSheet = ({ isOpen, onClose }) => {
   return (
     <div 
       className={`fixed inset-0 z-[6000] flex flex-col justify-end ${isDarkMode ? 'bg-black/60' : 'bg-black/40'}`}
+      data-modal-open={isOpen ? "true" : "false"}
       onClick={onClose}
     >
       <div 

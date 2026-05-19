@@ -100,10 +100,11 @@ const ProfileMoreOptionsSheet = ({
       className={`fixed inset-0 z-[5000] flex flex-col justify-end transition-opacity duration-300 ${
         isOpen && !isClosing ? 'opacity-100' : 'opacity-0'
       } ${isDarkMode ? 'bg-black/70' : 'bg-black/40'}`}
+      data-modal-open={isOpen && !isClosing ? "true" : "false"}
       onClick={handleClose}
     >
       <div 
-        className={`w-full max-h-[85vh] overflow-y-auto rounded-t-[20px] pb-[calc(var(--safe-area-bottom)+20px)] transition-transform duration-300 transform no-scrollbar ${
+        className={`w-full max-h-[85vh] overflow-y-auto rounded-t-[20px] pb-[calc(var(--safe-area-bottom)+40px)] transition-transform duration-300 transform no-scrollbar ${
           isOpen && !isClosing ? 'translate-y-0' : 'translate-y-full'
         } ${
           isDarkMode 

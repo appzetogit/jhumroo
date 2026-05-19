@@ -16,7 +16,10 @@ const VideoCard = ({ videoData, isActive }) => {
   const [showHeart, setShowHeart] = useState(false);
   const [showFavoritesModal, setShowFavoritesModal] = useState(false);
   const [showSavedToast, setShowSavedToast] = useState(false);
-  const [isMuted, setIsMuted] = useState(() => localStorage.getItem('isReelsMuted') === 'true');
+  const [isMuted, setIsMuted] = useState(() => {
+    const saved = localStorage.getItem('isReelsMuted');
+    return saved === null ? true : saved === 'true';
+  });
   const [showMuteOverlay, setShowMuteOverlay] = useState(false);
   const [localVideoData, setLocalVideoData] = useState(videoData);
 
@@ -222,8 +225,8 @@ const VideoCard = ({ videoData, isActive }) => {
     <div className="h-full w-full relative snap-start bg-black flex justify-center items-center overflow-hidden" style={{ contain: 'strict' }}>
       <video
         ref={videoRef}
-        className="w-full h-full object-cover bg-black"
-        style={{ willChange: 'transform' }}
+        className="absolute inset-0 w-full h-full object-cover bg-black"
+        style={{ willChange: 'transform', objectFit: 'cover' }}
         loop
         playsInline
         preload="auto"

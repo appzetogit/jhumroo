@@ -38,11 +38,52 @@ const MoreOptionsSheet = ({
   const [startY, setStartY] = useState(null);
   const [currentY, setCurrentY] = useState(0);
   const [isClosing, setIsClosing] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
 
   if (!isOpen && !isClosing) return null;
   if (!reelData && isOpen) return null;
 
   const isOwner = user?._id && reelData?.user && (user._id === (reelData.user._id || reelData.user));
+
+  const handleDownload = async () => {
+    const videoUrl = reelData?.video?.url || reelData?.url;
+    if (!videoUrl) {
+      alert("Video URL not found.");
+      return;
+    }
+
+    setIsDownloading(true);
+    try {
+      const response = await fetch(videoUrl);
+      if (!response.ok) throw new Error("Failed to fetch video file");
+      
+      const blob = await response.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+      
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      const filename = `jhumroo-reel-${reelData?._id || 'video'}.mp4`;
+      link.setAttribute('download', filename);
+      document.body.appendChild(link);
+      link.click();
+      
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(blobUrl);
+    } catch (err) {
+      console.error("Error downloading reel:", err);
+      // Fallback
+      const link = document.createElement('a');
+      link.href = videoUrl;
+      link.target = '_blank';
+      link.setAttribute('download', `jhumroo-reel-${reelData?._id || 'video'}.mp4`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } finally {
+      setIsDownloading(false);
+      handleClose();
+    }
+  };
 
   const handleTouchStart = (e) => {
     setStartY(e.touches[0].clientY);
@@ -133,10 +174,11 @@ const MoreOptionsSheet = ({
       className={`fixed inset-0 z-[5000] flex flex-col justify-end transition-opacity duration-300 ${
         isOpen && !isClosing ? 'opacity-100' : 'opacity-0'
       } ${isDarkMode ? 'bg-black/70' : 'bg-black/40'}`}
+      data-modal-open={isOpen && !isClosing ? "true" : "false"}
       onClick={handleClose}
     >
       <div 
-        className={`w-full max-h-[85vh] overflow-y-auto rounded-t-[20px] pb-[calc(var(--safe-area-bottom)+20px)] transition-transform duration-300 transform no-scrollbar ${
+        className={`w-full max-h-[85vh] overflow-y-auto rounded-t-[20px] pb-[calc(var(--safe-area-bottom)+40px)] transition-transform duration-300 transform no-scrollbar ${
           isOpen && !isClosing ? 'translate-y-0' : 'translate-y-full'
         } ${
           isDarkMode 
@@ -172,12 +214,9 @@ const MoreOptionsSheet = ({
             />
             {((reelData?.user?.downloadPrivacy !== 'Off') && (reelData?.allowDownload !== false)) && (
               <BubbleOptionItem 
-                icon={BiDownload} 
-                label="Download" 
-                onClick={() => {
-                  alert("Download started...");
-                  handleClose();
-                }}
+                icon={isDownloading ? () => <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin" /> : BiDownload} 
+                label={isDownloading ? "Downloading..." : "Download"} 
+                onClick={handleDownload}
               />
             )}
             <BubbleOptionItem 
