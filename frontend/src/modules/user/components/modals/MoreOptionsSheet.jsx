@@ -18,6 +18,7 @@ import { useTheme } from '../../../../context/ThemeContext';
 import { useAuth } from '../../../../context/AuthContext';
 import reelService from '../../../../services/reelService';
 import userService from '../../../../services/userService';
+import api from '../../../../services/api';
 
 const MoreOptionsSheet = ({ 
   isOpen, 
@@ -46,23 +47,22 @@ const MoreOptionsSheet = ({
   const isOwner = user?._id && reelData?.user && (user._id === (reelData.user._id || reelData.user));
 
   const handleDownload = async () => {
-    const videoUrl = reelData?.video?.url || reelData?.url;
-    if (!videoUrl) {
-      alert("Video URL not found.");
+    if (!reelData?._id) {
+      alert("Video ID not found.");
       return;
     }
 
     setIsDownloading(true);
     try {
-      const response = await fetch(videoUrl);
-      if (!response.ok) throw new Error("Failed to fetch video file");
+      const response = await api.get(`/reels/${reelData._id}/download`, {
+        responseType: 'blob'
+      });
       
-      const blob = await response.blob();
-      const blobUrl = window.URL.createObjectURL(blob);
+      const blobUrl = window.URL.createObjectURL(new Blob([response]));
       
       const link = document.createElement('a');
       link.href = blobUrl;
-      const filename = `jhumroo-reel-${reelData?._id || 'video'}.mp4`;
+      const filename = `jhumroo-reel-${reelData._id}.mp4`;
       link.setAttribute('download', filename);
       document.body.appendChild(link);
       link.click();
@@ -70,15 +70,35 @@ const MoreOptionsSheet = ({
       document.body.removeChild(link);
       window.URL.revokeObjectURL(blobUrl);
     } catch (err) {
-      console.error("Error downloading reel:", err);
-      // Fallback
-      const link = document.createElement('a');
-      link.href = videoUrl;
-      link.target = '_blank';
-      link.setAttribute('download', `jhumroo-reel-${reelData?._id || 'video'}.mp4`);
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      console.error("Error downloading reel via proxy:", err);
+      // Fallback: direct download as a last resort
+      const videoUrl = reelData?.video?.url || reelData?.url;
+      if (videoUrl) {
+        try {
+          const response = await fetch(videoUrl);
+          if (!response.ok) throw new Error("Fallback fetch failed");
+          const blob = await response.blob();
+          const blobUrl = window.URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = blobUrl;
+          link.setAttribute('download', `jhumroo-reel-${reelData._id}.mp4`);
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          window.URL.revokeObjectURL(blobUrl);
+        } catch (fallbackErr) {
+          console.error("Fallback fetch also failed:", fallbackErr);
+          const link = document.createElement('a');
+          link.href = videoUrl;
+          link.target = '_blank';
+          link.setAttribute('download', `jhumroo-reel-${reelData._id}.mp4`);
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+        }
+      } else {
+        alert("Error downloading video. Please try again.");
+      }
     } finally {
       setIsDownloading(false);
       handleClose();

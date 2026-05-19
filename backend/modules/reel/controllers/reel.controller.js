@@ -15,6 +15,7 @@ import { deleteFile } from '../../../config/cloudinary.js';
 import RecommendationEngine from '../../../utils/recommendationEngine.js';
 import WatchAnalytics from '../../../models/WatchAnalytics.model.js';
 import fs from 'fs';
+import axios from 'axios';
 
 /**
  * Helper to handle mention notifications for Reels
@@ -1167,6 +1168,47 @@ export const getSavedCollections = asyncHandler(async (req, res) => {
     success: true,
     collections: collections.length > 0 ? collections : ['All Videos']
   });
+});
+
+/**
+ * @desc    Download reel directly (Stream file from storage to bypass CORS and force download)
+ * @route   GET /api/reels/:id/download
+ * @access  Public
+ */
+export const downloadReel = asyncHandler(async (req, res) => {
+  const reel = await Reel.findById(req.params.id);
+  if (!reel) {
+    return res.status(404).json({ success: false, message: 'Reel not found' });
+  }
+
+  // Find the uploader user to check their download privacy setting
+  const uploader = await User.findById(reel.user);
+  if ((uploader?.downloadPrivacy === 'Off') || (reel.allowDownload === false)) {
+    return res.status(403).json({ success: false, message: 'Downloading this reel is disabled' });
+  }
+
+  const videoUrl = reel.video?.url || reel.rawVideoUrl;
+  if (!videoUrl) {
+    return res.status(404).json({ success: false, message: 'Video URL not found' });
+  }
+
+  try {
+    const response = await axios({
+      method: 'get',
+      url: videoUrl,
+      responseType: 'stream'
+    });
+
+    const filename = `jhumroo-reel-${reel._id}.mp4`;
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Type', response.headers['content-type'] || 'video/mp4');
+
+    response.data.pipe(res);
+  } catch (error) {
+    console.error('[downloadReel] Error streaming file:', error);
+    // Fallback: redirect to direct URL if streaming fails
+    res.redirect(videoUrl);
+  }
 });
 
 
