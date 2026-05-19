@@ -1184,21 +1184,26 @@ export const downloadReel = asyncHandler(async (req, res) => {
   // Find the uploader user to check their download privacy setting
   const uploader = await User.findById(reel.user);
   if ((uploader?.downloadPrivacy === 'Off') || (reel.allowDownload === false)) {
+    console.log(`[DOWNLOAD LOG - BLOCKED] Download blocked for Reel ID: ${reel._id}. Privacy: Off or allowDownload: false.`);
     return res.status(403).json({ success: false, message: 'Downloading this reel is disabled' });
   }
 
   const videoUrl = reel.video?.url || reel.rawVideoUrl;
   if (!videoUrl) {
+    console.log(`[DOWNLOAD LOG - ERROR] Video URL not found for Reel ID: ${reel._id}`);
     return res.status(404).json({ success: false, message: 'Video URL not found' });
   }
 
   const filename = `jhumroo-reel-${reel._id}.mp4`;
   let s3DownloadUrl = null;
 
+  console.log(`[DOWNLOAD LOG - INITIATED] Reel ID: ${reel._id} | Uploader: ${reel.user} | Requester: ${req.user ? req.user._id : 'Guest/Public'} | On S3: ${!!reel.video?.publicId}`);
+
   // Generate S3 presigned URL if publicId exists (meaning it's on S3)
   if (reel.video?.publicId) {
     try {
       s3DownloadUrl = await getPresignedDownloadUrl(reel.video.publicId, filename);
+      console.log(`[DOWNLOAD LOG - S3 SUCCESS] Secure presigned download URL generated for Reel ID: ${reel._id}`);
     } catch (err) {
       console.error('[downloadReel] Error generating S3 presigned URL:', err);
     }
@@ -1206,6 +1211,7 @@ export const downloadReel = asyncHandler(async (req, res) => {
 
   // If frontend requests JSON response containing the direct download url
   if (req.query.json === 'true') {
+    console.log(`[DOWNLOAD LOG - JSON RESPONSE] Sending download URL for Reel ID: ${reel._id}`);
     return res.status(200).json({
       success: true,
       downloadUrl: s3DownloadUrl || videoUrl
@@ -1215,11 +1221,13 @@ export const downloadReel = asyncHandler(async (req, res) => {
   // Otherwise, fallback / traditional direct access:
   // If S3, redirect directly to S3 forced download URL
   if (s3DownloadUrl) {
+    console.log(`[DOWNLOAD LOG - REDIRECT] Redirecting requester to S3 URL for Reel ID: ${reel._id}`);
     return res.redirect(s3DownloadUrl);
   }
 
   // If not on S3, stream it directly as proxy to bypass CORS
   try {
+    console.log(`[DOWNLOAD LOG - STREAMING] Proxy streaming local/external file for Reel ID: ${reel._id}`);
     const response = await axios({
       method: 'get',
       url: videoUrl,
