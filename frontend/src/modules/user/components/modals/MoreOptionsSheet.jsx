@@ -58,7 +58,7 @@ const MoreOptionsSheet = ({
         responseType: 'blob'
       });
       
-      const blobUrl = window.URL.createObjectURL(new Blob([response]));
+      const blobUrl = window.URL.createObjectURL(response);
       
       const link = document.createElement('a');
       link.href = blobUrl;
