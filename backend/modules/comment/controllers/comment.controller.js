@@ -176,6 +176,15 @@ export const createComment = asyncHandler(async (req, res) => {
     parentComment: parentCommentId || null
   });
 
+  // Update comment count on the parent content
+  if (!parentCommentId) {
+    if (isAd) {
+      await Ad.findByIdAndUpdate(reelId, { $inc: { 'stats.commentsCount': 1 } });
+    } else {
+      await Reel.findByIdAndUpdate(reelId, { $inc: { 'stats.commentsCount': 1 } });
+    }
+  }
+
   // Populate user details
   await comment.populate('user', 'username fullName profilePicture isVerified');
 

@@ -17,17 +17,20 @@ import { uploadAdMedia, uploadAdWithMusic } from '../../../middleware/upload.js'
 
 const router = express.Router();
 
+// Static routes MUST come before parameterized /:id routes
 router.post('/', protect, uploadAdWithMusic, createAd);
 router.get('/me', protect, getMyAds);
+router.get('/feed', protect, getAdsForFeed);
 router.get('/admin/all', protect, getAllAds);
 router.get('/admin/user-ads', protect, getUserAds);
-router.get('/:id', protect, getAdAnalytics);
+
+// Parameterized routes
 router.get('/:id/analytics', protect, getAdAnalytics);
 router.put('/:id', protect, uploadAdWithMusic, updateAd);
 router.patch('/:id/toggle', protect, toggleAdStatus);
 router.delete('/:id', protect, deleteAd);
-router.get('/feed', protect, getAdsForFeed);
 router.post('/:id/view', trackView);
 router.post('/:id/click', trackClick);
+router.get('/:id', protect, getAdAnalytics);
 
 export default router;

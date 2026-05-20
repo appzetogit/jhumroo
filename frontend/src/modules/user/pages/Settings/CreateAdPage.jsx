@@ -4,9 +4,7 @@ import { BiChevronLeft, BiCloudUpload, BiX, BiMap, BiLink, BiMusic } from 'react
 import { useTheme } from '../../../../context/ThemeContext';
 import adService from '../../../../services/adService';
 
-const INDIAN_STATES = [
-  "Andaman and Nicobar Islands", "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chandigarh", "Chhattisgarh", "Dadra and Nagar Haveli and Daman and Diu", "Delhi", "Goa", "Gujarat", "Haryana", "Himachal Pradesh", "Jammu and Kashmir", "Jharkhand", "Karnataka", "Kerala", "Ladakh", "Lakshadweep", "Madhya Pradesh", "Maharashtra", "Manipur", "Meghalaya", "Mizoram", "Nagaland", "Odisha", "Puducherry", "Punjab", "Rajasthan", "Sikkim", "Tamil Nadu", "Telangana", "Tripura", "Uttar Pradesh", "Uttarakhand", "West Bengal"
-];
+import { INDIAN_STATES, STATE_DISTRICTS } from '../../../../utils/indiaLocations';
 
 const CreateAdPage = () => {
   const navigate = useNavigate();
@@ -24,8 +22,9 @@ const CreateAdPage = () => {
   const [welcomeMessage, setWelcomeMessage] = useState('');
   const [musicName, setMusicName] = useState('');
   const [musicFile, setMusicFile] = useState(null);
-  const [selectedStates, setSelectedStates] = useState([]);
-  const [searchState, setSearchState] = useState('');
+  const [targetCountry, setTargetCountry] = useState('India');
+  const [targetState, setTargetState] = useState('');
+  const [targetDistricts, setTargetDistricts] = useState([]);
   const [isMapLoaded, setIsMapLoaded] = useState(false);
 
   // Google Maps API Key from env
@@ -79,11 +78,11 @@ const CreateAdPage = () => {
     }
   };
 
-  const toggleState = (state) => {
-    if (selectedStates.includes(state)) {
-      setSelectedStates(selectedStates.filter(s => s !== state));
+  const toggleDistrict = (district) => {
+    if (targetDistricts.includes(district)) {
+      setTargetDistricts(targetDistricts.filter(d => d !== district));
     } else {
-      setSelectedStates([...selectedStates, state]);
+      setTargetDistricts([...targetDistricts, district]);
     }
   };
 
@@ -101,8 +100,8 @@ const CreateAdPage = () => {
     }
 
     // Geographic targeting validation
-    if (selectedStates.length === 0) {
-      return alert('Please select at least one target state in India. Your ad will only show in these states.');
+    if (!targetCountry) {
+      return alert('Please select a target country.');
     }
 
     setLoading(true);
@@ -118,7 +117,9 @@ const CreateAdPage = () => {
       if (musicFile) {
         formData.append('musicFile', musicFile);
       }
-      formData.append('targetStates', JSON.stringify(selectedStates));
+      formData.append('targetCountry', targetCountry);
+      formData.append('targetState', targetState);
+      formData.append('targetDistricts', JSON.stringify(targetDistricts));
 
       const res = await adService.createAd(formData);
       if (res.success) {
@@ -133,9 +134,7 @@ const CreateAdPage = () => {
     }
   };
 
-  const filteredStates = INDIAN_STATES.filter(state => 
-    state.toLowerCase().includes(searchState.toLowerCase())
-  );
+
 
   return (
     <div className="page-container theme-surface-page flex flex-col min-h-screen">
@@ -321,46 +320,92 @@ const CreateAdPage = () => {
                 <BiMap size={20} className="text-[#FE2C55]" />
                 <div>
                   <h3 className="theme-text-primary text-[15px] font-bold">Target Locations <span className="text-red-500">*</span></h3>
-                  <p className="theme-text-muted text-[12px]">Your ad will show to users in these states.</p>
+                  <p className="theme-text-muted text-[12px]">Your ad will show strictly to users in this location.</p>
                 </div>
               </div>
 
-              {/* State Search and Chips */}
-              <div className="flex flex-wrap gap-2 mb-4">
-                {selectedStates.map(state => (
-                  <div key={state} className="bg-[#FE2C55]/10 text-[#FE2C55] px-3 py-1.5 rounded-full flex items-center gap-1 text-[13px] font-bold">
-                    {state}
-                    <button onClick={() => toggleState(state)}><BiX size={16} /></button>
-                  </div>
-                ))}
-                {selectedStates.length === 0 && <p className="text-[13px] theme-text-muted italic">No states selected</p>}
-              </div>
-
-              <div className="relative">
-                <input 
-                  type="text"
-                  value={searchState}
-                  onChange={(e) => setSearchState(e.target.value)}
-                  placeholder="Search states in India..."
-                  className="w-full theme-panel-divider border rounded-xl px-4 py-3 bg-black/5 theme-text-primary text-[14px] outline-none"
-                />
+              <div className="flex flex-col gap-4">
+                <div>
+                  <label className="theme-text-muted text-[11px] font-bold uppercase tracking-wider mb-1 block">
+                    Country <span className="text-red-500">*</span>
+                  </label>
+                  <select 
+                    value={targetCountry}
+                    onChange={(e) => setTargetCountry(e.target.value)}
+                    className="w-full theme-panel-divider border rounded-xl px-4 py-3 bg-black/5 theme-text-primary text-[14px] outline-none appearance-none"
+                  >
+                    <option className="bg-white text-black dark:bg-[#1A1A1A] dark:text-white" value="India">India</option>
+                  </select>
+                </div>
                 
-                {searchState && (
-                  <div className="absolute top-full left-0 right-0 mt-2 max-h-[200px] overflow-y-auto z-20 theme-panel-card rounded-xl shadow-xl border theme-panel-divider">
-                    {filteredStates.map(state => (
-                      <div 
-                        key={state}
-                        onClick={() => {
-                          toggleState(state);
-                          setSearchState('');
-                        }}
-                        className={`p-3 text-[14px] cursor-pointer hover:bg-black/5 ${selectedStates.includes(state) ? 'text-[#FE2C55] font-bold' : 'theme-text-primary'}`}
-                      >
-                        {state}
+                <div>
+                  <label className="theme-text-muted text-[11px] font-bold uppercase tracking-wider mb-1 block">
+                    State (Optional)
+                  </label>
+                  {targetCountry === 'India' ? (
+                    <select 
+                      value={targetState}
+                      onChange={(e) => setTargetState(e.target.value)}
+                      className="w-full theme-panel-divider border rounded-xl px-4 py-3 bg-black/5 theme-text-primary text-[14px] outline-none appearance-none"
+                    >
+                      <option className="bg-white text-black dark:bg-[#1A1A1A] dark:text-white" value="">All States</option>
+                      {INDIAN_STATES.map(state => (
+                        <option className="bg-white text-black dark:bg-[#1A1A1A] dark:text-white" key={state} value={state}>{state}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input 
+                      type="text"
+                      value={targetState}
+                      onChange={(e) => {
+                        setTargetState(e.target.value);
+                        setTargetDistricts([]);
+                      }}
+                      placeholder="Enter State/Province"
+                      className="w-full theme-panel-divider border rounded-xl px-4 py-3 bg-black/5 theme-text-primary text-[14px] outline-none"
+                    />
+                  )}
+                </div>
+
+                <div>
+                  <label className="theme-text-muted text-[11px] font-bold uppercase tracking-wider mb-1 block">
+                    District / City (Optional)
+                  </label>
+                  
+                  <div className="flex flex-wrap gap-2 mb-2">
+                    {targetDistricts.map(district => (
+                      <div key={district} className="bg-[#FE2C55]/10 text-[#FE2C55] px-3 py-1.5 rounded-full flex items-center gap-1 text-[13px] font-bold">
+                        {district}
+                        <button type="button" onClick={() => toggleDistrict(district)}><BiX size={16} /></button>
                       </div>
                     ))}
+                    {targetDistricts.length === 0 && <p className="text-[13px] theme-text-muted italic mb-2">All Districts</p>}
                   </div>
-                )}
+
+                  {targetState && STATE_DISTRICTS[targetState] ? (
+                    <select 
+                      value=""
+                      onChange={(e) => {
+                        if (e.target.value) toggleDistrict(e.target.value);
+                      }}
+                      className="w-full theme-panel-divider border rounded-xl px-4 py-3 bg-black/5 theme-text-primary text-[14px] outline-none appearance-none"
+                    >
+                      <option className="bg-white text-black dark:bg-[#1A1A1A] dark:text-white" value="">Select to add a district...</option>
+                      {STATE_DISTRICTS[targetState].map(district => (
+                        <option className="bg-white text-black dark:bg-[#1A1A1A] dark:text-white" key={district} value={district}>{district}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input 
+                      type="text"
+                      value=""
+                      onChange={() => {}}
+                      placeholder="Select a state first to see districts"
+                      disabled
+                      className="w-full theme-panel-divider border rounded-xl px-4 py-3 bg-black/5 theme-text-primary text-[14px] outline-none opacity-50 cursor-not-allowed"
+                    />
+                  )}
+                </div>
               </div>
             </div>
           </div>

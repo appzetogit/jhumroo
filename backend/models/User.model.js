@@ -147,6 +147,9 @@ const userSchema = new mongoose.Schema(
     state: {
       type: String
     },
+    district: {
+      type: String
+    },
     interests: {
       type: [String],
       default: []
@@ -186,7 +189,18 @@ const userSchema = new mongoose.Schema(
     blockedUsers: [{
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User'
-    }]
+    }],
+    liveLocation: {
+      type: {
+        type: String,
+        enum: ['Point'],
+        default: 'Point'
+      },
+      coordinates: {
+        type: [Number], // [longitude, latitude]
+        default: [0, 0]
+      }
+    }
   },
   {
     timestamps: true,
@@ -198,6 +212,7 @@ const userSchema = new mongoose.Schema(
 // Indexes for performance
 userSchema.index({ createdAt: -1 });
 userSchema.index({ 'stats.followersCount': -1 });
+userSchema.index({ liveLocation: '2dsphere' });
 
 // Virtual for full phone number
 userSchema.virtual('fullPhoneNumber').get(function () {

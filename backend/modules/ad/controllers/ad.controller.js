@@ -1,9 +1,12 @@
 import Ad from '../../../models/Ad.model.js';
 import User from '../../../models/User.model.js';
 import Admin from '../../../models/Admin.model.js';
+import Like from '../../../models/Like.model.js';
+import Comment from '../../../models/Comment.model.js';
 import { asyncHandler } from '../../../middleware/errorHandler.js';
 import { uploadToS3, getFileUrl, deleteFromS3 } from '../../../utils/s3.js';
 import fs from 'fs';
+
 
 /**
  * @desc    Create a new advertisement
@@ -21,8 +24,8 @@ export const createAd = asyncHandler(async (req, res) => {
     });
   }
 
-  const { caption, link, targetStates, adType, whatsappNumber, welcomeMessage, musicName, isPlatformAd } = req.body;
-  const statesArray = targetStates ? (typeof targetStates === 'string' ? JSON.parse(targetStates) : targetStates) : [];
+  const { caption, link, targetCountry, targetState, targetDistricts, adType, whatsappNumber, welcomeMessage, musicName, isPlatformAd } = req.body;
+  const parsedDistricts = targetDistricts ? (typeof targetDistricts === 'string' ? JSON.parse(targetDistricts) : targetDistricts) : [];
 
   // Upload Media to S3
   const s3Result = await uploadToS3(mediaFile.path, 'ads', mediaFile.mimetype);
@@ -41,18 +44,15 @@ export const createAd = asyncHandler(async (req, res) => {
   }
 
   let onModel = 'User';
+  let adUserId = req.user ? req.user._id : null;
+
   if (req.admin || isPlatformAd === 'true') {
     onModel = 'Admin';
-  } else if (req.user) {
-    // Check if this user is actually an admin by email
-    const adminAccount = await Admin.findOne({ email: req.user.email });
-    if (adminAccount) {
-      onModel = 'Admin';
-    }
+    if (req.admin) adUserId = req.admin._id;
   }
 
   const ad = await Ad.create({
-    user: req.admin ? req.admin._id : req.user._id,
+    user: adUserId,
     onModel,
     media: {
       url: await getFileUrl(s3Result.key),
@@ -64,7 +64,9 @@ export const createAd = asyncHandler(async (req, res) => {
     adType: adType || 'shop',
     whatsappNumber: whatsappNumber || '',
     welcomeMessage: welcomeMessage || '',
-    targetStates: statesArray,
+    targetCountry: targetCountry || 'India',
+    targetState: targetState || '',
+    targetDistricts: parsedDistricts,
     music: musicResult ? {
       name: musicData.name,
       url: musicData.url,
@@ -89,9 +91,28 @@ export const getMyAds = asyncHandler(async (req, res) => {
   const ads = await Ad.find({ user: req.user._id, onModel: 'User' })
     .sort({ createdAt: -1 });
 
+  // Self-healing: sync actual like/comment counts from sub-collections
+  const Like = (await import('../../../models/Like.model.js')).default;
+  const Comment = (await import('../../../models/Comment.model.js')).default;
+
+  const syncedAds = await Promise.all(ads.map(async (ad) => {
+    const [actualLikes, actualComments] = await Promise.all([
+      Like.countDocuments({ ad: ad._id }),
+      Comment.countDocuments({ ad: ad._id, isDeleted: false, parentComment: null })
+    ]);
+    const adObj = ad.toObject();
+    adObj.stats = { ...adObj.stats, likesCount: actualLikes, commentsCount: actualComments };
+    if (ad.stats.likesCount !== actualLikes || ad.stats.commentsCount !== actualComments) {
+      Ad.findByIdAndUpdate(ad._id, {
+        $set: { 'stats.likesCount': actualLikes, 'stats.commentsCount': actualComments }
+      }).catch(() => {});
+    }
+    return adObj;
+  }));
+
   res.status(200).json({
     success: true,
-    ads
+    ads: syncedAds
   });
 });
 
@@ -143,6 +164,28 @@ export const getAdAnalytics = asyncHandler(async (req, res) => {
   if (!ad || (req.admin && !ad.user)) {
     return res.status(404).json({ success: false, message: 'Ad not found' });
   }
+
+  // Self-healing: sync actual counts from Like and Comment collections
+  const Like = (await import('../../../models/Like.model.js')).default;
+  const Comment = (await import('../../../models/Comment.model.js')).default;
+
+  const [actualLikes, actualComments] = await Promise.all([
+    Like.countDocuments({ ad: ad._id }),
+    Comment.countDocuments({ ad: ad._id, isDeleted: false, parentComment: null })
+  ]);
+
+  // Update if out of sync
+  if (ad.stats.likesCount !== actualLikes || ad.stats.commentsCount !== actualComments) {
+    await Ad.findByIdAndUpdate(ad._id, {
+      $set: {
+        'stats.likesCount': actualLikes,
+        'stats.commentsCount': actualComments
+      }
+    });
+    ad.stats.likesCount = actualLikes;
+    ad.stats.commentsCount = actualComments;
+  }
+
   res.json({ success: true, ad });
 });
 
@@ -177,21 +220,6 @@ export const deleteAd = asyncHandler(async (req, res) => {
  * @access  Private/Admin
  */
 export const getAllAds = asyncHandler(async (req, res) => {
-  // Fix attribution for existing ads created by admins
-  // 1. Check by Admin IDs
-  const admins = await Admin.find().select('_id email');
-  const adminIds = admins.map(a => a._id);
-  const adminEmails = admins.map(a => a.email);
-
-  // 2. Check for Users who are actually Admins (by email)
-  const adminUsers = await User.find({ email: { $in: adminEmails } }).select('_id');
-  const adminUserIds = adminUsers.map(u => u._id);
-
-  // 3. Migrate all such ads to 'Admin' model
-  await Ad.updateMany({ 
-    user: { $in: [...adminIds, ...adminUserIds] }, 
-    onModel: 'User' 
-  }, { onModel: 'Admin' });
 
   const ads = await Ad.find({ onModel: 'Admin' })
 
@@ -212,30 +240,40 @@ export const getAllAds = asyncHandler(async (req, res) => {
  * @access  Private/Admin
  */
 export const getUserAds = asyncHandler(async (req, res) => {
-  // Fix attribution for existing ads created by admins (Ensure they don't show up in User Ads)
-  const admins = await Admin.find().select('_id email');
-  const adminIds = admins.map(a => a._id);
-  const adminEmails = admins.map(a => a.email);
-  const adminUsers = await User.find({ email: { $in: adminEmails } }).select('_id');
-  const adminUserIds = adminUsers.map(u => u._id);
-
-  await Ad.updateMany({ 
-    user: { $in: [...adminIds, ...adminUserIds] }, 
-    onModel: 'User' 
-  }, { onModel: 'Admin' });
-
-  console.log('Migration IDs:', [...adminIds, ...adminUserIds]);
 
   const ads = await Ad.find({ onModel: 'User' })
-
     .populate('user', 'username profilePicture fullName email')
     .sort({ createdAt: -1 });
 
   const activeUserAds = ads.filter(ad => ad.user);
 
+  // Self-healing: sync actual like/comment counts from sub-collections
+  const Like = (await import('../../../models/Like.model.js')).default;
+  const Comment = (await import('../../../models/Comment.model.js')).default;
+
+  const syncedAds = await Promise.all(activeUserAds.map(async (ad) => {
+    const [actualLikes, actualComments] = await Promise.all([
+      Like.countDocuments({ ad: ad._id }),
+      Comment.countDocuments({ ad: ad._id, isDeleted: false, parentComment: null })
+    ]);
+    const adObj = ad.toObject();
+    adObj.stats = {
+      ...adObj.stats,
+      likesCount: actualLikes,
+      commentsCount: actualComments
+    };
+    // Update DB if stale
+    if (ad.stats.likesCount !== actualLikes || ad.stats.commentsCount !== actualComments) {
+      Ad.findByIdAndUpdate(ad._id, {
+        $set: { 'stats.likesCount': actualLikes, 'stats.commentsCount': actualComments }
+      }).catch(() => {});
+    }
+    return adObj;
+  }));
+
   res.status(200).json({
     success: true,
-    ads: activeUserAds
+    ads: syncedAds
   });
 });
 
@@ -246,15 +284,20 @@ export const getUserAds = asyncHandler(async (req, res) => {
  * @access  Private
  */
 export const getAdsForFeed = asyncHandler(async (req, res) => {
-  const userState = req.user.state;
+  const userCountry = req.user.country || 'India';
+  const userState = req.user.state || '';
   
   const query = { isActive: true };
-  if (userState) {
-    query.$or = [
-      { targetStates: { $size: 0 } }, // All states
-      { targetStates: userState }     // Specifically targeted to user's state
-    ];
-  }
+  
+  // Ad target matching logic:
+  // - Ad must not restrict country, OR restrict to user's country
+  // - Ad must not restrict state, OR restrict to user's state
+  // - Ad must not restrict district, OR restrict to user's district
+  query.$and = [
+    { $or: [{ targetCountry: { $exists: false } }, { targetCountry: '' }, { targetCountry: userCountry }] },
+    { $or: [{ targetState: { $exists: false } }, { targetState: '' }, { targetState: userState }] },
+    { $or: [{ targetDistricts: { $size: 0 } }, { targetDistricts: { $exists: false } }, { targetDistricts: req.user.district }] }
+  ];
 
   const ads = await Ad.find(query).populate('user', 'username profilePicture').limit(5);
 
@@ -300,7 +343,7 @@ export const updateAd = asyncHandler(async (req, res) => {
     });
   }
 
-  const { caption, link, targetStates, adType, whatsappNumber, welcomeMessage, musicName, isActive } = req.body;
+  const { caption, link, targetCountry, targetState, targetDistricts, adType, whatsappNumber, welcomeMessage, musicName, isActive } = req.body;
   const mediaFile = req.files?.['media']?.[0];
   const musicFile = req.files?.['musicFile']?.[0];
 
@@ -312,8 +355,10 @@ export const updateAd = asyncHandler(async (req, res) => {
   if (welcomeMessage !== undefined) ad.welcomeMessage = welcomeMessage;
   if (isActive !== undefined) ad.isActive = isActive === 'true' || isActive === true;
 
-  if (targetStates) {
-    ad.targetStates = typeof targetStates === 'string' ? JSON.parse(targetStates) : targetStates;
+  if (targetCountry !== undefined) ad.targetCountry = targetCountry;
+  if (targetState !== undefined) ad.targetState = targetState;
+  if (targetDistricts !== undefined) {
+    ad.targetDistricts = typeof targetDistricts === 'string' ? JSON.parse(targetDistricts) : targetDistricts;
   }
 
   // Optional Media Replacement

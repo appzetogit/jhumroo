@@ -388,25 +388,34 @@ export const getFeedReels = asyncHandler(async (req, res) => {
         _id: ad._id.toString(),
         isAd: true,
         video: { url: ad.media.url, type: ad.media.type, thumbnail: ad.media.thumbnail || ad.media.url },
-        stats: { likesCount: ad.stats?.likesCount || 0, viewsCount: ad.stats?.viewsCount || 0 }
+        stats: {
+          likesCount: ad.stats?.likesCount || 0,
+          viewsCount: ad.stats?.viewsCount || 0,
+          commentsCount: ad.stats?.commentsCount || 0,
+          clicksCount: ad.stats?.clicksCount || 0
+        }
       });
     }
 
     if (req.user) {
       const reelIds = reels.filter(r => !r.isAd).map(r => r._id);
-      const [likes, saves] = await Promise.all([
+      const adIds = reels.filter(r => r.isAd).map(r => r._id);
+      
+      const [likes, adLikes, saves] = await Promise.all([
         Like.find({ user: req.user._id, reel: { $in: reelIds } }),
+        Like.find({ user: req.user._id, ad: { $in: adIds } }),
         SavedReel.find({ user: req.user._id, reel: { $in: reelIds } })
       ]);
       
-      const likedSet = new Set(likes.map(l => l.reel.toString()));
+      const likedSet = new Set([
+        ...likes.map(l => l.reel.toString()), 
+        ...adLikes.map(l => l.ad.toString())
+      ]);
       const savedSet = new Set(saves.map(s => s.reel.toString()));
 
       reels.forEach(r => {
-        if (!r.isAd) {
-          r.isLiked = likedSet.has(r._id.toString());
-          r.isSaved = savedSet.has(r._id.toString());
-        }
+        r.isLiked = likedSet.has(r._id.toString());
+        r.isSaved = savedSet.has(r._id.toString());
       });
     }
   }

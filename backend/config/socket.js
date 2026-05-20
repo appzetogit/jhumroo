@@ -137,6 +137,24 @@ export const initSocket = (server) => {
     });
 
     /**
+     * Handle live location updates
+     */
+    socket.on('update_location', async ({ latitude, longitude }) => {
+      try {
+        if (latitude !== undefined && longitude !== undefined) {
+          await User.findByIdAndUpdate(userId, {
+            liveLocation: {
+              type: 'Point',
+              coordinates: [longitude, latitude] // GeoJSON format: [longitude, latitude]
+            }
+          });
+        }
+      } catch (error) {
+        console.error(`Error updating live location for user ${userId}:`, error);
+      }
+    });
+
+    /**
      * Handle user going offline
      */
     socket.on('disconnect', () => {

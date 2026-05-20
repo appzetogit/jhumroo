@@ -52,9 +52,17 @@ const adSchema = new mongoose.Schema(
       type: String,
       trim: true
     },
-    targetStates: {
+    targetCountry: {
+      type: String,
+      default: 'India'
+    },
+    targetState: {
+      type: String,
+      default: ''
+    },
+    targetDistricts: {
       type: [String],
-      default: [] // Empty means all states (or specific targeting logic)
+      default: []
     },
     music: {
       name: String,
@@ -93,7 +101,7 @@ const adSchema = new mongoose.Schema(
 );
 
 // Indexes
-adSchema.index({ targetStates: 1 });
+adSchema.index({ targetCountry: 1, targetState: 1, targetDistricts: 1 });
 adSchema.index({ isActive: 1 });
 
 const Ad = mongoose.model('Ad', adSchema);

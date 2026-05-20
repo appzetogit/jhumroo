@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BiPlus, BiTrash, BiStats, BiLinkExternal, BiChevronLeft } from 'react-icons/bi';
+import { BiPlus, BiTrash, BiStats, BiLinkExternal, BiChevronLeft, BiHeart, BiMessageRounded } from 'react-icons/bi';
 import { useTheme } from '../../../../context/ThemeContext';
 import adService from '../../../../services/adService';
 
@@ -54,7 +54,7 @@ const AdsManagerPage = () => {
     <div className="page-container theme-surface-page flex flex-col min-h-screen">
       {/* Header */}
       <div className="flex items-center justify-between px-4 pt-6 pb-4 shrink-0 relative">
-        <button 
+        <button
           onClick={() => navigate(-1)}
           className="theme-icon-button w-10 h-10 rounded-full flex items-center justify-center z-10"
         >
@@ -69,7 +69,7 @@ const AdsManagerPage = () => {
           <div className="theme-panel-card p-6 rounded-[24px] text-center bg-gradient-to-br from-[#FE2C55] to-[#FF7B93] text-white">
             <h3 className="text-[20px] font-bold mb-1">Grow your reach</h3>
             <p className="text-[13px] opacity-90 mb-4">Create sponsored reels to reach users in specific states across India.</p>
-            <button 
+            <button
               onClick={() => navigate('/settings/ads-manager/create')}
               className="bg-white text-[#FE2C55] px-6 py-2.5 rounded-full font-bold text-[14px] active:scale-95 transition-transform"
             >
@@ -78,7 +78,7 @@ const AdsManagerPage = () => {
           </div>
 
           <h4 className="theme-text-primary text-[15px] font-bold mt-4">Your Advertisements</h4>
-          
+
           {loading ? (
             <div className="flex justify-center py-10">
               <div className="w-8 h-8 border-4 border-[#FE2C55] border-t-transparent rounded-full animate-spin"></div>
@@ -105,8 +105,8 @@ const AdsManagerPage = () => {
                           {ad.isActive ? 'Active' : 'Inactive'}
                         </span>
                         <div className="flex gap-2 items-center">
-                          <button 
-                            onClick={() => navigate(`/settings/ads-manager/analytics/${ad._id}`)} 
+                          <button
+                            onClick={() => navigate(`/settings/ads-manager/analytics/${ad._id}`)}
                             className="bg-[#FE2C55]/10 text-[#FE2C55] px-2 py-0.5 rounded text-[10px] font-bold uppercase"
                           >
                             Dashboard
@@ -121,16 +121,39 @@ const AdsManagerPage = () => {
                       </div>
                       <p className="theme-text-primary text-[13px] font-medium line-clamp-1 mt-1">{ad.caption || 'No caption'}</p>
                     </div>
-                    <div className="flex items-center gap-4 mt-2">
+
+                    {/* Stats row */}
+                    <div className="flex items-center gap-3 mt-2 flex-wrap">
                       <div className="flex items-center gap-1 theme-text-muted">
                         <BiStats size={14} />
                         <span className="text-[11px]">{ad.stats?.viewsCount || 0} views</span>
+                      </div>
+                      <div className="flex items-center gap-1 theme-text-muted">
+                        <BiHeart size={14} />
+                        <span className="text-[11px]">{ad.stats?.likesCount || 0} likes</span>
+                      </div>
+                      <div className="flex items-center gap-1 theme-text-muted">
+                        <BiMessageRounded size={14} />
+                        <span className="text-[11px]">{ad.stats?.commentsCount || 0} comments</span>
                       </div>
                       <div className="flex items-center gap-1 theme-text-muted">
                         <BiLinkExternal size={14} />
                         <span className="text-[11px]">{ad.stats?.clicksCount || 0} clicks</span>
                       </div>
                     </div>
+
+                    {/* Targeting summary */}
+                    {(ad.targetState || (ad.targetDistricts && ad.targetDistricts.length > 0)) && (
+                      <div className="flex items-center gap-1 mt-1.5">
+                        <span className="text-[10px] theme-text-muted">📍</span>
+                        <span className="text-[10px] theme-text-muted truncate">
+                          {ad.targetState || 'India'}
+                          {ad.targetDistricts && ad.targetDistricts.length > 0
+                            ? ` · ${ad.targetDistricts.slice(0, 2).join(', ')}${ad.targetDistricts.length > 2 ? ` +${ad.targetDistricts.length - 2}` : ''}`
+                            : ''}
+                        </span>
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}

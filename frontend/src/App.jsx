@@ -152,8 +152,10 @@ const MainLayout = ({ onLogout }) => {
 
 
 import SuspendedScreen from './modules/user/components/common/SuspendedScreen';
+import useLiveLocation from './hooks/useLiveLocation';
 
 const AppContent = () => {
+    useLiveLocation();
     const { theme } = useTheme();
     const navigate = useNavigate();
     const location = useLocation();

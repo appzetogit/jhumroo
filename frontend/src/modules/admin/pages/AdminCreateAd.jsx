@@ -12,9 +12,7 @@ import {
 } from 'react-icons/bi';
 import adService from '../../../services/adService';
 
-const INDIAN_STATES = [
-  "Andaman and Nicobar Islands", "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chandigarh", "Chhattisgarh", "Dadra and Nagar Haveli and Daman and Diu", "Delhi", "Goa", "Gujarat", "Haryana", "Himachal Pradesh", "Jammu and Kashmir", "Jharkhand", "Karnataka", "Kerala", "Ladakh", "Lakshadweep", "Madhya Pradesh", "Maharashtra", "Manipur", "Meghalaya", "Mizoram", "Nagaland", "Odisha", "Puducherry", "Punjab", "Rajasthan", "Sikkim", "Tamil Nadu", "Telangana", "Tripura", "Uttar Pradesh", "Uttarakhand", "West Bengal"
-];
+import { INDIAN_STATES, STATE_DISTRICTS } from '../../../utils/indiaLocations';
 
 const AdminCreateAd = () => {
   const navigate = useNavigate();
@@ -33,8 +31,9 @@ const AdminCreateAd = () => {
   const [welcomeMessage, setWelcomeMessage] = useState('');
   const [musicName, setMusicName] = useState('');
   const [musicFile, setMusicFile] = useState(null);
-  const [selectedStates, setSelectedStates] = useState([]);
-  const [searchState, setSearchState] = useState('');
+  const [targetCountry, setTargetCountry] = useState('India');
+  const [targetState, setTargetState] = useState('');
+  const [targetDistricts, setTargetDistricts] = useState([]);
   const [isActive, setIsActive] = useState(true);
 
   useEffect(() => {
@@ -51,7 +50,9 @@ const AdminCreateAd = () => {
             setWhatsappNumber(ad.whatsappNumber || '');
             setWelcomeMessage(ad.welcomeMessage || '');
             setMusicName(ad.music?.name || '');
-            setSelectedStates(ad.targetStates || []);
+            setTargetCountry(ad.targetCountry || 'India');
+            setTargetState(ad.targetState || '');
+            setTargetDistricts(ad.targetDistricts || []);
             setMediaPreview(ad.media?.url || '');
             setMediaType(ad.media?.type || '');
             setIsActive(ad.isActive !== false);
@@ -80,11 +81,11 @@ const AdminCreateAd = () => {
     }
   };
 
-  const toggleState = (state) => {
-    if (selectedStates.includes(state)) {
-      setSelectedStates(selectedStates.filter(s => s !== state));
+  const toggleDistrict = (district) => {
+    if (targetDistricts.includes(district)) {
+      setTargetDistricts(targetDistricts.filter(d => d !== district));
     } else {
-      setSelectedStates([...selectedStates, state]);
+      setTargetDistricts([...targetDistricts, district]);
     }
   };
 
@@ -97,7 +98,7 @@ const AdminCreateAd = () => {
       if (!whatsappNumber.trim()) return alert('Please enter WhatsApp number');
       if (!welcomeMessage.trim()) return alert('Please enter welcome message');
     }
-    if (selectedStates.length === 0) return alert('Please select at least one target state');
+    if (!targetCountry) return alert('Please select a target country');
 
     setLoading(true);
     try {
@@ -111,7 +112,9 @@ const AdminCreateAd = () => {
       formData.append('musicName', musicName);
       formData.append('isActive', isActive);
       if (musicFile) formData.append('musicFile', musicFile);
-      formData.append('targetStates', JSON.stringify(selectedStates));
+      formData.append('targetCountry', targetCountry);
+      formData.append('targetState', targetState);
+      formData.append('targetDistricts', JSON.stringify(targetDistricts));
       formData.append('isPlatformAd', 'true');
 
       let res;
@@ -133,9 +136,7 @@ const AdminCreateAd = () => {
     }
   };
 
-  const filteredStates = INDIAN_STATES.filter(s => 
-    s.toLowerCase().includes(searchState.toLowerCase())
-  );
+
 
   return (
     <div className="admin-page p-6 bg-[#FAFAFA] dark:bg-[#0A0A0A] min-h-screen">
@@ -324,38 +325,86 @@ const AdminCreateAd = () => {
             <div className="bg-white dark:bg-[#111] p-6 rounded-[24px] border border-[#EEE] dark:border-[#222] shadow-sm">
               <h3 className="text-[16px] font-bold mb-4 flex items-center gap-2 text-[#1A1A1A] dark:text-white">
                 <BiMap className="text-[#FE2C55]" />
-                Target States <span className="text-red-500">*</span>
+                Target Locations <span className="text-red-500">*</span>
               </h3>
               
-              <div className="mb-4">
-                <input 
-                  type="text"
-                  value={searchState}
-                  onChange={(e) => setSearchState(e.target.value)}
-                  placeholder="Search states in India..."
-                  className="w-full bg-[#F5F5F5] dark:bg-[#1A1A1A] px-4 py-2.5 rounded-xl text-[14px] outline-none"
-                />
-              </div>
-
-              <div className="flex flex-wrap gap-2 mb-4 max-h-[150px] overflow-y-auto p-2 border border-[#F0F0F0] dark:border-[#222] rounded-xl">
-                {filteredStates.map(state => (
-                  <button 
-                    key={state}
-                    onClick={() => toggleState(state)}
-                    className={`px-3 py-1.5 rounded-lg text-[12px] font-medium transition-all flex items-center gap-2 ${
-                      selectedStates.includes(state) 
-                        ? 'bg-[#FE2C55] text-white' 
-                        : 'bg-[#F5F5F5] dark:bg-[#1A1A1A] text-[#666] hover:bg-[#EEE]'
-                    }`}
+              <div className="space-y-4">
+                <div>
+                  <label className="text-[12px] font-bold text-[#666] uppercase mb-1 block">Country <span className="text-red-500">*</span></label>
+                  <select 
+                    value={targetCountry}
+                    onChange={(e) => setTargetCountry(e.target.value)}
+                    className="w-full bg-[#F5F5F5] dark:bg-[#1A1A1A] px-4 py-2.5 rounded-xl text-[14px] outline-none appearance-none"
                   >
-                    {state}
-                    {selectedStates.includes(state) && <BiCheck size={14} />}
-                  </button>
-                ))}
+                    <option className="bg-white text-black dark:bg-[#1A1A1A] dark:text-white" value="India">India</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-[12px] font-bold text-[#666] uppercase mb-1 block">State (Optional)</label>
+                  {targetCountry === 'India' ? (
+                    <select 
+                      value={targetState}
+                      onChange={(e) => {
+                        setTargetState(e.target.value);
+                        setTargetDistricts([]);
+                      }}
+                      className="w-full bg-[#F5F5F5] dark:bg-[#1A1A1A] px-4 py-2.5 rounded-xl text-[14px] outline-none appearance-none"
+                    >
+                      <option className="bg-white text-black dark:bg-[#1A1A1A] dark:text-white" value="">All States</option>
+                      {INDIAN_STATES.map(state => (
+                        <option className="bg-white text-black dark:bg-[#1A1A1A] dark:text-white" key={state} value={state}>{state}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input 
+                      type="text"
+                      value={targetState}
+                      onChange={(e) => setTargetState(e.target.value)}
+                      placeholder="Enter State/Province"
+                      className="w-full bg-[#F5F5F5] dark:bg-[#1A1A1A] px-4 py-2.5 rounded-xl text-[14px] outline-none"
+                    />
+                  )}
+                </div>
+
+                <div>
+                  <label className="text-[12px] font-bold text-[#666] uppercase mb-1 block">District / City (Optional)</label>
+                  
+                  <div className="flex flex-wrap gap-2 mb-2">
+                    {targetDistricts.map(district => (
+                      <div key={district} className="bg-[#FE2C55]/10 text-[#FE2C55] px-3 py-1.5 rounded-full flex items-center gap-1 text-[13px] font-bold">
+                        {district}
+                        <button type="button" onClick={() => toggleDistrict(district)}><BiX size={16} /></button>
+                      </div>
+                    ))}
+                    {targetDistricts.length === 0 && <p className="text-[13px] theme-text-muted italic mb-2">All Districts</p>}
+                  </div>
+
+                  {targetState && STATE_DISTRICTS[targetState] ? (
+                    <select 
+                      value=""
+                      onChange={(e) => {
+                        if (e.target.value) toggleDistrict(e.target.value);
+                      }}
+                      className="w-full bg-[#F5F5F5] dark:bg-[#1A1A1A] px-4 py-2.5 rounded-xl text-[14px] outline-none appearance-none"
+                    >
+                      <option className="bg-white text-black dark:bg-[#1A1A1A] dark:text-white" value="">Select to add a district...</option>
+                      {STATE_DISTRICTS[targetState].map(district => (
+                        <option className="bg-white text-black dark:bg-[#1A1A1A] dark:text-white" key={district} value={district}>{district}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input 
+                      type="text"
+                      value=""
+                      onChange={() => {}}
+                      placeholder="Select a state first to see districts"
+                      disabled
+                      className="w-full bg-[#F5F5F5] dark:bg-[#1A1A1A] px-4 py-2.5 rounded-xl text-[14px] outline-none opacity-50 cursor-not-allowed"
+                    />
+                  )}
+                </div>
               </div>
-              <p className="text-[#999] text-[11px] italic">
-                {selectedStates.length} states selected. Your ad will only show in these locations.
-              </p>
             </div>
 
             {/* Submit */}
