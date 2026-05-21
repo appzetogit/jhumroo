@@ -13,7 +13,10 @@ import {
   getAllSounds,
   getAllHashtags,
   getAllLiveUsers,
-  syncAllDurations
+  syncAllDurations,
+  updateReelTargeting,
+  getGlobalReelsTargeting,
+  updateGlobalReelsTargeting
 } from '../controllers/content.controller.js';
 import { protectAdmin, checkPermission } from '../../../middleware/adminAuth.js';
 
@@ -24,8 +27,11 @@ router.use(protectAdmin);
 
 // Reels management
 router.get('/reels', getAllReels);
+router.get('/reels/global-targeting', getGlobalReelsTargeting);
+router.put('/reels/global-targeting', checkPermission('manage_content'), updateGlobalReelsTargeting);
 router.get('/reels/:id', getReelById);
 router.delete('/reels/:id', checkPermission('delete_content'), deleteReel);
+router.put('/reels/:id/targeting', checkPermission('manage_content'), updateReelTargeting);
 router.post('/reels/sync-durations', syncAllDurations);
 
 // Comments management

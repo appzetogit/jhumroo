@@ -143,17 +143,28 @@ const AdsManagerPage = () => {
                     </div>
 
                     {/* Targeting summary */}
-                    {(ad.targetState || (ad.targetDistricts && ad.targetDistricts.length > 0)) && (
-                      <div className="flex items-center gap-1 mt-1.5">
-                        <span className="text-[10px] theme-text-muted">📍</span>
-                        <span className="text-[10px] theme-text-muted truncate">
-                          {ad.targetState || 'India'}
-                          {ad.targetDistricts && ad.targetDistricts.length > 0
-                            ? ` · ${ad.targetDistricts.slice(0, 2).join(', ')}${ad.targetDistricts.length > 2 ? ` +${ad.targetDistricts.length - 2}` : ''}`
-                            : ''}
-                        </span>
-                      </div>
-                    )}
+                    {(() => {
+                      const statesArray = Array.isArray(ad.targetState)
+                        ? ad.targetState
+                        : (ad.targetState ? (ad.targetState.startsWith('[') ? JSON.parse(ad.targetState) : [ad.targetState]) : []);
+                      const statesStr = statesArray.length > 0 ? statesArray.join(', ') : ad.targetCountry || 'India';
+                      const hasDistricts = ad.targetDistricts && ad.targetDistricts.length > 0;
+                      
+                      if (statesArray.length > 0 || hasDistricts) {
+                        return (
+                          <div className="flex items-center gap-1 mt-1.5">
+                            <span className="text-[10px] theme-text-muted">📍</span>
+                            <span className="text-[10px] theme-text-muted truncate max-w-[200px]" title={statesStr}>
+                              {statesStr}
+                              {hasDistricts
+                                ? ` · ${ad.targetDistricts.slice(0, 2).join(', ')}${ad.targetDistricts.length > 2 ? ` +${ad.targetDistricts.length - 2}` : ''}`
+                                : ''}
+                            </span>
+                          </div>
+                        );
+                      }
+                      return null;
+                    })()}
                   </div>
                 </div>
               ))}

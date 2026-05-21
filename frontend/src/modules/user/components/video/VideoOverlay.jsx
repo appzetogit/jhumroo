@@ -337,6 +337,11 @@ const VideoOverlay = ({ reelId, username, caption, musicName, isLiked, likes, co
          onClose={() => setIsCommentsOpen(false)} 
          commentCount={comments}
          reelId={reelId}
+         onCommentAdded={(newCount) => {
+           if (typeof onUpdate === 'function') {
+             onUpdate({ stats: { commentsCount: newCount } });
+           }
+         }}
       />
 
       {/* Share Sheet Modal */}

@@ -5,6 +5,7 @@ import Like from '../../../models/Like.model.js';
 import Follow from '../../../models/Follow.model.js';
 import Report from '../../../models/Report.model.js';
 import Admin from '../../../models/Admin.model.js';
+import Ad from '../../../models/Ad.model.js';
 import { asyncHandler } from '../../../middleware/errorHandler.js';
 
 /**
@@ -606,5 +607,347 @@ export const exportAnalytics = asyncHandler(async (req, res) => {
     type,
     count: data.length,
     data
+  });
+});
+
+/**
+ * @desc    Get reel geo-analytics — hype by country, state, district
+ * @route   GET /api/admin/analytics/reel-geo
+ * @access  Private/Admin
+ * @query   country, state, district, metric (views|likes|shares|comments), days
+ */
+export const getReelGeoAnalytics = asyncHandler(async (req, res) => {
+  const {
+    country = '',
+    state = '',
+    district = '',
+    metric = 'views',
+    days = 30
+  } = req.query;
+
+  const startDate = new Date();
+  startDate.setDate(startDate.getDate() - parseInt(days));
+
+  // Map metric param to stats field
+  const metricFieldMap = {
+    views: 'stats.viewsCount',
+    likes: 'stats.likesCount',
+    shares: 'stats.sharesCount',
+    comments: 'stats.commentsCount'
+  };
+  const metricField = metricFieldMap[metric] || 'stats.viewsCount';
+
+  // Build user filter for geo
+  const userMatchStage = { isActive: true };
+  if (country) userMatchStage.country = country;
+  if (state) userMatchStage.state = state;
+  if (district) userMatchStage.district = district;
+
+  // ----- TOP LEVEL: Group by country -----
+  const byCountry = await Reel.aggregate([
+    { $match: { createdAt: { $gte: startDate }, isActive: true } },
+    {
+      $lookup: {
+        from: 'users',
+        localField: 'user',
+        foreignField: '_id',
+        as: 'creator'
+      }
+    },
+    { $unwind: '$creator' },
+    { $match: { 'creator.isActive': true } },
+    {
+      $group: {
+        _id: '$creator.country',
+        totalReels: { $sum: 1 },
+        totalViews: { $sum: '$stats.viewsCount' },
+        totalLikes: { $sum: '$stats.likesCount' },
+        totalShares: { $sum: '$stats.sharesCount' },
+        totalComments: { $sum: '$stats.commentsCount' },
+        hypeScore: { $sum: `$${metricField}` }
+      }
+    },
+    { $sort: { hypeScore: -1 } },
+    { $limit: 20 }
+  ]);
+
+  // ----- STATE LEVEL -----
+  const stateMatchReel = { createdAt: { $gte: startDate }, isActive: true };
+  const stateMatchUser = { 'creator.isActive': true };
+  if (country) stateMatchUser['creator.country'] = country;
+
+  const byState = await Reel.aggregate([
+    { $match: stateMatchReel },
+    {
+      $lookup: {
+        from: 'users',
+        localField: 'user',
+        foreignField: '_id',
+        as: 'creator'
+      }
+    },
+    { $unwind: '$creator' },
+    { $match: stateMatchUser },
+    {
+      $group: {
+        _id: { state: '$creator.state', country: '$creator.country' },
+        totalReels: { $sum: 1 },
+        totalViews: { $sum: '$stats.viewsCount' },
+        totalLikes: { $sum: '$stats.likesCount' },
+        totalShares: { $sum: '$stats.sharesCount' },
+        totalComments: { $sum: '$stats.commentsCount' },
+        hypeScore: { $sum: `$${metricField}` }
+      }
+    },
+    { $match: { '_id.state': { $nin: [null, '', undefined] } } },
+    { $sort: { hypeScore: -1 } },
+    { $limit: 30 }
+  ]);
+
+  // ----- DISTRICT LEVEL -----
+  const districtMatchUser = { 'creator.isActive': true };
+  if (country) districtMatchUser['creator.country'] = country;
+  if (state) districtMatchUser['creator.state'] = state;
+
+  const byDistrict = await Reel.aggregate([
+    { $match: stateMatchReel },
+    {
+      $lookup: {
+        from: 'users',
+        localField: 'user',
+        foreignField: '_id',
+        as: 'creator'
+      }
+    },
+    { $unwind: '$creator' },
+    { $match: districtMatchUser },
+    {
+      $group: {
+        _id: {
+          district: '$creator.district',
+          state: '$creator.state',
+          country: '$creator.country'
+        },
+        totalReels: { $sum: 1 },
+        totalViews: { $sum: '$stats.viewsCount' },
+        totalLikes: { $sum: '$stats.likesCount' },
+        totalShares: { $sum: '$stats.sharesCount' },
+        totalComments: { $sum: '$stats.commentsCount' },
+        hypeScore: { $sum: `$${metricField}` }
+      }
+    },
+    { $match: { '_id.district': { $nin: [null, '', undefined] } } },
+    { $sort: { hypeScore: -1 } },
+    { $limit: 30 }
+  ]);
+
+  // Distinct values for filter dropdowns
+  const [distinctCountries, distinctStates, distinctDistricts] = await Promise.all([
+    User.distinct('country', { isActive: true, country: { $nin: [null, ''] } }),
+    User.distinct('state', {
+      isActive: true,
+      state: { $nin: [null, ''] },
+      ...(country ? { country } : {})
+    }),
+    User.distinct('district', {
+      isActive: true,
+      district: { $nin: [null, ''] },
+      ...(country ? { country } : {}),
+      ...(state ? { state } : {})
+    })
+  ]);
+
+  res.status(200).json({
+    success: true,
+    metric,
+    period: `Last ${days} days`,
+    filters: { country, state, district },
+    dropdowns: {
+      countries: distinctCountries.sort(),
+      states: distinctStates.sort(),
+      districts: distinctDistricts.sort()
+    },
+    data: {
+      byCountry: byCountry.map(d => ({
+        country: d._id || 'Unknown',
+        totalReels: d.totalReels,
+        totalViews: d.totalViews,
+        totalLikes: d.totalLikes,
+        totalShares: d.totalShares,
+        totalComments: d.totalComments,
+        hypeScore: d.hypeScore
+      })),
+      byState: byState
+        .filter(d => d._id.state && d._id.state.trim() !== '')
+        .map(d => ({
+        state: d._id.state,
+        country: d._id.country || '',
+        totalReels: d.totalReels,
+        totalViews: d.totalViews,
+        totalLikes: d.totalLikes,
+        totalShares: d.totalShares,
+        totalComments: d.totalComments,
+        hypeScore: d.hypeScore
+      })),
+      byDistrict: byDistrict
+        .filter(d => d._id.district && d._id.district.trim() !== '')
+        .map(d => ({
+        district: d._id.district,
+        state: d._id.state || '',
+        country: d._id.country || '',
+        totalReels: d.totalReels,
+        totalViews: d.totalViews,
+        totalLikes: d.totalLikes,
+        totalShares: d.totalShares,
+        totalComments: d.totalComments,
+        hypeScore: d.hypeScore
+      }))
+    }
+  });
+});
+
+/**
+ * @desc    Get ads performance analytics
+ * @route   GET /api/admin/analytics/ads
+ * @access  Private/Admin
+ * @query   type (admin|user|all), days, country, state
+ */
+export const getAdsAnalytics = asyncHandler(async (req, res) => {
+  const {
+    type = 'all',
+    days = 30,
+    country = '',
+    state = ''
+  } = req.query;
+
+  const startDate = new Date();
+  startDate.setDate(startDate.getDate() - parseInt(days));
+
+  // Build match
+  const matchStage = { createdAt: { $gte: startDate } };
+  if (type === 'admin') matchStage.onModel = 'Admin';
+  else if (type === 'user') matchStage.onModel = 'User';
+  if (country) matchStage.targetCountry = country;
+  if (state) matchStage.targetState = state;
+
+  // Aggregate overview
+  const [overview] = await Ad.aggregate([
+    { $match: matchStage },
+    {
+      $group: {
+        _id: null,
+        totalAds: { $sum: 1 },
+        activeAds: { $sum: { $cond: ['$isActive', 1, 0] } },
+        totalViews: { $sum: '$stats.viewsCount' },
+        totalClicks: { $sum: '$stats.clicksCount' },
+        totalLikes: { $sum: '$stats.likesCount' },
+        totalComments: { $sum: '$stats.commentsCount' }
+      }
+    }
+  ]);
+
+  // Per-type split
+  const typeSplit = await Ad.aggregate([
+    { $match: { createdAt: { $gte: startDate } } },
+    {
+      $group: {
+        _id: '$onModel',
+        count: { $sum: 1 },
+        totalViews: { $sum: '$stats.viewsCount' },
+        totalClicks: { $sum: '$stats.clicksCount' }
+      }
+    }
+  ]);
+
+  // Top ads by views
+  const topAdsByViews = await Ad.find(matchStage)
+    .populate('user', 'username fullName profilePicture')
+    .sort({ 'stats.viewsCount': -1 })
+    .limit(10)
+    .lean();
+
+  // Geo distribution of ads (which states are being targeted most)
+  const geoDistribution = await Ad.aggregate([
+    { $match: { createdAt: { $gte: startDate } } },
+    { $unwind: { path: '$targetState', preserveNullAndEmpty: false } },
+    {
+      $group: {
+        _id: '$targetState',
+        adsCount: { $sum: 1 },
+        totalViews: { $sum: '$stats.viewsCount' },
+        totalClicks: { $sum: '$stats.clicksCount' }
+      }
+    },
+    { $match: { _id: { $ne: null, $ne: '' } } },
+    { $sort: { adsCount: -1 } },
+    { $limit: 20 }
+  ]);
+
+  // Daily trend
+  const dailyTrend = await Ad.aggregate([
+    { $match: matchStage },
+    {
+      $group: {
+        _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } },
+        newAds: { $sum: 1 },
+        totalViews: { $sum: '$stats.viewsCount' },
+        totalClicks: { $sum: '$stats.clicksCount' }
+      }
+    },
+    { $sort: { _id: 1 } }
+  ]);
+
+  const totalViews = overview?.totalViews || 0;
+  const totalClicks = overview?.totalClicks || 0;
+  const avgCTR = totalViews > 0 ? ((totalClicks / totalViews) * 100).toFixed(2) : '0.00';
+
+  res.status(200).json({
+    success: true,
+    period: `Last ${days} days`,
+    filters: { type, country, state },
+    overview: {
+      totalAds: overview?.totalAds || 0,
+      activeAds: overview?.activeAds || 0,
+      totalViews,
+      totalClicks,
+      totalLikes: overview?.totalLikes || 0,
+      totalComments: overview?.totalComments || 0,
+      avgCTRPercent: parseFloat(avgCTR)
+    },
+    typeSplit: typeSplit.map(t => ({
+      type: t._id,
+      count: t.count,
+      totalViews: t.totalViews,
+      totalClicks: t.totalClicks,
+      ctr: t.totalViews > 0 ? ((t.totalClicks / t.totalViews) * 100).toFixed(2) : '0.00'
+    })),
+    topAdsByViews: topAdsByViews.map(ad => ({
+      id: ad._id,
+      caption: ad.caption?.slice(0, 60) || '',
+      mediaType: ad.media?.type,
+      onModel: ad.onModel,
+      adType: ad.adType,
+      isActive: ad.isActive,
+      targetCountry: ad.targetCountry,
+      targetState: ad.targetState,
+      views: ad.stats?.viewsCount || 0,
+      clicks: ad.stats?.clicksCount || 0,
+      likes: ad.stats?.likesCount || 0,
+      comments: ad.stats?.commentsCount || 0,
+      ctr: (ad.stats?.viewsCount || 0) > 0
+        ? (((ad.stats?.clicksCount || 0) / ad.stats.viewsCount) * 100).toFixed(2)
+        : '0.00',
+      user: ad.user
+        ? { username: ad.user.username, fullName: ad.user.fullName, avatar: ad.user.profilePicture?.url }
+        : null,
+      createdAt: ad.createdAt
+    })),
+    geoDistribution: geoDistribution.map(g => ({
+      state: g._id,
+      adsCount: g.adsCount,
+      totalViews: g.totalViews,
+      totalClicks: g.totalClicks
+    })),
+    dailyTrend
   });
 });

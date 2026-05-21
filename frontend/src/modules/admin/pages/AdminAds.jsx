@@ -182,113 +182,123 @@ const StatCard = ({ label, value, icon, accent }) => (
   </div>
 );
 
-const AdRow = ({ ad, onToggle, onDelete, onEdit, onViewComments }) => (
-  <div className="bg-white dark:bg-[#111] p-4 rounded-[24px] border border-[#EEE] dark:border-[#222] flex flex-col md:flex-row items-center gap-6 shadow-sm hover:border-[#FE2C55]/30 transition-all group">
-    {/* Media Preview */}
-    <div className="w-full md:w-[120px] h-[160px] md:h-[80px] rounded-2xl overflow-hidden bg-black flex-shrink-0 relative">
-      {ad.media?.type === 'video' ? (
-        <video src={ad.media.url} className="w-full h-full object-cover" muted />
-      ) : (
-        <img src={ad.media?.url} className="w-full h-full object-cover" alt="ad" />
-      )}
-      <div className="absolute top-2 left-2 bg-black/50 backdrop-blur-sm text-white text-[9px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">
-        {ad.media?.type}
-      </div>
-    </div>
+const AdRow = ({ ad, onToggle, onDelete, onEdit, onViewComments }) => {
+  const statesArray = Array.isArray(ad.targetState) 
+    ? ad.targetState 
+    : (ad.targetState ? (ad.targetState.startsWith('[') ? JSON.parse(ad.targetState) : [ad.targetState]) : []);
 
-    {/* Info */}
-    <div className="flex-1 min-w-0">
-      <div className="flex items-center gap-3 mb-1">
-        <h3 className="text-[16px] font-bold text-[#1A1A1A] dark:text-white truncate">{ad.caption || 'No caption'}</h3>
-        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
-          ad.isActive ? 'bg-[#10b981]/10 text-[#10b981]' : 'bg-[#EF4444]/10 text-[#EF4444]'
-        }`}>
-          {ad.isActive ? 'Active' : 'Inactive'}
-        </span>
-        <span className="bg-[#3b82f6]/10 text-[#3b82f6] px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider">
-          {ad.adType}
-        </span>
-      </div>
-      
-      <div className="flex flex-wrap items-center gap-4 text-[#666] dark:text-[#999] text-[12px]">
-        <div className="flex items-center gap-1.5">
-          <BiCalendar />
-          <span>{new Date(ad.createdAt).toLocaleDateString()}</span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <BiTargetLock />
-          <span>{ad.targetStates?.length || 0} States</span>
-        </div>
-        {ad.link && (
-          <div className="flex items-center gap-1.5 truncate max-w-[200px]">
-            <BiLink />
-            <span className="truncate">{ad.link}</span>
-          </div>
+  return (
+    <div className="bg-white dark:bg-[#111] p-4 rounded-[24px] border border-[#EEE] dark:border-[#222] flex flex-col md:flex-row items-center gap-6 shadow-sm hover:border-[#FE2C55]/30 transition-all group">
+      {/* Media Preview */}
+      <div className="w-full md:w-[120px] h-[160px] md:h-[80px] rounded-2xl overflow-hidden bg-black flex-shrink-0 relative">
+        {ad.media?.type === 'video' ? (
+          <video src={ad.media.url} className="w-full h-full object-cover" muted />
+        ) : (
+          <img src={ad.media?.url} className="w-full h-full object-cover" alt="ad" />
         )}
+        <div className="absolute top-2 left-2 bg-black/50 backdrop-blur-sm text-white text-[9px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">
+          {ad.media?.type}
+        </div>
       </div>
-    </div>
 
-    {/* Stats */}
-    <div className="flex items-center gap-6 px-6 border-x border-[#EEE] dark:border-[#222]">
-      <div className="text-center">
-        <p className="text-[#1A1A1A] dark:text-white font-bold text-[16px]">{ad.stats?.viewsCount || 0}</p>
-        <p className="text-[#999] text-[10px] uppercase font-bold tracking-wider">Views</p>
+      {/* Info */}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-3 mb-1">
+          <h3 className="text-[16px] font-bold text-[#1A1A1A] dark:text-white truncate">{ad.caption || 'No caption'}</h3>
+          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+            ad.isActive ? 'bg-[#10b981]/10 text-[#10b981]' : 'bg-[#EF4444]/10 text-[#EF4444]'
+          }`}>
+            {ad.isActive ? 'Active' : 'Inactive'}
+          </span>
+          <span className="bg-[#3b82f6]/10 text-[#3b82f6] px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider">
+            {ad.adType}
+          </span>
+        </div>
+        
+        <div className="flex flex-wrap items-center gap-4 text-[#666] dark:text-[#999] text-[12px]">
+          <div className="flex items-center gap-1.5">
+            <BiCalendar />
+            <span>{new Date(ad.createdAt).toLocaleDateString()}</span>
+          </div>
+          <div className="flex items-center gap-1.5" title={statesArray.join(', ') || 'All States'}>
+            <BiTargetLock />
+            <span>
+              {statesArray.length > 0 
+                ? `${statesArray.length} ${statesArray.length === 1 ? 'State' : 'States'}` 
+                : `All States (${ad.targetCountry || 'All'})`}
+            </span>
+          </div>
+          {ad.link && (
+            <div className="flex items-center gap-1.5 truncate max-w-[200px]">
+              <BiLink />
+              <span className="truncate">{ad.link}</span>
+            </div>
+          )}
+        </div>
       </div>
-      <div className="text-center">
-        <p className="text-[#1A1A1A] dark:text-white font-bold text-[16px]">{ad.stats?.clicksCount || 0}</p>
-        <p className="text-[#999] text-[10px] uppercase font-bold tracking-wider">Clicks</p>
-      </div>
-      <div className="text-center">
-        <p className="text-[#FE2C55] font-bold text-[16px] flex items-center justify-center gap-1">
-          <BiHeart size={14} />
-          {ad.stats?.likesCount || 0}
-        </p>
-        <p className="text-[#999] text-[10px] uppercase font-bold tracking-wider">Likes</p>
-      </div>
-      <div className="text-center cursor-pointer hover:bg-gray-50 dark:hover:bg-white/5 p-1 rounded-lg transition-colors" onClick={onViewComments}>
-        <p className="text-[#3b82f6] font-bold text-[16px] flex items-center justify-center gap-1">
-          <BiCommentDetail size={14} />
-          {ad.stats?.commentsCount || 0}
-        </p>
-        <p className="text-[#999] text-[10px] uppercase font-bold tracking-wider">Comments</p>
-      </div>
-      <div className="text-center">
-        <p className="text-[#FE2C55] font-bold text-[16px]">
-          {ad.stats?.viewsCount > 0 ? ((ad.stats.clicksCount / ad.stats.viewsCount) * 100).toFixed(1) : 0}%
-        </p>
-        <p className="text-[#999] text-[10px] uppercase font-bold tracking-wider">CTR</p>
-      </div>
-    </div>
 
-    {/* Actions */}
-    <div className="flex items-center gap-2">
-      <button 
-        onClick={onEdit}
-        className="p-2.5 rounded-xl bg-blue-500/10 text-blue-500 hover:bg-blue-500/20 transition-all"
-        title="Edit Ad"
-      >
-        <BiEditAlt size={20} />
-      </button>
-      <button 
-        onClick={onToggle}
-        className={`p-2.5 rounded-xl transition-all ${
-          ad.isActive 
-            ? 'bg-[#10b981]/10 text-[#10b981] hover:bg-[#10b981]/20' 
-            : 'bg-[#666]/10 text-[#666] hover:bg-[#666]/20'
-        }`}
-        title={ad.isActive ? 'Deactivate Ad' : 'Activate Ad'}
-      >
-        {ad.isActive ? <BiCheckCircle size={20} /> : <BiXCircle size={20} />}
-      </button>
-      <button 
-        onClick={onDelete}
-        className="p-2.5 rounded-xl bg-[#EF4444]/10 text-[#EF4444] hover:bg-[#EF4444]/20 transition-all"
-        title="Delete Ad"
-      >
-        <BiTrash size={20} />
-      </button>
+      {/* Stats */}
+      <div className="flex items-center gap-6 px-6 border-x border-[#EEE] dark:border-[#222]">
+        <div className="text-center">
+          <p className="text-[#1A1A1A] dark:text-white font-bold text-[16px]">{ad.stats?.viewsCount || 0}</p>
+          <p className="text-[#999] text-[10px] uppercase font-bold tracking-wider">Views</p>
+        </div>
+        <div className="text-center">
+          <p className="text-[#1A1A1A] dark:text-white font-bold text-[16px]">{ad.stats?.clicksCount || 0}</p>
+          <p className="text-[#999] text-[10px] uppercase font-bold tracking-wider">Clicks</p>
+        </div>
+        <div className="text-center">
+          <p className="text-[#FE2C55] font-bold text-[16px] flex items-center justify-center gap-1">
+            <BiHeart size={14} />
+            {ad.stats?.likesCount || 0}
+          </p>
+          <p className="text-[#999] text-[10px] uppercase font-bold tracking-wider">Likes</p>
+        </div>
+        <div className="text-center cursor-pointer hover:bg-gray-50 dark:hover:bg-white/5 p-1 rounded-lg transition-colors" onClick={onViewComments}>
+          <p className="text-[#3b82f6] font-bold text-[16px] flex items-center justify-center gap-1">
+            <BiCommentDetail size={14} />
+            {ad.stats?.commentsCount || 0}
+          </p>
+          <p className="text-[#999] text-[10px] uppercase font-bold tracking-wider">Comments</p>
+        </div>
+        <div className="text-center">
+          <p className="text-[#FE2C55] font-bold text-[16px]">
+            {ad.stats?.viewsCount > 0 ? ((ad.stats.clicksCount / ad.stats.viewsCount) * 100).toFixed(1) : 0}%
+          </p>
+          <p className="text-[#999] text-[10px] uppercase font-bold tracking-wider">CTR</p>
+        </div>
+      </div>
+
+      {/* Actions */}
+      <div className="flex items-center gap-2">
+        <button 
+          onClick={onEdit}
+          className="p-2.5 rounded-xl bg-blue-500/10 text-blue-500 hover:bg-blue-500/20 transition-all"
+          title="Edit Ad"
+        >
+          <BiEditAlt size={20} />
+        </button>
+        <button 
+          onClick={onToggle}
+          className={`p-2.5 rounded-xl transition-all ${
+            ad.isActive 
+              ? 'bg-[#10b981]/10 text-[#10b981] hover:bg-[#10b981]/20' 
+              : 'bg-[#666]/10 text-[#666] hover:bg-[#666]/20'
+          }`}
+          title={ad.isActive ? 'Deactivate Ad' : 'Activate Ad'}
+        >
+          {ad.isActive ? <BiCheckCircle size={20} /> : <BiXCircle size={20} />}
+        </button>
+        <button 
+          onClick={onDelete}
+          className="p-2.5 rounded-xl bg-[#EF4444]/10 text-[#EF4444] hover:bg-[#EF4444]/20 transition-all"
+          title="Delete Ad"
+        >
+          <BiTrash size={20} />
+        </button>
+      </div>
     </div>
-  </div>
-);
+  );
+};
 
 export default AdminAds;

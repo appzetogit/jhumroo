@@ -3,6 +3,7 @@ import Comment from '../../../models/Comment.model.js';
 import Report from '../../../models/Report.model.js';
 import User from '../../../models/User.model.js';
 import Like from '../../../models/Like.model.js';
+import SystemSetting from '../../../models/SystemSetting.model.js';
 import { asyncHandler } from '../../../middleware/errorHandler.js';
 import { deleteFile } from '../../../config/cloudinary.js';
 
@@ -619,5 +620,88 @@ export const getAllLiveUsers = asyncHandler(async (req, res) => {
     success: true,
     count: users.length,
     users
+  });
+});
+
+/**
+ * @desc    Update reel geo-targeting
+ * @route   PUT /api/admin/content/reels/:id/targeting
+ * @access  Private/Admin (require permission: manage_content)
+ */
+export const updateReelTargeting = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { targetLocations } = req.body;
+
+  const reel = await Reel.findById(id);
+
+  if (!reel) {
+    return res.status(404).json({
+      success: false,
+      message: 'Reel not found'
+    });
+  }
+
+  reel.targetLocations = targetLocations || [];
+  await reel.save();
+
+  // Log activity
+  req.admin.addActivity(
+    'reel_targeting_updated',
+    `Updated geo-targeting for reel ID: ${id}`,
+    req.ip
+  );
+  await req.admin.save();
+
+  res.status(200).json({
+    success: true,
+    message: 'Reel geo-targeting updated successfully',
+    reel
+  });
+});
+
+/**
+ * @desc    Get global reel geo-targeting settings
+ * @route   GET /api/admin/content/reels/global-targeting
+ * @access  Private/Admin (require permission: manage_content)
+ */
+export const getGlobalReelsTargeting = asyncHandler(async (req, res) => {
+  const setting = await SystemSetting.findOne({ key: 'global_reels_targeting' });
+  res.status(200).json({
+    success: true,
+    targetLocations: setting ? setting.value : []
+  });
+});
+
+/**
+ * @desc    Update global reel geo-targeting settings
+ * @route   PUT /api/admin/content/reels/global-targeting
+ * @access  Private/Admin (require permission: manage_content)
+ */
+export const updateGlobalReelsTargeting = asyncHandler(async (req, res) => {
+  const { targetLocations } = req.body;
+
+  let setting = await SystemSetting.findOne({ key: 'global_reels_targeting' });
+  if (!setting) {
+    setting = new SystemSetting({
+      key: 'global_reels_targeting',
+      value: targetLocations || []
+    });
+  } else {
+    setting.value = targetLocations || [];
+  }
+  await setting.save();
+
+  // Log activity
+  req.admin.addActivity(
+    'global_reel_targeting_updated',
+    `Updated global geo-targeting rules`,
+    req.ip
+  );
+  await req.admin.save();
+
+  res.status(200).json({
+    success: true,
+    message: 'Global reel geo-targeting updated successfully',
+    targetLocations: setting.value
   });
 });

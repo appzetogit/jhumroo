@@ -90,7 +90,10 @@ const AdAnalyticsPage = () => {
   const engagementLabel = engagementRate >= 5 ? 'High' : engagementRate >= 2 ? 'Medium' : 'Low';
   const engagementColor = engagementRate >= 5 ? 'text-green-500' : engagementRate >= 2 ? 'text-yellow-500' : 'text-red-400';
 
-  const hasState = ad.targetState && ad.targetState.trim() !== '';
+  const statesArray = Array.isArray(ad.targetState) 
+    ? ad.targetState 
+    : (ad.targetState ? (ad.targetState.startsWith('[') ? JSON.parse(ad.targetState) : [ad.targetState]) : []);
+  const hasState = statesArray.length > 0;
   const hasDistricts = ad.targetDistricts && ad.targetDistricts.length > 0;
 
   return (
@@ -243,11 +246,15 @@ const AdAnalyticsPage = () => {
 
             {/* State */}
             <div className="flex items-center justify-between border-t theme-panel-divider pt-3">
-              <span className="theme-text-muted text-[12px]">State</span>
+              <span className="theme-text-muted text-[12px]">States</span>
               {hasState ? (
-                <span className="bg-[#FE2C55]/10 text-[#FE2C55] px-3 py-1 rounded-full text-[12px] font-semibold">
-                  {ad.targetState}
-                </span>
+                <div className="flex flex-wrap gap-1.5 justify-end max-w-[70%]">
+                  {statesArray.map(state => (
+                    <span key={state} className="bg-[#FE2C55]/10 text-[#FE2C55] px-3 py-1 rounded-full text-[11px] font-semibold">
+                      {state}
+                    </span>
+                  ))}
+                </div>
               ) : (
                 <span className="theme-text-muted text-[12px] italic">All States</span>
               )}

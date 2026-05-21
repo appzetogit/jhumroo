@@ -6,7 +6,7 @@ import { useAuth } from '../../../../context/AuthContext';
 import reelService from '../../../../services/reelService';
 import userService from '../../../../services/userService';
 
-const CommentsSheet = ({ isOpen, onClose, commentCount = 0, reelId }) => {
+const CommentsSheet = ({ isOpen, onClose, commentCount = 0, reelId, onCommentAdded }) => {
   const { isDarkMode } = useTheme();
   const { config } = useAppContent();
   const { user: currentUser } = useAuth();
@@ -62,6 +62,9 @@ const CommentsSheet = ({ isOpen, onClose, commentCount = 0, reelId }) => {
       if (response.success) {
         setCommentsList(response.comments);
         setCommentsDisabled(!!response.commentsDisabled);
+        if (typeof onCommentAdded === 'function') {
+          onCommentAdded(response.comments.length);
+        }
       }
     } catch (err) {
       console.error("Error fetching comments:", err);
@@ -89,6 +92,9 @@ const CommentsSheet = ({ isOpen, onClose, commentCount = 0, reelId }) => {
           fetchComments();
         } else {
           setCommentsList(prev => [commentData, ...prev]);
+          if (typeof onCommentAdded === 'function') {
+            onCommentAdded(commentsList.length + 1);
+          }
         }
         
         setNewComment('');

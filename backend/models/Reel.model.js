@@ -86,6 +86,16 @@ const reelSchema = new mongoose.Schema(
         }
       }
     },
+    // Geotargeting (multiple countries, and within those countries, specific states)
+    targetLocations: [{
+      country: {
+        type: String,
+        required: true
+      },
+      states: [{
+        type: String
+      }]
+    }],
     // Privacy settings
     isPrivate: {
       type: Boolean,

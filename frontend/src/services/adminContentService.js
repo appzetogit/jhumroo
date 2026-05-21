@@ -78,6 +78,27 @@ const adminContentService = {
     } catch (error) {
       throw error;
     }
+  },
+  updateReelTargeting: async (id, targetLocations) => {
+    try {
+      return await api.put(`/admin/content/reels/${id}/targeting`, { targetLocations });
+    } catch (error) {
+      throw error;
+    }
+  },
+  getGlobalReelsTargeting: async () => {
+    try {
+      return await api.get('/admin/content/reels/global-targeting');
+    } catch (error) {
+      throw error;
+    }
+  },
+  updateGlobalReelsTargeting: async (targetLocations) => {
+    try {
+      return await api.put('/admin/content/reels/global-targeting', { targetLocations });
+    } catch (error) {
+      throw error;
+    }
   }
 };
 

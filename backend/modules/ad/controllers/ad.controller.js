@@ -26,6 +26,7 @@ export const createAd = asyncHandler(async (req, res) => {
 
   const { caption, link, targetCountry, targetState, targetDistricts, adType, whatsappNumber, welcomeMessage, musicName, isPlatformAd } = req.body;
   const parsedDistricts = targetDistricts ? (typeof targetDistricts === 'string' ? JSON.parse(targetDistricts) : targetDistricts) : [];
+  const parsedStates = targetState ? (typeof targetState === 'string' ? (targetState.startsWith('[') ? JSON.parse(targetState) : [targetState].filter(Boolean)) : targetState) : [];
 
   // Upload Media to S3
   const s3Result = await uploadToS3(mediaFile.path, 'ads', mediaFile.mimetype);
@@ -46,9 +47,10 @@ export const createAd = asyncHandler(async (req, res) => {
   let onModel = 'User';
   let adUserId = req.user ? req.user._id : null;
 
-  if (req.admin || isPlatformAd === 'true') {
+  // Only assign Admin model if the requester is actually authenticated as an admin
+  if (req.admin) {
     onModel = 'Admin';
-    if (req.admin) adUserId = req.admin._id;
+    adUserId = req.admin._id;
   }
 
   const ad = await Ad.create({
@@ -65,7 +67,7 @@ export const createAd = asyncHandler(async (req, res) => {
     whatsappNumber: whatsappNumber || '',
     welcomeMessage: welcomeMessage || '',
     targetCountry: targetCountry || 'India',
-    targetState: targetState || '',
+    targetState: parsedStates,
     targetDistricts: parsedDistricts,
     music: musicResult ? {
       name: musicData.name,
@@ -102,7 +104,9 @@ export const getMyAds = asyncHandler(async (req, res) => {
     ]);
     const adObj = ad.toObject();
     adObj.stats = { ...adObj.stats, likesCount: actualLikes, commentsCount: actualComments };
-    if (ad.stats.likesCount !== actualLikes || ad.stats.commentsCount !== actualComments) {
+    const likesCount = ad.stats?.likesCount ?? 0;
+    const commentsCount = ad.stats?.commentsCount ?? 0;
+    if (likesCount !== actualLikes || commentsCount !== actualComments) {
       Ad.findByIdAndUpdate(ad._id, {
         $set: { 'stats.likesCount': actualLikes, 'stats.commentsCount': actualComments }
       }).catch(() => {});
@@ -131,7 +135,7 @@ export const toggleAdStatus = asyncHandler(async (req, res) => {
     });
   }
 
-  if (ad.user.toString() !== req.user._id.toString()) {
+  if (!req.admin && ad.user.toString() !== req.user._id.toString()) {
     return res.status(403).json({
       success: false,
       message: 'Not authorized'
@@ -174,14 +178,18 @@ export const getAdAnalytics = asyncHandler(async (req, res) => {
     Comment.countDocuments({ ad: ad._id, isDeleted: false, parentComment: null })
   ]);
 
+  const likesCount = ad.stats?.likesCount ?? 0;
+  const commentsCount = ad.stats?.commentsCount ?? 0;
+
   // Update if out of sync
-  if (ad.stats.likesCount !== actualLikes || ad.stats.commentsCount !== actualComments) {
+  if (likesCount !== actualLikes || commentsCount !== actualComments) {
     await Ad.findByIdAndUpdate(ad._id, {
       $set: {
         'stats.likesCount': actualLikes,
         'stats.commentsCount': actualComments
       }
     });
+    if (!ad.stats) ad.stats = {};
     ad.stats.likesCount = actualLikes;
     ad.stats.commentsCount = actualComments;
   }
@@ -199,7 +207,7 @@ export const deleteAd = asyncHandler(async (req, res) => {
     });
   }
 
-  if (ad.user.toString() !== req.user._id.toString()) {
+  if (!req.admin && ad.user.toString() !== req.user._id.toString()) {
     return res.status(403).json({
       success: false,
       message: 'Not authorized'
@@ -262,8 +270,10 @@ export const getUserAds = asyncHandler(async (req, res) => {
       likesCount: actualLikes,
       commentsCount: actualComments
     };
+    const likesCount = ad.stats?.likesCount ?? 0;
+    const commentsCount = ad.stats?.commentsCount ?? 0;
     // Update DB if stale
-    if (ad.stats.likesCount !== actualLikes || ad.stats.commentsCount !== actualComments) {
+    if (likesCount !== actualLikes || commentsCount !== actualComments) {
       Ad.findByIdAndUpdate(ad._id, {
         $set: { 'stats.likesCount': actualLikes, 'stats.commentsCount': actualComments }
       }).catch(() => {});
@@ -295,7 +305,7 @@ export const getAdsForFeed = asyncHandler(async (req, res) => {
   // - Ad must not restrict district, OR restrict to user's district
   query.$and = [
     { $or: [{ targetCountry: { $exists: false } }, { targetCountry: '' }, { targetCountry: userCountry }] },
-    { $or: [{ targetState: { $exists: false } }, { targetState: '' }, { targetState: userState }] },
+    { $or: [{ targetState: { $exists: false } }, { targetState: '' }, { targetState: { $size: 0 } }, { targetState: userState }] },
     { $or: [{ targetDistricts: { $size: 0 } }, { targetDistricts: { $exists: false } }, { targetDistricts: req.user.district }] }
   ];
 
@@ -343,6 +353,13 @@ export const updateAd = asyncHandler(async (req, res) => {
     });
   }
 
+  if (!req.admin && ad.user.toString() !== req.user._id.toString()) {
+    return res.status(403).json({
+      success: false,
+      message: 'Not authorized to edit this advertisement'
+    });
+  }
+
   const { caption, link, targetCountry, targetState, targetDistricts, adType, whatsappNumber, welcomeMessage, musicName, isActive } = req.body;
   const mediaFile = req.files?.['media']?.[0];
   const musicFile = req.files?.['musicFile']?.[0];
@@ -356,7 +373,11 @@ export const updateAd = asyncHandler(async (req, res) => {
   if (isActive !== undefined) ad.isActive = isActive === 'true' || isActive === true;
 
   if (targetCountry !== undefined) ad.targetCountry = targetCountry;
-  if (targetState !== undefined) ad.targetState = targetState;
+  if (targetState !== undefined) {
+    ad.targetState = typeof targetState === 'string'
+      ? (targetState.startsWith('[') ? JSON.parse(targetState) : [targetState].filter(Boolean))
+      : targetState;
+  }
   if (targetDistricts !== undefined) {
     ad.targetDistricts = typeof targetDistricts === 'string' ? JSON.parse(targetDistricts) : targetDistricts;
   }

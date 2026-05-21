@@ -9,7 +9,9 @@ import {
   getReportsAnalytics,
   getAdminActivity,
   getPlatformHealth,
-  exportAnalytics
+  exportAnalytics,
+  getReelGeoAnalytics,
+  getAdsAnalytics
 } from '../controllers/analytics.controller.js';
 import { protectAdmin, checkPermission, checkRole } from '../../../middleware/adminAuth.js';
 
@@ -30,6 +32,12 @@ router.get('/top-users', getTopUsers);
 router.get('/content', getContentAnalytics);
 router.get('/watch-time', getWatchTimeAnalytics);
 router.get('/top-reels', getTopReels);
+
+// Geo analytics for reels
+router.get('/reel-geo', getReelGeoAnalytics);
+
+// Ads analytics
+router.get('/ads', getAdsAnalytics);
 
 // Reports analytics
 router.get('/reports', checkPermission('manage_reports'), getReportsAnalytics);

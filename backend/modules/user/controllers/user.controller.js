@@ -8,6 +8,7 @@ import { asyncHandler } from '../../../middleware/errorHandler.js';
 import { uploadImage, deleteFile } from '../../../config/cloudinary.js';
 import { getFileUrl } from '../../../utils/s3.js';
 import fs from 'fs';
+import { isUserAllowedToViewReels } from '../../../utils/geoHelper.js';
 
 /**
  * @desc    Get user profile by username
@@ -203,6 +204,21 @@ export const uploadProfilePicture = asyncHandler(async (req, res) => {
  * @access  Public
  */
 export const getUserReels = asyncHandler(async (req, res) => {
+  // Global geo-targeting check
+  const isAllowed = await isUserAllowedToViewReels(req);
+  if (!isAllowed) {
+    return res.status(200).json({
+      success: true,
+      reels: [],
+      pagination: {
+        total: 0,
+        pages: 0,
+        page: 1,
+        limit
+      }
+    });
+  }
+
   const { username } = req.params;
   const page = parseInt(req.query.page) || 1;
   const limit = parseInt(req.query.limit) || 20;
@@ -237,13 +253,15 @@ export const getUserReels = asyncHandler(async (req, res) => {
     }
   }
 
-  const reels = await Reel.find({ user: user._id, isActive: true })
+  const query = { user: user._id, isActive: true };
+
+  const reels = await Reel.find(query)
     .sort({ createdAt: -1 })
     .skip(skip)
     .limit(limit)
     .populate('user', 'username fullName profilePicture isVerified downloadPrivacy');
 
-  const total = await Reel.countDocuments({ user: user._id, isActive: true });
+  const total = await Reel.countDocuments(query);
 
   res.status(200).json({
     success: true,

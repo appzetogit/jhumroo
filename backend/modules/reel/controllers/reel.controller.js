@@ -14,6 +14,7 @@ import { processReelWithAudio } from '../../../utils/videoProcessor.js';
 import { deleteFile } from '../../../config/cloudinary.js';
 import RecommendationEngine from '../../../utils/recommendationEngine.js';
 import WatchAnalytics from '../../../models/WatchAnalytics.model.js';
+import { isUserAllowedToViewReels } from '../../../utils/geoHelper.js';
 import fs from 'fs';
 import axios from 'axios';
 
@@ -267,6 +268,16 @@ export const createReel = asyncHandler(async (req, res) => {
  */
 
 export const getFeedReels = asyncHandler(async (req, res) => {
+  // Global geo-targeting check
+  const isAllowed = await isUserAllowedToViewReels(req);
+  if (!isAllowed) {
+    return res.status(200).json({
+      success: true,
+      reels: [],
+      pagination: { pages: 0, page: 1, hasMore: false }
+    });
+  }
+
   const limit = Math.min(parseInt(req.query.limit) || 10, 20);
   const cursor = req.query.cursor; // Format: base64(score_id)
 
@@ -297,11 +308,15 @@ export const getFeedReels = asyncHandler(async (req, res) => {
     const followers = await Follow.find({ following: req.user._id, status: 'accepted' }).select('follower');
     const followerIds = followers.map(f => f.follower);
 
-    baseQuery.$or = [
-      { audience: 'everyone' },
-      { user: req.user._id },
-      { user: { $in: followingIds }, audience: 'followers' },
-      { user: { $in: followerIds }, audience: 'following' }
+    baseQuery.$and = [
+      {
+        $or: [
+          { audience: 'everyone' },
+          { user: req.user._id },
+          { user: { $in: followingIds }, audience: 'followers' },
+          { user: { $in: followerIds }, audience: 'following' }
+        ]
+      }
     ];
   }
 
@@ -434,6 +449,16 @@ export const getFeedReels = asyncHandler(async (req, res) => {
  * @access  Private
  */
 export const getFollowingReels = asyncHandler(async (req, res) => {
+  // Global geo-targeting check
+  const isAllowed = await isUserAllowedToViewReels(req);
+  if (!isAllowed) {
+    return res.status(200).json({
+      success: true,
+      reels: [],
+      pagination: { pages: 0, page: 1, hasMore: false }
+    });
+  }
+
   const limit = Math.min(parseInt(req.query.limit) || 10, 20);
   const cursor = req.query.cursor; // last_id
 
@@ -537,13 +562,27 @@ export const shareReel = asyncHandler(async (req, res) => {
  * @access  Public
  */
 export const getTrendingReels = asyncHandler(async (req, res) => {
+  // Global geo-targeting check
+  const isAllowed = await isUserAllowedToViewReels(req);
+  if (!isAllowed) {
+    return res.status(200).json({
+      success: true,
+      reels: [],
+      pagination: { pages: 0, page: 1, hasMore: false }
+    });
+  }
+
   const page = parseInt(req.query.page) || 1;
   const limit = parseInt(req.query.limit) || 10;
   const skip = (page - 1) * limit;
 
   // Optimize: Retrieve a candidate pool of the 300 most recent active public reels
   // This avoids a full collection scan for dynamic engagement calculations.
-  const candidateReels = await Reel.find({ isActive: true, status: 'completed', audience: 'everyone' })
+  const candidateReels = await Reel.find({ 
+    isActive: true, 
+    status: 'completed', 
+    audience: 'everyone'
+  })
     .sort({ createdAt: -1 })
     .limit(300)
     .select('_id')
@@ -1031,12 +1070,24 @@ export const addView = asyncHandler(async (req, res) => {
  * @access  Public
  */
 export const searchReels = asyncHandler(async (req, res) => {
+  // Global geo-targeting check
+  const isAllowed = await isUserAllowedToViewReels(req);
+  if (!isAllowed) {
+    return res.status(200).json({
+      success: true,
+      reels: [],
+      pagination: { total: 0, pages: 0, page: 1, limit }
+    });
+  }
+
   const { q, hashtag } = req.query;
   const page = parseInt(req.query.page) || 1;
   const limit = parseInt(req.query.limit) || 20;
   const skip = (page - 1) * limit;
 
-  let query = { isActive: true };
+  let query = { 
+    isActive: true
+  };
 
   if (hashtag) {
     query.hashtags = hashtag.toLowerCase();

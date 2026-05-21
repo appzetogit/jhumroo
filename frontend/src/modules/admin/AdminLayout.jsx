@@ -14,7 +14,8 @@ import {
   BiRocket,
   BiBookmark,
   BiSupport,
-  BiFile
+  BiFile,
+  BiLineChart
 } from 'react-icons/bi';
 import AdminDashboard from './pages/AdminDashboard';
 import AdminUsers from './pages/AdminUsers';
@@ -31,6 +32,7 @@ import AdminProfile from './pages/AdminProfile';
 import AdminUserDetails from './pages/AdminUserDetails';
 import AdminCreateAd from './pages/AdminCreateAd';
 import AdminUserAds from './pages/AdminUserAds';
+import AdminAnalytics from './pages/AdminAnalytics';
 import { useAdminConfig } from '../../context/AdminConfigContext';
 import { useNavigate } from 'react-router-dom';
 import adminAuthService from '../../services/adminAuthService';
@@ -61,6 +63,7 @@ const isVeryLightHex = (hex) => {
 
 const NAV_ITEMS = [
   { id: 'dashboard', label: 'Dashboard', icon: BiBarChartAlt2, path: '/admin/dashboard' },
+  { id: 'analytics', label: 'Analytics', icon: BiLineChart, path: '/admin/analytics' },
   { id: 'users', label: 'Users', icon: BiGroup, path: '/admin/users' },
   { id: 'reels', label: 'Reels', icon: BiPlay, path: '/admin/reels' },
   { id: 'audio', label: 'Audio', icon: BiMusic, path: '/admin/audio' },
@@ -167,6 +170,7 @@ const AdminLayout = () => {
           <Routes>
             <Route path="/" element={<Navigate to="dashboard" replace />} />
             <Route path="dashboard" element={<AdminDashboard />} />
+            <Route path="analytics" element={<AdminAnalytics />} />
             <Route path="users" element={<AdminUsers />} />
             <Route path="users/:userId" element={<AdminUserDetails />} />
             <Route path="reels" element={<AdminReels />} />
