@@ -223,7 +223,7 @@ const VideoCard = ({ videoData, isActive }) => {
   const imageSrc = localVideoData.video?.url || localVideoData.media?.url || localVideoData.url;
 
   return (
-    <div className="h-full w-full relative snap-start bg-black flex justify-center items-center overflow-hidden" style={{ contain: 'strict' }}>
+    <div className="h-full w-full relative bg-black flex justify-center items-center overflow-hidden">
 
       {/* Render img for image ads, video for everything else */}
       {isImageAd ? (

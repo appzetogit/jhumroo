@@ -17,6 +17,10 @@ const HomePage = () => {
   const containerRef = useRef(null);
   const [onboardingStep, setOnboardingStep] = useState(0);
 
+  const isSearchFeed = Array.isArray(location.state?.searchVideos) && location.state.searchVideos.length > 0;
+  const activeSearchVideoId = location.state?.activeVideoId;
+  const displayedVideos = isSearchFeed ? location.state.searchVideos : reels;
+
   // Initial Fetch
   useEffect(() => {
     if (reelId) {
@@ -28,10 +32,10 @@ const HomePage = () => {
 
   // Infinite Scroll Trigger
   useEffect(() => {
-    if (activeVideoIndex >= reels.length - 2 && hasMore && !loading && !reelId) {
+    if (activeVideoIndex >= reels.length - 2 && hasMore && !loading && !reelId && !isSearchFeed) {
       fetchFeed(currentTab);
     }
-  }, [activeVideoIndex, reels.length, hasMore, loading, currentTab, reelId, fetchFeed]);
+  }, [activeVideoIndex, reels.length, hasMore, loading, currentTab, reelId, fetchFeed, isSearchFeed]);
 
   // Onboarding Logic
   useEffect(() => {
@@ -43,6 +47,13 @@ const HomePage = () => {
     setOnboardingStep(0);
     localStorage.setItem('hasSeenOnboarding', 'true');
   };
+
+  // Auto-dismiss onboarding if user successfully scrolls to a subsequent reel
+  useEffect(() => {
+    if (activeVideoIndex > 0 && onboardingStep === 2) {
+      handleFinishOnboarding();
+    }
+  }, [activeVideoIndex, onboardingStep]);
 
   // Intersection Observer for Active Video
   useEffect(() => {
@@ -61,11 +72,80 @@ const HomePage = () => {
     const elements = document.querySelectorAll('.video-card-wrapper');
     elements.forEach((el) => observer.observe(el));
     return () => elements.forEach((el) => observer.unobserve(el));
-  }, [reels.length, currentTab]);
+  }, [displayedVideos, currentTab]);
 
-  const isSearchFeed = Array.isArray(location.state?.searchVideos) && location.state.searchVideos.length > 0;
-  const activeSearchVideoId = location.state?.activeVideoId;
-  const displayedVideos = isSearchFeed ? location.state.searchVideos : reels;
+  // Feed variables are declared above the hooks
+
+  // Desktop Mouse Wheel & Trackpad scroll helper to prevent rigid snap-back behavior
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    let isScrolling = false;
+
+    const handleWheel = (e) => {
+      // If it's a horizontal scroll or there are no videos, let it be
+      if (Math.abs(e.deltaX) > Math.abs(e.deltaY) || displayedVideos.length <= 1) {
+        return;
+      }
+
+      // Prevent default rigid desktop scroll and instant snap-backs
+      e.preventDefault();
+
+      if (isScrolling) return;
+
+      const direction = e.deltaY > 0 ? 1 : -1;
+      const nextIndex = activeVideoIndex + direction;
+
+      if (nextIndex >= 0 && nextIndex < displayedVideos.length) {
+        isScrolling = true;
+        
+        const nextCard = container.querySelector(`[data-index="${nextIndex}"]`);
+        if (nextCard) {
+          nextCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+
+        // Lock wheel scrolling for 600ms to allow smooth scroll animation to finish
+        setTimeout(() => {
+          isScrolling = false;
+        }, 600);
+      }
+    };
+
+    container.addEventListener('wheel', handleWheel, { passive: false });
+    return () => {
+      container.removeEventListener('wheel', handleWheel);
+    };
+  }, [activeVideoIndex, displayedVideos.length]);
+
+  // Desktop Keyboard navigation helper (ArrowUp, ArrowDown)
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (displayedVideos.length <= 1) return;
+      
+      // Only handle if active element is body or container itself (not typing in comments/search input)
+      if (document.activeElement && document.activeElement !== document.body && document.activeElement.tagName !== 'DIV') {
+        return;
+      }
+
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        const direction = e.key === 'ArrowDown' ? 1 : -1;
+        const nextIndex = activeVideoIndex + direction;
+
+        if (nextIndex >= 0 && nextIndex < displayedVideos.length) {
+          const container = containerRef.current;
+          const nextCard = container?.querySelector(`[data-index="${nextIndex}"]`);
+          nextCard?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [activeVideoIndex, displayedVideos.length]);
 
   const handleTabChange = (nextTab) => {
     setCurrentTab(nextTab);
@@ -87,7 +167,12 @@ const HomePage = () => {
   }, [isSearchFeed, activeSearchVideoId, displayedVideos.length]);
 
   return (
-    <div className="relative w-full h-full bg-black overflow-hidden">
+    <div 
+      className="relative w-full h-full bg-black overflow-hidden"
+      onClick={onboardingStep === 2 ? handleFinishOnboarding : undefined}
+      onWheel={onboardingStep === 2 ? handleFinishOnboarding : undefined}
+      onTouchStart={onboardingStep === 2 ? handleFinishOnboarding : undefined}
+    >
       {/* Top Navigation */}
       <div className="absolute top-[var(--safe-area-top)] left-0 w-full flex justify-between items-center px-4 py-6 z-[50] pointer-events-none">
         <div className="w-8" />
@@ -117,8 +202,8 @@ const HomePage = () => {
       {/* Vertical Feed */}
       <div
         ref={containerRef}
-        className="h-full w-full overflow-y-auto snap-y snap-mandatory no-scrollbar overscroll-none"
-        style={{ scrollSnapStop: 'always', WebkitOverflowScrolling: 'touch', scrollBehavior: 'auto' }}
+        className="h-full w-full overflow-y-auto snap-y snap-mandatory no-scrollbar"
+        style={{ WebkitOverflowScrolling: 'touch', scrollBehavior: 'auto', touchAction: 'pan-y' }}
       >
         {displayedVideos.length === 0 && !loading ? (
           <div className="h-full w-full flex flex-col items-center justify-center bg-black px-6 text-center select-none">
@@ -187,8 +272,10 @@ const HomePage = () => {
 
       {/* Onboarding Swipe Prompt */}
       {onboardingStep === 2 && (
-        <div className="absolute inset-0 z-40 bg-black/40 flex flex-col items-center justify-center cursor-pointer" onClick={handleFinishOnboarding}>
-          <div className="flex flex-col items-center animate-bounce-slow">
+        <div 
+          className="absolute inset-0 z-40 bg-black/40 flex flex-col items-center justify-center transition-all duration-300 opacity-100 pointer-events-none" 
+        >
+          <div className="flex flex-col items-center animate-bounce-slow pointer-events-none">
             <div className="w-24 h-24 bg-white/20 rounded-2xl flex items-center justify-center border border-white/30 backdrop-blur-sm mb-6">
               <svg viewBox="0 0 24 24" fill="white" width="48" height="48" className="animate-swipe-up">
                 <path d="M11 19V6.414l-4.293 4.293-1.414-1.414L12 2.586l6.707 6.707-1.414 1.414L13 6.414V19h-2z" />

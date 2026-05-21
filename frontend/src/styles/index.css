@@ -67,8 +67,13 @@
     -webkit-tap-highlight-color: transparent;
   }
 
+  html {
+    height: 100%;
+    overflow: hidden !important;
+  }
+
   html, body, #root {
-    touch-action: pan-x pan-y;
+    touch-action: auto;
   }
 
   body {

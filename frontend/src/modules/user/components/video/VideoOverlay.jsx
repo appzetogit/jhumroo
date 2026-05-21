@@ -131,12 +131,12 @@ const VideoOverlay = ({ reelId, username, caption, musicName, isLiked, likes, co
       <div className="absolute inset-0 pointer-events-none flex flex-col justify-end bg-gradient-to-t from-black/80 via-black/20 to-transparent z-[30]">
         <div className="flex justify-between items-end p-4 pb-[calc(var(--bottom-nav-height)+16px)]">
           {/* Left: User info */}
-          <div className="flex-1 pr-12 text-left text-white pointer-events-auto flex flex-col items-start">
+          <div className="flex-1 pr-12 text-left text-white pointer-events-none flex flex-col items-start">
             {/* Ad Action Button - Moved above name */}
             {isAd && (videoData.adType === 'chat' || videoData.link) && (
               <button 
                 onClick={handleAdClick}
-                className="w-full bg-[#FE2C55] text-white py-3 px-4 rounded-xl font-bold text-[15px] mb-4 active:scale-[0.98] transition-all flex items-center justify-between shadow-lg shadow-[#FE2C55]/20"
+                className="w-full bg-[#FE2C55] text-white py-3 px-4 rounded-xl font-bold text-[15px] mb-4 active:scale-[0.98] transition-all flex items-center justify-between shadow-lg shadow-[#FE2C55]/20 pointer-events-auto"
               >
                 <span className="flex items-center gap-2">
                   {videoData.adType === 'chat' ? (
@@ -158,7 +158,7 @@ const VideoOverlay = ({ reelId, username, caption, musicName, isLiked, likes, co
             <div className="flex items-center gap-2 mb-2">
               {(!isAd || (isAd && videoData.onModel === 'User')) && (
                 <h3
-                  className="text-lg font-bold cursor-pointer active:opacity-70"
+                  className="text-lg font-bold cursor-pointer active:opacity-70 pointer-events-auto"
                   onClick={() => navigate(`/user/${username}`)}
                 >
                   @{username}
@@ -173,7 +173,7 @@ const VideoOverlay = ({ reelId, username, caption, musicName, isLiked, likes, co
 
             <div className="text-base mb-2 leading-tight">
               {isExpanded ? (
-                <span>{caption}</span>
+                <span className="pointer-events-auto">{caption}</span>
               ) : (
                 <>
                   <span>
@@ -185,7 +185,7 @@ const VideoOverlay = ({ reelId, username, caption, musicName, isLiked, likes, co
                         e.stopPropagation();
                         setIsExpanded(true);
                       }}
-                      className="font-bold ml-1 cursor-pointer opacity-80 hover:opacity-100"
+                      className="font-bold ml-1 cursor-pointer opacity-80 hover:opacity-100 pointer-events-auto"
                     >
                       ...more
                     </span>
@@ -196,7 +196,7 @@ const VideoOverlay = ({ reelId, username, caption, musicName, isLiked, likes, co
             {/* Music — clickable → sound page */}
             {(!isAd || (isAd && videoData.onModel === 'User')) && (
               <div
-                className="flex items-center cursor-pointer active:opacity-70"
+                className="flex items-center cursor-pointer active:opacity-70 pointer-events-auto"
                 onClick={() => navigate(`/sound/${encodeURIComponent(musicName?.name || musicName)}`)}
                 style={{ pointerEvents: 'auto' }}
               >
