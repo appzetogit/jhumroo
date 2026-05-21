@@ -1636,12 +1636,6 @@ const CreatePage = () => {
     e.target.value = '';
   };
 
-
-
-  const handleSaveDraftUi = () => {
-    showToast('Saved to drafts');
-  };
-
   const handlePublishUi = async () => {
     const fileToUpload = mergedVideoBlob || videoFile;
     if (!fileToUpload) {
@@ -1656,26 +1650,30 @@ const CreatePage = () => {
         const fileName = fileToUpload.name || `jhumroo_reel_${Date.now()}.webm`;
         const fileType = fileToUpload.type || 'video/webm';
         
-        // 1. Get Presigned URL from Backend
-        const uploadUrlResponse = await reelService.getPresignedUrl(fileName, fileType);
-        const { uploadUrl, key, videoId } = uploadUrlResponse;
+        let directUploadSuccess = false;
+        let videoId = null;
+        let key = null;
 
-        showToast('Uploading edited reel...');
-        
-        // 2. Upload Binary File directly to AWS S3
-        await axios.put(uploadUrl, fileToUpload, {
-            headers: { 
-              'Content-Type': fileType 
-            },
-            onUploadProgress: (progressEvent) => {
-                const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
-                // Progress tracking could be added here
-            }
-        });
+        try {
+            // 1. Get Presigned URL from Backend
+            const uploadUrlResponse = await reelService.getPresignedUrl(fileName, fileType);
+            const { uploadUrl, key: S3Key, videoId: S3VideoId } = uploadUrlResponse;
+            key = S3Key;
+            videoId = S3VideoId;
 
-        showToast('Finalizing post...');
+            showToast('Uploading edited reel...');
+            
+            // 2. Upload Binary File directly to AWS S3
+            await axios.put(uploadUrl, fileToUpload, {
+                headers: { 
+                  'Content-Type': fileType 
+                }
+            });
+            directUploadSuccess = true;
+        } catch (uploadError) {
+            console.warn('Direct S3 upload failed, falling back to server-side upload:', uploadError);
+        }
 
-        // 3. Gather all metadata and notify backend to start processing
         const editsData = {
             text: overlayText ? {
                 content: overlayText,
@@ -1693,39 +1691,25 @@ const CreatePage = () => {
             filter: selectedFilter
         };
 
-        const postData = {
-            videoId,
-            key,
-            caption: postState.caption,
-            audience: postState.audience,
-            allowComments: postState.allowComments,
-            highQuality: postState.highQuality,
-            saveToDevice: postState.saveToDevice,
-            autoCaptions: postState.autoCaptions,
-            captionLanguage: postState.captionLanguage,
-            isAgeRestricted: postState.audienceControls,
-            location: postState.location,
-            music: (selectedSound && selectedSound._id && selectedSound._id !== 'sound-original') ? {
-                _id: selectedSound._id,
-                title: selectedSound.title,
-                author: selectedSound.author,
-                url: selectedSound.url,
-                duration: typeof selectedSound.duration === 'string' ? parseDurationSeconds(selectedSound.duration) : (Number(selectedSound.duration) || 0)
-            } : null,
-            edits: {
-                ...editsData,
-                overlays: activeOverlays.map(o => ({
-                    id: o.id,
-                    url: o.url,
-                    type: o.type,
-                    position: { x: o.x, y: o.y }
-                }))
-            }
+        const editsPayload = {
+            ...editsData,
+            overlays: activeOverlays.map(o => ({
+                id: o.id,
+                url: o.url,
+                type: o.type,
+                position: { x: o.x, y: o.y }
+            }))
         };
 
-        const response = await reelService.completeUpload(postData);
-        
-        if (response.success) {
+        const musicPayload = (selectedSound && selectedSound._id && selectedSound._id !== 'sound-original') ? {
+            _id: selectedSound._id,
+            title: selectedSound.title,
+            author: selectedSound.author,
+            url: selectedSound.url,
+            duration: typeof selectedSound.duration === 'string' ? parseDurationSeconds(selectedSound.duration) : (Number(selectedSound.duration) || 0)
+        } : null;
+
+        const handleUploadSuccess = () => {
             showToast('Reel published successfully!');
             
             // Clear persistence cache
@@ -1744,6 +1728,62 @@ const CreatePage = () => {
                 setActiveStickers([]);
                 setSelectedFilter('Normal');
             }, 1500);
+        };
+
+        if (directUploadSuccess) {
+            showToast('Finalizing post...');
+
+            const postData = {
+                videoId,
+                key,
+                caption: postState.caption,
+                audience: postState.audience,
+                allowComments: postState.allowComments,
+                highQuality: postState.highQuality,
+                saveToDevice: postState.saveToDevice,
+                autoCaptions: postState.autoCaptions,
+                captionLanguage: postState.captionLanguage,
+                isAgeRestricted: postState.audienceControls,
+                location: postState.location,
+                music: musicPayload,
+                edits: editsPayload
+            };
+
+            const response = await reelService.completeUpload(postData);
+            
+            if (response.success) {
+                handleUploadSuccess();
+            }
+        } else {
+            // Fallback: Upload via backend endpoint using Multipart/FormData
+            showToast('Uploading via fallback server...');
+            
+            const formData = new FormData();
+            formData.append('video', fileToUpload, fileName);
+            formData.append('caption', postState.caption || '');
+            formData.append('audience', postState.audience || 'everyone');
+            formData.append('allowComments', postState.allowComments);
+            formData.append('highQuality', postState.highQuality);
+            formData.append('saveToDevice', postState.saveToDevice);
+            formData.append('autoCaptions', postState.autoCaptions);
+            formData.append('captionLanguage', postState.captionLanguage || 'English');
+            formData.append('isAgeRestricted', postState.audienceControls);
+            
+            if (postState.location) {
+                formData.append('location', typeof postState.location === 'object' ? JSON.stringify(postState.location) : postState.location);
+            }
+            if (musicPayload) {
+                formData.append('music', JSON.stringify(musicPayload));
+            }
+            if (editsPayload) {
+                formData.append('edits', JSON.stringify(editsPayload));
+            }
+
+            const response = await reelService.createReel(formData);
+            
+            if (response.success) {
+                handleUploadSuccess();
+            }
         }
     } catch (error) {
         console.error('Upload failed:', error);
@@ -1751,6 +1791,10 @@ const CreatePage = () => {
     } finally {
         setUploading(false);
     }
+  };
+
+  const handleSaveDraftUi = () => {
+    showToast('Saved to drafts');
   };
 
   const handleFileChange = (e) => {
