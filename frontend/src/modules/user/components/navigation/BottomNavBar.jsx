@@ -81,7 +81,26 @@ const BottomNavBar = ({ isDarkTheme = true }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   
   const isHomePage = location.pathname === '/';
-  const usesDarkNavAppearance = isDarkMode || isHomePage;
+  const [isReelOverlayOpen, setIsReelOverlayOpen] = useState(false);
+
+  useEffect(() => {
+    const checkReelOverlay = () => {
+      const hasOverlay = !!document.querySelector('[data-reel-overlay-open="true"]');
+      setIsReelOverlayOpen(hasOverlay);
+    };
+
+    checkReelOverlay();
+
+    const observer = new MutationObserver(checkReelOverlay);
+    observer.observe(document.body, {
+      attributes: true,
+      attributeFilter: ['data-reel-overlay-open']
+    });
+
+    return () => observer.disconnect();
+  }, []);
+
+  const usesDarkNavAppearance = isDarkMode || isHomePage || isReelOverlayOpen;
 
   // Watch for active full-screen modal sheets in Jhumroo
   useEffect(() => {
@@ -169,7 +188,7 @@ const BottomNavBar = ({ isDarkTheme = true }) => {
     }
   }, [location.pathname, navItems]);
 
-  const containerClasses = `absolute left-0 w-full z-[1000] flex justify-around items-stretch transition-all duration-300 ${isHomePage
+  const containerClasses = `absolute left-0 w-full z-[1000] flex justify-around items-stretch transition-all duration-300 ${(isHomePage || isReelOverlayOpen)
       ? 'bg-black text-white/90 border-t border-white/10 shadow-[0_-5px_15px_rgba(0,0,0,0.45)]'
       : isDarkTheme && isDarkMode
         ? 'bg-black/85 backdrop-blur-md border-t border-white/10 text-white/70 shadow-[0_-5px_15px_rgba(0,0,0,0.5)]'

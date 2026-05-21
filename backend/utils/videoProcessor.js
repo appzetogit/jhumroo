@@ -51,6 +51,20 @@ export const processReelWithAudio = async (videoId, rawKey, music) => {
       }
     }
 
+    // 2.5. Check if raw video has an audio stream
+    const hasAudio = await new Promise((resolve) => {
+      ffmpeg.ffprobe(rawLocalPath, (err, metadata) => {
+        if (err) {
+          console.warn(`[Processor:${videoId}] ffprobe check for audio failed:`, err.message);
+          resolve(false);
+        } else {
+          const audioStream = metadata.streams && metadata.streams.find(s => s.codec_type === 'audio');
+          resolve(!!audioStream);
+        }
+      });
+    });
+    console.log(`[Processor:${videoId}] Raw video has audio stream: ${hasAudio}`);
+
     // 3. Merge Video and Audio using FFmpeg
     console.log(`[Processor:${videoId}] Starting FFmpeg merge...`);
     await new Promise((resolve, reject) => {
@@ -77,16 +91,28 @@ export const processReelWithAudio = async (videoId, rawKey, music) => {
           ]);
       } else {
         // Just convert to mp4 if no extra music
-        command = command
-          .outputOptions([
-            '-c:v libx264',
-            '-preset superfast',
-            '-crf 23',
-            '-c:a aac',
-            '-b:a 128k',
-            '-movflags +faststart'
-          ]);
+        if (hasAudio) {
+          command = command
+            .outputOptions([
+              '-c:v libx264',
+              '-preset superfast',
+              '-crf 23',
+              '-c:a aac',
+              '-b:a 128k',
+              '-movflags +faststart'
+            ]);
+        } else {
+          command = command
+            .outputOptions([
+              '-c:v libx264',
+              '-preset superfast',
+              '-crf 23',
+              '-an', // Disable audio stream in output since input has no audio stream
+              '-movflags +faststart'
+            ]);
+        }
       }
+
 
       command
         .output(outputLocalPath)

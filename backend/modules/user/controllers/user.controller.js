@@ -30,7 +30,7 @@ export const getUserProfile = asyncHandler(async (req, res) => {
 
   // Sync stats (End-to-end reliability)
   // 1. Re-calculate actual reels count and total likes received on those reels
-  const activeReels = await Reel.find({ user: user._id, isActive: true });
+  const activeReels = await Reel.find({ user: user._id, isActive: true, status: 'completed' });
   const actualReelsCount = activeReels.length;
   const actualLikesCount = activeReels.reduce((sum, r) => sum + (r.stats?.likesCount || 0), 0);
 
@@ -253,7 +253,7 @@ export const getUserReels = asyncHandler(async (req, res) => {
     }
   }
 
-  const query = { user: user._id, isActive: true };
+  const query = { user: user._id, isActive: true, status: 'completed' };
 
   const reels = await Reel.find(query)
     .sort({ createdAt: -1 })
@@ -297,7 +297,7 @@ export const getLikedReels = asyncHandler(async (req, res) => {
       }
     });
 
-  const reels = likes.map(like => like.reel).filter(reel => reel && reel.isActive);
+  const reels = likes.map(like => like.reel).filter(reel => reel && reel.isActive && reel.status === 'completed');
   const total = await Like.countDocuments({ user: req.user._id });
 
   res.status(200).json({
@@ -340,7 +340,7 @@ export const getSavedReels = asyncHandler(async (req, res) => {
       }
     });
 
-  const reels = savedReels.map(saved => saved.reel).filter(reel => reel && reel.isActive);
+  const reels = savedReels.map(saved => saved.reel).filter(reel => reel && reel.isActive && reel.status === 'completed');
   const total = await SavedReel.countDocuments(query);
 
   res.status(200).json({

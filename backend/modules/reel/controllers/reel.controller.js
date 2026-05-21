@@ -1086,7 +1086,8 @@ export const searchReels = asyncHandler(async (req, res) => {
   const skip = (page - 1) * limit;
 
   let query = { 
-    isActive: true
+    isActive: true,
+    status: 'completed'
   };
 
   if (hashtag) {

@@ -76,12 +76,18 @@ const HomePage = () => {
 
   // Feed variables are declared above the hooks
 
+  const isScrollingRef = useRef(false);
+  const activeVideoIndexRef = useRef(0);
+
+  // Sync activeVideoIndexRef with the latest state
+  useEffect(() => {
+    activeVideoIndexRef.current = activeVideoIndex;
+  }, [activeVideoIndex]);
+
   // Desktop Mouse Wheel & Trackpad scroll helper to prevent rigid snap-back behavior
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
-
-    let isScrolling = false;
 
     const handleWheel = (e) => {
       // If it's a horizontal scroll or there are no videos, let it be
@@ -92,13 +98,13 @@ const HomePage = () => {
       // Prevent default rigid desktop scroll and instant snap-backs
       e.preventDefault();
 
-      if (isScrolling) return;
+      if (isScrollingRef.current) return;
 
       const direction = e.deltaY > 0 ? 1 : -1;
-      const nextIndex = activeVideoIndex + direction;
+      const nextIndex = activeVideoIndexRef.current + direction;
 
       if (nextIndex >= 0 && nextIndex < displayedVideos.length) {
-        isScrolling = true;
+        isScrollingRef.current = true;
         
         const nextCard = container.querySelector(`[data-index="${nextIndex}"]`);
         if (nextCard) {
@@ -107,7 +113,7 @@ const HomePage = () => {
 
         // Lock wheel scrolling for 600ms to allow smooth scroll animation to finish
         setTimeout(() => {
-          isScrolling = false;
+          isScrollingRef.current = false;
         }, 600);
       }
     };
@@ -116,7 +122,7 @@ const HomePage = () => {
     return () => {
       container.removeEventListener('wheel', handleWheel);
     };
-  }, [activeVideoIndex, displayedVideos.length]);
+  }, [displayedVideos.length]);
 
   // Desktop Keyboard navigation helper (ArrowUp, ArrowDown)
   useEffect(() => {
@@ -131,7 +137,7 @@ const HomePage = () => {
       if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
         e.preventDefault();
         const direction = e.key === 'ArrowDown' ? 1 : -1;
-        const nextIndex = activeVideoIndex + direction;
+        const nextIndex = activeVideoIndexRef.current + direction;
 
         if (nextIndex >= 0 && nextIndex < displayedVideos.length) {
           const container = containerRef.current;
@@ -145,7 +151,7 @@ const HomePage = () => {
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [activeVideoIndex, displayedVideos.length]);
+  }, [displayedVideos.length]);
 
   const handleTabChange = (nextTab) => {
     setCurrentTab(nextTab);
@@ -202,7 +208,7 @@ const HomePage = () => {
       {/* Vertical Feed */}
       <div
         ref={containerRef}
-        className="h-full w-full overflow-y-auto snap-y snap-mandatory no-scrollbar"
+        className="h-full w-full overflow-y-auto snap-y snap-mandatory reels-feed-container no-scrollbar"
         style={{ WebkitOverflowScrolling: 'touch', scrollBehavior: 'auto', touchAction: 'pan-y' }}
       >
         {displayedVideos.length === 0 && !loading ? (
@@ -247,6 +253,7 @@ const HomePage = () => {
                 key={video.id}
                 data-index={index}
                 className="video-card-wrapper h-full w-full snap-start snap-always relative"
+                style={{ scrollSnapStop: 'always' }}
               >
                 {isVisible ? (
                   <VideoCard

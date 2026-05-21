@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { BiMenu, BiUserPlus, BiBookmark, BiHeart, BiArrowBack, BiBell, BiDotsVerticalRounded, BiX } from 'react-icons/bi';
 import { BsGrid3X3 } from 'react-icons/bs';
@@ -10,6 +10,7 @@ import followService from '../../../../services/followService';
 import ProfileMoreOptionsSheet from '../../components/modals/ProfileMoreOptionsSheet';
 import ReportSheet from '../../components/modals/ReportSheet';
 import ReportUserSheet from '../../components/modals/ReportUserSheet';
+import VideoCard from '../../components/video/VideoCard';
 
 const VideoGrid = ({ videos, onVideoClick }) => {
   if (!videos || !videos.length) {
@@ -83,6 +84,11 @@ const ProfilePage = () => {
   const [showReport, setShowReport] = useState(false);
   const [isBlocked, setIsBlocked] = useState(false);
 
+  const [overlayVideos, setOverlayVideos] = useState([]);
+  const [activeOverlayIndex, setActiveOverlayIndex] = useState(null);
+  const [justOpenedOverlay, setJustOpenedOverlay] = useState(false);
+  const overlayContainerRef = useRef(null);
+
   const displayUsername = profileUsername || currentUser?.username || 'user';
   const isOwnProfile = !profileUsername || 
     (profileUsername && currentUser?.username && profileUsername.toLowerCase() === currentUser.username.toLowerCase()) ||
@@ -98,6 +104,119 @@ const ProfilePage = () => {
       fetchEngagementData();
     }
   }, [activeTab]);
+
+  useEffect(() => {
+    const handlePopState = () => {
+      if (activeOverlayIndex !== null) {
+        setActiveOverlayIndex(null);
+        setOverlayVideos([]);
+        document.body.removeAttribute('data-reel-overlay-open');
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [activeOverlayIndex]);
+
+  useEffect(() => {
+    return () => {
+      document.body.removeAttribute('data-reel-overlay-open');
+    };
+  }, []);
+
+  useEffect(() => {
+    if (activeOverlayIndex !== null && justOpenedOverlay && overlayContainerRef.current) {
+      const card = overlayContainerRef.current.querySelector(`[data-index="${activeOverlayIndex}"]`);
+      if (card) {
+        card.scrollIntoView({ block: 'start' });
+        setJustOpenedOverlay(false);
+      }
+    }
+  }, [activeOverlayIndex, justOpenedOverlay, overlayVideos]);
+
+  useEffect(() => {
+    if (activeOverlayIndex === null) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            const index = Number(entry.target.getAttribute('data-index'));
+            setActiveOverlayIndex(index);
+          }
+        });
+      },
+      { threshold: 0.5 }
+    );
+
+    const elements = overlayContainerRef.current?.querySelectorAll('.overlay-video-card-wrapper');
+    elements?.forEach((el) => observer.observe(el));
+    return () => elements?.forEach((el) => observer.unobserve(el));
+  }, [activeOverlayIndex, overlayVideos]);
+
+  useEffect(() => {
+    const container = overlayContainerRef.current;
+    if (!container || activeOverlayIndex === null) return;
+
+    let isScrolling = false;
+
+    const handleWheel = (e) => {
+      if (Math.abs(e.deltaX) > Math.abs(e.deltaY) || overlayVideos.length <= 1) {
+        return;
+      }
+      e.preventDefault();
+
+      if (isScrolling) return;
+
+      const direction = e.deltaY > 0 ? 1 : -1;
+      const nextIndex = activeOverlayIndex + direction;
+
+      if (nextIndex >= 0 && nextIndex < overlayVideos.length) {
+        isScrolling = true;
+        
+        const nextCard = container.querySelector(`[data-index="${nextIndex}"]`);
+        if (nextCard) {
+          nextCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+
+        setTimeout(() => {
+          isScrolling = false;
+        }, 600);
+      }
+    };
+
+    container.addEventListener('wheel', handleWheel, { passive: false });
+    return () => {
+      container.removeEventListener('wheel', handleWheel);
+    };
+  }, [activeOverlayIndex, overlayVideos.length]);
+
+  useEffect(() => {
+    if (activeOverlayIndex === null || overlayVideos.length <= 1) return;
+
+    const handleKeyDown = (e) => {
+      if (document.activeElement && document.activeElement !== document.body && document.activeElement.tagName !== 'DIV') {
+        return;
+      }
+
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        const direction = e.key === 'ArrowDown' ? 1 : -1;
+        const nextIndex = activeOverlayIndex + direction;
+
+        if (nextIndex >= 0 && nextIndex < overlayVideos.length) {
+          const container = overlayContainerRef.current;
+          const nextCard = container?.querySelector(`[data-index="${nextIndex}"]`);
+          nextCard?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [activeOverlayIndex, overlayVideos.length]);
 
   const fetchProfileData = async () => {
     setLoading(true);
@@ -269,12 +388,20 @@ const ProfilePage = () => {
     else if (activeTab === 'likes') listToPass = likedVideos;
     else if (activeTab === 'saves') listToPass = savedVideos;
 
-    navigate('/', { 
-      state: { 
-        searchVideos: listToPass,
-        activeVideoId: video._id || video.id
-      } 
-    });
+    setOverlayVideos(listToPass);
+    setActiveOverlayIndex(index);
+    setJustOpenedOverlay(true);
+    document.body.setAttribute('data-reel-overlay-open', 'true');
+    window.history.pushState({ overlayOpen: true }, '');
+  };
+
+  const handleCloseOverlay = () => {
+    setActiveOverlayIndex(null);
+    setOverlayVideos([]);
+    document.body.removeAttribute('data-reel-overlay-open');
+    if (window.history.state?.overlayOpen) {
+      window.history.back();
+    }
   };
 
   const handleShareProfile = async () => {
@@ -642,6 +769,60 @@ const ProfilePage = () => {
         onClose={() => setShowReport(false)} 
         userId={profile?._id}
       />
+
+      {/* Vertical Reel Overlay Player */}
+      {activeOverlayIndex !== null && (
+        <div className="absolute inset-x-0 top-0 bottom-[var(--bottom-nav-height)] bg-black z-[900] flex flex-col animate-fade-in">
+          {/* Top Header */}
+          <div className="absolute top-[var(--safe-area-top)] left-0 w-full flex justify-between items-center px-4 py-6 z-[950] pointer-events-none">
+            <button 
+              onClick={handleCloseOverlay} 
+              className="pointer-events-auto flex items-center gap-1 text-white font-bold bg-transparent border-none outline-none cursor-pointer drop-shadow-md active:opacity-60 transition-opacity"
+            >
+              <BiArrowBack size={26} />
+            </button>
+            <button 
+              onClick={() => {
+                handleCloseOverlay();
+                navigate('/search');
+              }} 
+              className="pointer-events-auto text-white bg-transparent border-none outline-none cursor-pointer drop-shadow-md active:opacity-60 transition-opacity"
+            >
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            </button>
+          </div>
+
+          {/* Vertical Snapping Container */}
+          <div
+            ref={overlayContainerRef}
+            className="h-full w-full overflow-y-auto snap-y snap-mandatory reels-feed-container no-scrollbar"
+            style={{ WebkitOverflowScrolling: 'touch', scrollBehavior: 'auto', touchAction: 'pan-y' }}
+          >
+            {overlayVideos.map((video, index) => {
+              const isVisible = Math.abs(index - activeOverlayIndex) <= 2;
+              return (
+                <div
+                  key={video._id || video.id}
+                  data-index={index}
+                  className="overlay-video-card-wrapper h-full w-full snap-start snap-always relative"
+                  style={{ scrollSnapStop: 'always' }}
+                >
+                  {isVisible ? (
+                    <VideoCard
+                      videoData={video}
+                      isActive={index === activeOverlayIndex}
+                    />
+                  ) : (
+                    <div className="h-full w-full bg-black flex items-center justify-center">
+                      <div className="w-10 h-10 border-4 border-white/10 border-t-white/30 rounded-full animate-spin" />
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

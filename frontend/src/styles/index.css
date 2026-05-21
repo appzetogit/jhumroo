@@ -1510,4 +1510,18 @@
 .animate-scale-in {
   animation: scale-in 0.15s ease-out;
 }
+
+/* Perfect Vertical Reel Snapping & Scroll Stop Rules */
+.reels-feed-container {
+  scroll-snap-type: y mandatory !important;
+  overscroll-behavior-y: none !important;
+  -webkit-overflow-scrolling: touch !important;
+}
+
+.video-card-wrapper,
+.overlay-video-card-wrapper {
+  scroll-snap-align: start !important;
+  scroll-snap-stop: always !important;
+}
+
 
