@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { BiChevronLeft, BiCamera } from 'react-icons/bi';
 import { useAuth } from '../../../../context/AuthContext';
 import userService from '../../../../services/userService';
+import PhotoPickerSheet from '../../components/modals/PhotoPickerSheet';
 
 const EditProfilePage = () => {
     const navigate = useNavigate();
@@ -13,6 +14,7 @@ const EditProfilePage = () => {
     const [bio, setBio] = useState(currentUser?.bio || '');
     const [loading, setLoading] = useState(false);
     const [uploading, setUploading] = useState(false);
+    const [showPhotoPicker, setShowPhotoPicker] = useState(false);
 
     const handleSave = async () => {
         setLoading(true);
@@ -34,8 +36,11 @@ const EditProfilePage = () => {
         }
     };
 
-    const handleFileChange = async (e) => {
-        const file = e.target.files[0];
+    /**
+     * Called by PhotoPickerSheet when user selects a file
+     * (either from gallery or camera)
+     */
+    const handleFileSelected = async (file) => {
         if (!file) return;
 
         const formData = new FormData();
@@ -45,16 +50,15 @@ const EditProfilePage = () => {
         try {
             const response = await userService.uploadProfilePicture(formData);
             if (response.success) {
-                // The updateProfile API in backend returns the user, 
-                // but uploadProfilePicture might return just the image data.
-                // Let's check userService.js - it updates localStorage.
-                // We should refresh the user state.
-                const updatedUser = { ...currentUser, profilePicture: response.profilePicture };
+                const updatedUser = {
+                    ...currentUser,
+                    profilePicture: response.profilePicture,
+                };
                 updateUser(updatedUser);
             }
         } catch (error) {
             console.error('Failed to upload profile picture:', error);
-            alert('Failed to upload profile picture');
+            alert('Profile photo upload nahi ho saka. Dobara try karo.');
         } finally {
             setUploading(false);
         }
@@ -83,34 +87,39 @@ const EditProfilePage = () => {
             <div className="scrollable flex-1 px-4 pb-24">
                 {/* Profile Photo Section */}
                 <div className="flex flex-col items-center py-8">
-                    <div className="relative group cursor-pointer" onClick={() => document.getElementById('avatar-upload').click()}>
+                    {/* Tapping the avatar area opens the picker sheet */}
+                    <div
+                        className="relative group cursor-pointer"
+                        onClick={() => setShowPhotoPicker(true)}
+                    >
                         <div className="w-24 h-24 rounded-full overflow-hidden border-2 border-white/10 bg-black/20 relative">
                             <img 
-                                src={currentUser?.profilePicture?.url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${currentUser?.username}&style=circle`} 
+                                src={
+                                    currentUser?.profilePicture?.url ||
+                                    `https://api.dicebear.com/7.x/avataaars/svg?seed=${currentUser?.username}&style=circle`
+                                } 
                                 alt={currentUser?.username} 
-                                className={`w-full h-full object-cover ${uploading ? 'opacity-50' : ''}`} 
+                                className={`w-full h-full object-cover transition-opacity ${uploading ? 'opacity-40' : ''}`} 
                             />
+                            {/* Hover overlay */}
                             <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                                 <BiCamera size={24} className="text-white" />
                             </div>
+                            {/* Upload spinner */}
                             {uploading && (
-                                <div className="absolute inset-0 flex items-center justify-center">
-                                    <div className="w-6 h-6 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                <div className="absolute inset-0 flex items-center justify-center bg-black/30">
+                                    <div className="w-7 h-7 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                                 </div>
                             )}
                         </div>
-                        <div className="absolute -bottom-1 -right-0 w-8 h-8 rounded-full bg-[#FE2C55] flex items-center justify-center border-2 border-[#161616]">
+                        {/* Camera badge */}
+                        <div className="absolute -bottom-1 -right-0 w-8 h-8 rounded-full bg-[#FE2C55] flex items-center justify-center border-2 border-[#161616] shadow-lg">
                             <BiCamera size={16} className="text-white" />
                         </div>
-                        <input 
-                            id="avatar-upload"
-                            type="file" 
-                            accept="image/*" 
-                            className="hidden" 
-                            onChange={handleFileChange}
-                        />
                     </div>
-                    <p className="text-white/60 text-[13px] font-medium mt-4">Change photo</p>
+                    <p className="text-white/60 text-[13px] font-medium mt-4">
+                        {uploading ? 'Upload ho raha hai...' : 'Change photo'}
+                    </p>
                 </div>
 
                 {/* Form Section */}
@@ -177,6 +186,14 @@ const EditProfilePage = () => {
                     </div>
                 </div>
             </div>
+
+            {/* Photo Picker Bottom Sheet */}
+            <PhotoPickerSheet
+                isOpen={showPhotoPicker}
+                onClose={() => setShowPhotoPicker(false)}
+                onFileSelected={handleFileSelected}
+                hasExistingPhoto={!!currentUser?.profilePicture?.url}
+            />
         </div>
     );
 };

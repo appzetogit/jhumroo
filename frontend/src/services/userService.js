@@ -51,6 +51,7 @@ const userService = {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
+        timeout: 60000, // 60 seconds for Cloudinary upload
       });
       
       // Update stored user data
@@ -63,6 +64,7 @@ const userService = {
       throw error;
     }
   },
+
 
   /**
    * Get user's reels
