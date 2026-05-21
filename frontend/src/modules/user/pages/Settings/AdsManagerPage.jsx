@@ -101,25 +101,44 @@ const AdsManagerPage = () => {
                   <div className="flex-1 flex flex-col justify-between py-1">
                     <div>
                       <div className="flex justify-between items-start">
-                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${ad.isActive ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-500'}`}>
-                          {ad.isActive ? 'Active' : 'Inactive'}
-                        </span>
+                        {ad.status === 'pending' ? (
+                          <span className="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase bg-amber-100 text-amber-600 dark:bg-amber-900/20 dark:text-amber-400">
+                            Pending Approval
+                          </span>
+                        ) : ad.status === 'rejected' ? (
+                          <span className="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase bg-red-100 text-red-600 dark:bg-red-900/20 dark:text-red-400">
+                            Rejected
+                          </span>
+                        ) : (
+                          <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${ad.isActive ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-500'}`}>
+                            {ad.isActive ? 'Active' : 'Inactive'}
+                          </span>
+                        )}
                         <div className="flex gap-2 items-center">
-                          <button
-                            onClick={() => navigate(`/settings/ads-manager/analytics/${ad._id}`)}
-                            className="bg-[#FE2C55]/10 text-[#FE2C55] px-2 py-0.5 rounded text-[10px] font-bold uppercase"
-                          >
-                            Dashboard
-                          </button>
-                          <button onClick={() => handleToggleStatus(ad._id)} className="theme-text-primary p-1">
-                            <span className="text-[11px] font-bold">{ad.isActive ? 'Pause' : 'Resume'}</span>
-                          </button>
-                          <button onClick={() => handleDeleteAd(ad._id)} className="text-red-500 p-1">
+                          {(!ad.status || ad.status === 'approved') && (
+                            <>
+                              <button
+                                onClick={() => navigate(`/settings/ads-manager/analytics/${ad._id}`)}
+                                className="bg-[#FE2C55]/10 text-[#FE2C55] px-2 py-0.5 rounded text-[10px] font-bold uppercase hover:bg-[#FE2C55]/20 transition-colors"
+                              >
+                                Dashboard
+                              </button>
+                              <button onClick={() => handleToggleStatus(ad._id)} className="theme-text-primary p-1 hover:opacity-85 transition-opacity">
+                                <span className="text-[11px] font-bold">{ad.isActive ? 'Pause' : 'Resume'}</span>
+                              </button>
+                            </>
+                          )}
+                          <button onClick={() => handleDeleteAd(ad._id)} className="text-red-500 p-1 hover:opacity-85 transition-opacity">
                             <BiTrash size={18} />
                           </button>
                         </div>
                       </div>
                       <p className="theme-text-primary text-[13px] font-medium line-clamp-1 mt-1">{ad.caption || 'No caption'}</p>
+                      {ad.status === 'pending' && (
+                        <p className="text-[11px] text-amber-600 dark:text-amber-400 font-semibold mt-1.5 flex items-center gap-1 bg-amber-50 dark:bg-amber-950/20 px-3 py-1.5 rounded-xl w-fit">
+                          <span>🔔</span> Note: After approval it will show to users.
+                        </p>
+                      )}
                     </div>
 
                     {/* Stats row */}

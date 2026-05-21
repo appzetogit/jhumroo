@@ -74,7 +74,8 @@ export const createAd = asyncHandler(async (req, res) => {
       url: musicData.url,
       publicId: musicResult.key
     } : undefined,
-    isActive: true
+    isActive: true,
+    status: req.admin ? 'approved' : 'pending'
   });
 
   res.status(201).json({
@@ -297,7 +298,7 @@ export const getAdsForFeed = asyncHandler(async (req, res) => {
   const userCountry = req.user.country || 'India';
   const userState = req.user.state || '';
   
-  const query = { isActive: true };
+  const query = { isActive: true, status: 'approved' };
   
   // Ad target matching logic:
   // - Ad must not restrict country, OR restrict to user's country
@@ -421,6 +422,45 @@ export const updateAd = asyncHandler(async (req, res) => {
   res.status(200).json({
     success: true,
     message: 'Advertisement updated successfully',
+    ad
+  });
+});
+
+/**
+ * @desc    Review advertisement (Approve/Reject) (Admin)
+ * @route   PATCH /api/ads/:id/review
+ * @access  Private/Admin
+ */
+export const reviewAd = asyncHandler(async (req, res) => {
+  if (!req.admin) {
+    return res.status(403).json({
+      success: false,
+      message: 'Not authorized as admin'
+    });
+  }
+
+  const { status } = req.body;
+  if (!status || !['approved', 'rejected', 'pending'].includes(status)) {
+    return res.status(400).json({
+      success: false,
+      message: 'Please provide a valid status: approved, rejected, or pending'
+    });
+  }
+
+  const ad = await Ad.findById(req.params.id);
+  if (!ad) {
+    return res.status(404).json({
+      success: false,
+      message: 'Advertisement not found'
+    });
+  }
+
+  ad.status = status;
+  await ad.save();
+
+  res.status(200).json({
+    success: true,
+    message: `Advertisement status updated to ${status}`,
     ad
   });
 });

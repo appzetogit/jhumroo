@@ -72,6 +72,12 @@ const adSchema = new mongoose.Schema(
       type: Boolean,
       default: true
     },
+    status: {
+      type: String,
+      enum: ['pending', 'approved', 'rejected'],
+      default: 'pending',
+      index: true
+    },
     stats: {
       viewsCount: {
         type: Number,

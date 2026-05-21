@@ -87,6 +87,30 @@ const AdminUserAds = () => {
     }
   };
 
+  const handleApproveAd = async (adId) => {
+    try {
+      const res = await adService.reviewAdAdmin(adId, 'approved');
+      if (res.success) {
+        alert('Advertisement approved successfully!');
+        fetchAds(); // Refresh
+      }
+    } catch (error) {
+      alert('Failed to approve ad');
+    }
+  };
+
+  const handleRejectAd = async (adId) => {
+    try {
+      const res = await adService.reviewAdAdmin(adId, 'rejected');
+      if (res.success) {
+        alert('Advertisement rejected successfully!');
+        fetchAds(); // Refresh
+      }
+    } catch (error) {
+      alert('Failed to reject ad');
+    }
+  };
+
   return (
     <div className="admin-page p-6 bg-[#FAFAFA] dark:bg-[#0A0A0A] min-h-screen">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
@@ -146,6 +170,8 @@ const AdminUserAds = () => {
                 setSelectedAd(ad);
                 setIsCommentsOpen(true);
               }}
+              onApprove={() => handleApproveAd(ad._id)}
+              onReject={() => handleRejectAd(ad._id)}
             />
           ))}
         </div>
@@ -177,7 +203,7 @@ const StatCard = ({ label, value, icon, accent }) => (
   </div>
 );
 
-const AdRow = ({ ad, onToggle, onDelete, onEdit, onViewComments }) => {
+const AdRow = ({ ad, onToggle, onDelete, onEdit, onViewComments, onApprove, onReject }) => {
   const statesArray = Array.isArray(ad.targetState) 
     ? ad.targetState 
     : (ad.targetState ? (ad.targetState.startsWith('[') ? JSON.parse(ad.targetState) : [ad.targetState]) : []);
@@ -198,8 +224,17 @@ const AdRow = ({ ad, onToggle, onDelete, onEdit, onViewComments }) => {
 
       {/* Info */}
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-3 mb-1">
+        <div className="flex items-center gap-3 mb-1 flex-wrap">
           <h3 className="text-[16px] font-bold text-[#1A1A1A] dark:text-white truncate">{ad.caption || 'No caption'}</h3>
+          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+            ad.status === 'pending'
+              ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400'
+              : ad.status === 'rejected'
+              ? 'bg-red-500/15 text-red-600 dark:text-red-400'
+              : 'bg-green-500/15 text-green-600 dark:text-green-400'
+          }`}>
+            {ad.status || 'approved'}
+          </span>
           <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
             ad.isActive ? 'bg-[#10b981]/10 text-[#10b981]' : 'bg-[#EF4444]/10 text-[#EF4444]'
           }`}>
@@ -280,6 +315,26 @@ const AdRow = ({ ad, onToggle, onDelete, onEdit, onViewComments }) => {
 
       {/* Actions */}
       <div className="flex items-center gap-2">
+        {ad.status !== 'approved' && (
+          <button 
+            onClick={onApprove}
+            className="p-2.5 rounded-xl bg-green-500/10 text-green-500 hover:bg-green-500/20 transition-all font-bold text-[12px] flex items-center gap-1"
+            title="Approve Ad"
+          >
+            <BiCheckCircle size={20} />
+            <span className="hidden lg:inline">Approve</span>
+          </button>
+        )}
+        {ad.status !== 'rejected' && (
+          <button 
+            onClick={onReject}
+            className="p-2.5 rounded-xl bg-red-500/10 text-red-500 hover:bg-red-500/20 transition-all font-bold text-[12px] flex items-center gap-1"
+            title="Reject Ad"
+          >
+            <BiXCircle size={20} />
+            <span className="hidden lg:inline">Reject</span>
+          </button>
+        )}
         <button 
           onClick={onEdit}
           className="p-2.5 rounded-xl bg-blue-500/10 text-blue-500 hover:bg-blue-500/20 transition-all"

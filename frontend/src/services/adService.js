@@ -52,6 +52,10 @@ const adService = {
         'Content-Type': 'multipart/form-data',
       },
     });
+  },
+
+  reviewAdAdmin: async (adId, status) => {
+    return await api.patch(`/ads/${adId}/review`, { status });
   }
 };
 

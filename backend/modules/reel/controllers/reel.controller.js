@@ -390,7 +390,7 @@ export const getFeedReels = asyncHandler(async (req, res) => {
 
   // Inject Ads and Like/Save status
   if (reels.length > 0) {
-    const ads = await Ad.find({ isActive: true })
+    const ads = await Ad.find({ isActive: true, status: 'approved' })
       .populate('user', 'username profilePicture isVerified')
       .lean();
 

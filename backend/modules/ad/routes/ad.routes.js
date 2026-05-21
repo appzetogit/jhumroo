@@ -10,7 +10,8 @@ import {
   trackView,
   trackClick,
   updateAd,
-  getUserAds
+  getUserAds,
+  reviewAd
 } from '../controllers/ad.controller.js';
 import { protect } from '../../../middleware/auth.js';
 import { uploadAdMedia, uploadAdWithMusic } from '../../../middleware/upload.js';
@@ -28,6 +29,7 @@ router.get('/admin/user-ads', protect, getUserAds);
 router.get('/:id/analytics', protect, getAdAnalytics);
 router.put('/:id', protect, uploadAdWithMusic, updateAd);
 router.patch('/:id/toggle', protect, toggleAdStatus);
+router.patch('/:id/review', protect, reviewAd);
 router.delete('/:id', protect, deleteAd);
 router.post('/:id/view', trackView);
 router.post('/:id/click', trackClick);
