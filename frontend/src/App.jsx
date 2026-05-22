@@ -59,6 +59,7 @@ import AdminLayout from './modules/admin/AdminLayout';
 import AdminLogin from './modules/admin/pages/AdminLogin';
 import { useAuth } from './context/AuthContext';
 import adminAuthService from './services/adminAuthService';
+import LenisProvider from './components/LenisProvider';
 
 const MainLayout = ({ onLogout }) => {
   const location = useLocation();
@@ -307,6 +308,7 @@ const AppContent = () => {
 function App() {
   return (
     <Router>
+      <LenisProvider>
         <ThemeProvider>
           <AdminConfigProvider>
             <SocketProvider>
@@ -314,6 +316,7 @@ function App() {
             </SocketProvider>
           </AdminConfigProvider>
         </ThemeProvider>
+      </LenisProvider>
     </Router>
   );
 }

@@ -49,14 +49,17 @@ const NotificationItem = ({ notification, onToggleFollow }) => {
       case 'follow': return 'started following you.';
       case 'follow_accept': return 'accepted your follow request.';
       case 'follow_request': return 'requested to follow you.';
-      case 'like': return 'liked your video.';
-      case 'comment': return 'commented on your video.';
-      case 'mention': return notification.comment ? 'mentioned you in a comment.' : 'mentioned you in a post.';
+      case 'like': return notification.comment ? 'liked your comment:' : 'liked your video.';
+      case 'comment': return 'commented:';
+      case 'mention': return notification.comment ? 'mentioned you in a comment:' : 'mentioned you in a post.';
       default: return 'interacted with you.';
     }
   };
 
   if (!sender) return null;
+
+  // Hide the notification if it's related to a reel but the reel is missing (e.g. deleted)
+  if (['like', 'comment', 'mention'].includes(type) && !notification.reel) return null;
 
   return (
     <div className="flex items-center px-4 py-3 gap-3 active:bg-gray-50 transition-colors cursor-pointer" onClick={handleOpenProfile}>
@@ -68,24 +71,32 @@ const NotificationItem = ({ notification, onToggleFollow }) => {
             className="w-full h-full object-cover rounded-full" 
           />
         </div>
+        {type === 'like' && (
+          <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-[#FE2C55] rounded-full flex items-center justify-center border-2 border-white shadow-sm">
+             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-3.5 h-3.5 text-white mt-[1px]">
+               <path d="M11.645 20.91l-.007-.003-.022-.012a15.247 15.247 0 01-.383-.218 25.18 25.18 0 01-4.244-3.17C4.688 15.36 2.25 12.174 2.25 8.25 2.25 5.322 4.714 3 7.688 3A5.5 5.5 0 0112 5.052 5.5 5.5 0 0116.313 3c2.973 0 5.437 2.322 5.437 5.25 0 3.925-2.438 7.111-4.739 9.256a25.175 25.175 0 01-4.244 3.17 15.247 15.247 0 01-.383.219l-.022.012-.007.004-.003.001a.752.752 0 01-.704 0l-.003-.001z" />
+             </svg>
+          </div>
+        )}
       </div>
       
       <div className="flex-1 min-w-0 pr-2">
-        <p className="text-[13px] leading-snug">
-          <span className="font-bold text-gray-900">{sender.username}</span>
-          <span className="text-gray-800 ml-1">
-             {getActionText()}
-          </span>
-          <span className="text-gray-400 ml-1.5">{getTimeAgo(createdAt)}</span>
+        <p className="text-[15px] leading-snug text-gray-800">
+          <span className="font-bold text-black">{sender.username}</span>{' '}
+          {getActionText()}
+          {(notification.text || notification.comment?.text) && (
+            <span className="text-black"> {notification.text || notification.comment?.text}</span>
+          )}
+          <span className="text-gray-500 ml-2">{getTimeAgo(createdAt)}</span>
         </p>
       </div>
 
-      {['like', 'comment', 'mention'].includes(type) && notification.reel ? (
-        <div className="shrink-0 w-10 h-14 rounded bg-gray-100 overflow-hidden border border-gray-200">
+      {['like', 'comment', 'mention'].includes(type) ? (
+        <div className="shrink-0 w-11 h-[60px] rounded-lg bg-gray-200 overflow-hidden border border-gray-200 flex items-center justify-center">
           <img 
-            src={notification.reel.video?.thumbnail || notification.reel.video?.url} 
+            src={notification.reel?.video?.thumbnail || notification.reel?.video?.url || notification.reel?.thumbnail || notification.reel?.url} 
             alt="reel" 
-            className="w-full h-full object-cover" 
+            className="w-full h-full object-cover bg-black" 
           />
         </div>
       ) : (

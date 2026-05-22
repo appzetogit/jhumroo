@@ -4,8 +4,10 @@ import { BiChevronLeft } from 'react-icons/bi';
 import VideoCard from '../../components/video/VideoCard';
 import { useAppContent } from '../../../../hooks/useAppContent';
 import { useReelsAPI } from '../../../../hooks/useReelsAPI';
+import { useLenis } from '../../../../hooks/useLenis';
 
 const HomePage = () => {
+  const lenis = useLenis();
   const navigate = useNavigate();
   const location = useLocation();
   const { reelId } = useParams();
@@ -108,7 +110,11 @@ const HomePage = () => {
         
         const nextCard = container.querySelector(`[data-index="${nextIndex}"]`);
         if (nextCard) {
-          nextCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          if (lenis) {
+            lenis.scrollTo(nextCard, { duration: 1.0 });
+          } else {
+            nextCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }
         }
 
         // Lock wheel scrolling for 600ms to allow smooth scroll animation to finish
@@ -122,7 +128,7 @@ const HomePage = () => {
     return () => {
       container.removeEventListener('wheel', handleWheel);
     };
-  }, [displayedVideos.length]);
+  }, [displayedVideos.length, lenis]);
 
   // Desktop Keyboard navigation helper (ArrowUp, ArrowDown)
   useEffect(() => {
@@ -142,7 +148,13 @@ const HomePage = () => {
         if (nextIndex >= 0 && nextIndex < displayedVideos.length) {
           const container = containerRef.current;
           const nextCard = container?.querySelector(`[data-index="${nextIndex}"]`);
-          nextCard?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          if (nextCard) {
+            if (lenis) {
+              lenis.scrollTo(nextCard, { duration: 1.0 });
+            } else {
+              nextCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+          }
         }
       }
     };
@@ -151,7 +163,7 @@ const HomePage = () => {
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [displayedVideos.length]);
+  }, [displayedVideos.length, lenis]);
 
   const handleTabChange = (nextTab) => {
     setCurrentTab(nextTab);
@@ -208,7 +220,7 @@ const HomePage = () => {
       {/* Vertical Feed */}
       <div
         ref={containerRef}
-        className="h-full w-full overflow-y-auto snap-y snap-mandatory reels-feed-container no-scrollbar"
+        className={`h-full w-full overflow-y-auto reels-feed-container no-scrollbar ${!lenis ? 'snap-y snap-mandatory' : ''}`}
         style={{ WebkitOverflowScrolling: 'touch', scrollBehavior: 'auto', touchAction: 'pan-y' }}
       >
         {displayedVideos.length === 0 && !loading ? (

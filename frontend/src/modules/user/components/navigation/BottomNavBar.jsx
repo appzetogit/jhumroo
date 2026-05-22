@@ -17,12 +17,12 @@ const iconMap = {
 const NavItem = ({ item, isActive, isDarkMode }) => {
   if (item.type === 'create') {
     return (
-      <NavLink to={item.path} className="flex-1 flex flex-col items-center justify-end pb-[7px] transition-transform active:scale-95 duration-200 will-change-transform">
-        <div className="relative w-[45px] h-[28px] flex items-center justify-center">
-          <div className="absolute left-0 w-[38px] h-full bg-tiktok-cyan rounded-[8px] z-[1]" />
-          <div className="absolute right-0 w-[38px] h-full bg-tiktok-red rounded-[8px] z-[1]" />
-          <div className="absolute w-[38px] h-full bg-white rounded-[8px] z-[2] flex items-center justify-center shadow-sm">
-            <span className="text-black text-[22px] font-bold leading-none">+</span>
+      <NavLink to={item.path} className="flex-1 flex flex-col items-center justify-center transition-transform active:scale-95 duration-200 will-change-transform">
+        <div className="relative w-[60px] h-[36px] flex items-center justify-center">
+          <div className="absolute left-0 w-[50px] h-full bg-tiktok-cyan rounded-[12px] z-[1]" />
+          <div className="absolute right-0 w-[50px] h-full bg-tiktok-red rounded-[12px] z-[1]" />
+          <div className="absolute w-[50px] h-full bg-white rounded-[12px] z-[2] flex items-center justify-center shadow-sm">
+            <span className="text-black text-[28px] font-bold leading-none mb-[3px]">+</span>
           </div>
         </div>
       </NavLink>
