@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import adminAuthService from '../../../services/adminAuthService';
-import { BiLockAlt, BiEnvelope, BiErrorCircle } from 'react-icons/bi';
+import { BiLockAlt, BiEnvelope, BiErrorCircle, BiShow, BiHide } from 'react-icons/bi';
+import logo from '../../../assets/loginPage/Logo.png';
 
 const AdminLogin = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
@@ -34,7 +36,7 @@ const AdminLogin = () => {
       <div className="admin-login-card">
         <div className="admin-login-header">
           <div className="admin-logo" style={{ margin: '0 auto 20px', width: '64px', height: '64px' }}>
-            <span className="admin-logo-fallback" style={{ fontSize: '24px' }}>A</span>
+            <img src={logo} alt="Jhumroo Admin Logo" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
           </div>
           <h1>Jhumroo Admin</h1>
           <p>Please enter your credentials to access the console.</p>
@@ -60,12 +62,19 @@ const AdminLogin = () => {
             <div className="admin-input-wrapper">
               <BiLockAlt className="input-icon" />
               <input
-                type="password"
+                type={showPassword ? "text" : "password"}
                 placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
               />
+              <button
+                type="button"
+                className="password-toggle-btn"
+                onClick={() => setShowPassword(!showPassword)}
+              >
+                {showPassword ? <BiHide /> : <BiShow />}
+              </button>
             </div>
           </div>
 
@@ -148,12 +157,28 @@ const AdminLogin = () => {
         }
         .admin-input-wrapper input {
           width: 100%;
-          padding: 12px 12px 12px 42px;
+          padding: 12px 42px 12px 42px;
           border-radius: 12px;
           border: 1px solid #e5e7eb;
           font-size: 14px;
+          color: #000;
           outline: none;
           transition: all 0.2s ease;
+        }
+        .password-toggle-btn {
+          position: absolute;
+          right: 14px;
+          background: none;
+          border: none;
+          color: #9ca3af;
+          font-size: 18px;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          padding: 0;
+        }
+        .password-toggle-btn:hover {
+          color: #4b5563;
         }
         .admin-input-wrapper input:focus {
           border-color: #fe2c55;

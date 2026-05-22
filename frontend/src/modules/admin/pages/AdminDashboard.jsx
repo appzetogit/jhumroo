@@ -119,9 +119,6 @@ const AdminDashboard = () => {
           <span className="admin-status-pill">
             <span className="pulse-dot"></span> Live Updates
           </span>
-          <button type="button" className="admin-primary-btn">
-            Generate Report
-          </button>
         </div>
       </div>
 
