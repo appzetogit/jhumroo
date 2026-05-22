@@ -34,6 +34,7 @@ import adminAnalyticsRoutes from './modules/admin/routes/analytics.routes.js';
 import adminAdminsRoutes from './modules/admin/routes/admins.routes.js';
 import adminReportRoutes from './modules/admin/routes/report.routes.js';
 import adminInterestRoutes from './modules/admin/routes/interest.routes.js';
+import adminNotificationRoutes from './modules/admin/routes/notification.routes.js';
 
 // Load environment variables
 dotenv.config();
@@ -128,6 +129,7 @@ app.use('/api/admin/problem-reports', problemReportRoutes);
 app.use('/api/admin/support-requests', supportRoutes);
 app.use('/api/admin/static-pages', staticPageRoutes);
 app.use('/api/admin/interests', adminInterestRoutes);
+app.use('/api/admin/notifications', adminNotificationRoutes);
 
 // 404 handler
 app.use('*', (req, res) => {

@@ -10,6 +10,7 @@ import EditReelSheet from '../modals/EditReelSheet';
 import FullscreenPlayer from '../modals/FullscreenPlayer';
 import reelService from '../../../../services/reelService';
 import userService from '../../../../services/userService';
+import messageService from '../../../../services/messageService';
 
 import adService from '../../../../services/adService';
 
@@ -83,7 +84,7 @@ const VideoOverlay = ({ reelId, username, caption, musicName, isLiked, likes, co
     }
   };
 
-  const handleShare = async (platform = 'general') => {
+  const handleShare = async (platform = 'general', targetUserId = null) => {
     const shareUrl = `${window.location.origin}/reel/${reelId}`;
     const shareText = caption || 'Watch this amazing reel on Jhumroo!';
     
@@ -114,14 +115,26 @@ const VideoOverlay = ({ reelId, username, caption, musicName, isLiked, likes, co
           alert('Link copied to clipboard!');
           shared = true;
         }
+      } else if (platform === 'chat' && targetUserId) {
+        await messageService.sendMessage({
+          receiverId: targetUserId,
+          messageType: 'reel',
+          reelId: reelId
+        });
+        shared = true;
       }
 
       if (shared) {
         await reelService.shareReel(reelId);
       }
     } catch (error) {
+      // Rollback optimistic update
+      if (typeof onUpdate === 'function') {
+        onUpdate({ stats: { ...(videoData.stats || {}), sharesCount: shares } });
+      }
       if (error.name !== 'AbortError') {
         console.error('Error sharing:', error);
+        throw error;
       }
     }
   };
@@ -274,7 +287,7 @@ const VideoOverlay = ({ reelId, username, caption, musicName, isLiked, likes, co
              
 
              {/* Share */}
-             <div className="flex flex-col items-center text-white tap-effect" onClick={(e) => { e.stopPropagation(); handleShare(); }} style={{ pointerEvents: 'auto' }}>
+             <div className="flex flex-col items-center text-white tap-effect" onClick={(e) => { e.stopPropagation(); setIsShareOpen(true); }} style={{ pointerEvents: 'auto' }}>
                 <svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="white" stroke="white" strokeWidth="0" strokeLinecap="round" strokeLinejoin="round">
                     <path d="m22 2-7 20-4-9-9-4Z"></path>
                     <path d="M22 2 11 13"></path>
@@ -359,7 +372,10 @@ const VideoOverlay = ({ reelId, username, caption, musicName, isLiked, likes, co
          reelData={videoData}
          isSaved={isSaved}
          onSaveClick={onSaveClick}
-         onShareClick={handleShare}
+         onShareClick={() => {
+           setIsMoreOpen(false);
+           setIsShareOpen(true);
+         }}
          onReportClick={() => {
            setIsMoreOpen(false);
            setIsReportOpen(true);

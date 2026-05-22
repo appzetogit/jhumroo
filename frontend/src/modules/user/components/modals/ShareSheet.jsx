@@ -1,7 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { BiX, BiLinkAlt, BiFlag, BiDownload, BiMessageSquareDetail } from 'react-icons/bi';
 import { FaWhatsapp, FaInstagram, FaFacebookMessenger } from 'react-icons/fa';
 import { useTheme } from '../../../../context/ThemeContext';
+import { useAuth } from '../../../../context/AuthContext';
+import messageService from '../../../../services/messageService';
+import followService from '../../../../services/followService';
+import userService from '../../../../services/userService';
 
 import reelService from '../../../../services/reelService';
 import api from '../../../../services/api';
@@ -9,6 +13,108 @@ import api from '../../../../services/api';
 const ShareSheet = ({ isOpen, onClose, reelData, onShare }) => {
   const { isDarkMode } = useTheme();
   const [isDownloading, setIsDownloading] = useState(false);
+
+  const { user: currentUser } = useAuth();
+  const [friends, setFriends] = useState([]);
+  const [loadingFriends, setLoadingFriends] = useState(false);
+  const [sentStatus, setSentStatus] = useState({});
+
+  useEffect(() => {
+    if (isOpen && currentUser) {
+      fetchFriends();
+    } else if (!isOpen) {
+      setSentStatus({});
+    }
+  }, [isOpen, currentUser]);
+
+  const fetchFriends = async () => {
+    setLoadingFriends(true);
+    try {
+      let uniqueFriends = [];
+      const seenIds = new Set();
+
+      try {
+        const res = await messageService.getConversations();
+        if (res.success && res.conversations) {
+          res.conversations.forEach(c => {
+            if (c.participant && !seenIds.has(c.participant._id)) {
+              seenIds.add(c.participant._id);
+              uniqueFriends.push({
+                _id: c.participant._id,
+                username: c.participant.username,
+                fullName: c.participant.fullName,
+                profilePicture: c.participant.profilePicture
+              });
+            }
+          });
+        }
+      } catch (err) {
+        console.error("Error fetching conversations:", err);
+      }
+
+      if (uniqueFriends.length < 5 && currentUser?._id) {
+        try {
+          const res = await followService.getMutualFollowers(currentUser._id);
+          if (res.success && res.users) {
+            res.users.forEach(u => {
+              if (!seenIds.has(u._id)) {
+                seenIds.add(u._id);
+                uniqueFriends.push({
+                  _id: u._id,
+                  username: u.username,
+                  fullName: u.fullName,
+                  profilePicture: u.profilePicture
+                });
+              }
+            });
+          }
+        } catch (err) {
+          console.error("Error fetching mutual followers:", err);
+        }
+      }
+
+      if (uniqueFriends.length < 5) {
+        try {
+          const res = await userService.getSuggestedUsers(10);
+          if (res.success && res.users) {
+            res.users.forEach(u => {
+              if (u._id !== currentUser?._id && !seenIds.has(u._id)) {
+                seenIds.add(u._id);
+                uniqueFriends.push({
+                  _id: u._id,
+                  username: u.username,
+                  fullName: u.fullName,
+                  profilePicture: u.profilePicture
+                });
+              }
+            });
+          }
+        } catch (err) {
+          console.error("Error fetching suggested users:", err);
+        }
+      }
+
+      setFriends(uniqueFriends);
+    } catch (error) {
+      console.error("Error in fetchFriends:", error);
+    } finally {
+      setLoadingFriends(false);
+    }
+  };
+
+  const handleSendToFriend = async (friend) => {
+    const friendId = friend._id;
+    if (sentStatus[friendId] === 'sending' || sentStatus[friendId] === 'sent') return;
+
+    setSentStatus(prev => ({ ...prev, [friendId]: 'sending' }));
+    try {
+      await onShare?.('chat', friendId);
+      setSentStatus(prev => ({ ...prev, [friendId]: 'sent' }));
+    } catch (err) {
+      console.error("Failed to send reel to friend:", err);
+      setSentStatus(prev => ({ ...prev, [friendId]: null }));
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -74,15 +180,59 @@ const ShareSheet = ({ isOpen, onClose, reelData, onShare }) => {
         <div className="space-y-6">
             <div>
                 <h3 className={`text-sm font-bold px-2 mb-4 ${isDarkMode ? 'text-white/50' : 'text-black/45'}`}>Send to</h3>
-                <div className="flex gap-4 overflow-x-auto no-scrollbar scroll-smooth px-2">
-                    {[1,2,3,4,5,6].map(i => (
-                        <div key={`friend-${i}`} className="flex flex-col items-center shrink-0 w-16 gap-1 group cursor-pointer" onClick={() => handleShareAction()}>
-                           <div className={`w-12 h-12 rounded-full overflow-hidden border group-active:scale-95 transition-transform ${isDarkMode ? 'border-white/5' : 'border-black/10'}`}>
-                               <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=friend${i}`} alt="friend" className="w-full h-full object-cover" />
-                           </div>
-                           <span className={`text-[10px] font-bold truncate w-full text-center ${isDarkMode ? 'text-white/60' : 'text-black/55'}`}>friend_{i}</span>
+                <div className="flex gap-4 overflow-x-auto no-scrollbar scroll-smooth px-2 min-h-[92px] items-center">
+                    {loadingFriends ? (
+                        <div className="flex gap-4">
+                            {[1, 2, 3, 4].map(i => (
+                                <div key={`skeleton-${i}`} className="flex flex-col items-center w-16 gap-1 animate-pulse">
+                                    <div className={`w-12 h-12 rounded-full ${isDarkMode ? 'bg-white/10' : 'bg-black/5'}`} />
+                                    <div className={`w-10 h-2 rounded ${isDarkMode ? 'bg-white/10' : 'bg-black/5'}`} />
+                                    <div className={`w-12 h-4 rounded ${isDarkMode ? 'bg-white/10' : 'bg-black/5'}`} />
+                                </div>
+                            ))}
                         </div>
-                    ))}
+                    ) : !currentUser ? (
+                        <p className={`text-xs px-2 font-bold ${isDarkMode ? 'text-white/40' : 'text-black/40'}`}>Please login to send to friends</p>
+                    ) : friends.length > 0 ? (
+                        friends.map(friend => {
+                            const status = sentStatus[friend._id];
+                            return (
+                                <div 
+                                  key={friend._id} 
+                                  className="flex flex-col items-center shrink-0 w-16 gap-1 group cursor-pointer"
+                                  onClick={() => handleSendToFriend(friend)}
+                                >
+                                   <div className={`w-12 h-12 rounded-full overflow-hidden border group-active:scale-95 transition-transform ${isDarkMode ? 'border-white/5' : 'border-black/10'}`}>
+                                       <img 
+                                          src={friend.profilePicture?.url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${friend.username}`} 
+                                          alt={friend.username} 
+                                          className="w-full h-full object-cover bg-gray-100" 
+                                       />
+                                   </div>
+                                   <span className={`text-[10px] font-bold truncate w-full text-center ${isDarkMode ? 'text-white/60' : 'text-black/55'}`}>
+                                       {friend.username}
+                                   </span>
+                                   <button 
+                                      className={`w-full py-0.5 rounded-[4px] text-[10px] font-black tracking-wide transition-all active:scale-[0.95] ${
+                                        status === 'sent'
+                                          ? 'bg-emerald-500 text-white shadow-sm shadow-emerald-500/10'
+                                          : status === 'sending'
+                                          ? 'bg-gray-500 text-white/70 cursor-not-allowed'
+                                          : 'bg-[#FE2C55] text-white shadow-sm shadow-[#FE2C55]/10'
+                                      }`}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleSendToFriend(friend);
+                                      }}
+                                   >
+                                      {status === 'sent' ? 'Sent' : status === 'sending' ? '...' : 'Send'}
+                                   </button>
+                                </div>
+                            );
+                        })
+                    ) : (
+                        <p className={`text-xs px-2 font-bold ${isDarkMode ? 'text-white/40' : 'text-black/40'}`}>No friends found</p>
+                    )}
                 </div>
             </div>
 
