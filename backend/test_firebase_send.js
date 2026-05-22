@@ -1,8 +1,8 @@
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 
-// Monkey patch Date.now to adjust for 4.5 minutes clock skew
-const driftMs = 267000; // 4 minutes 27 seconds
+// Monkey patch Date.now to adjust for clock drift (subtracting 10s to ensure iat is in the past)
+const driftMs = -10000;
 const originalNow = Date.now;
 Date.now = function() {
   return originalNow() + driftMs;

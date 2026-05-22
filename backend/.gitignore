@@ -31,3 +31,6 @@ temp/
 # Build
 dist/
 build/
+
+# Firebase Service Account Key
+*firebase-adminsdk*.json
