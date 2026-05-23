@@ -117,13 +117,16 @@ export const createNotification = async ({ recipient, sender, type, reel, commen
                 break;
             }
 
+            // IMPORTANT: Send data-only message (no `notification` block).
+            // If both `notification` AND `data` are present, Android/Chrome shows TWO notifications:
+            //   1. One from FCM's automatic handling of `notification` block
+            //   2. One from the service worker's onBackgroundMessage handler
+            // By sending data-only, ONLY the service worker shows the notification (one notification).
             const message = {
-              notification: {
-                title,
-                body: body.length > 100 ? body.substring(0, 97) + '...' : body,
-              },
               data: {
                 type,
+                title,
+                body: body.length > 100 ? body.substring(0, 97) + '...' : body,
                 senderId: sender.toString(),
                 reelId: reel ? reel.toString() : '',
                 commentId: comment ? comment.toString() : '',

@@ -72,23 +72,26 @@ export const sendNotification = asyncHandler(async (req, res) => {
     await Notification.insertMany(inAppNotifications);
   }
 
-  // 2. Collect FCM tokens
+  // 2. Collect FCM tokens — deduplicate per user to prevent sending 2 pushes to same device
   const tokens = [];
+  const seenTokens = new Set();
   users.forEach(user => {
-    if (user.fcmToken && user.fcmToken.trim() !== '') tokens.push(user.fcmToken);
-    if (user.fcmTokenMobile && user.fcmTokenMobile.trim() !== '') tokens.push(user.fcmTokenMobile);
+    const rawTokens = [user.fcmToken, user.fcmTokenMobile].filter(t => t && t.trim() !== '');
+    const uniqueTokens = [...new Set(rawTokens)]; // remove duplicates within same user
+    uniqueTokens.forEach(t => {
+      if (!seenTokens.has(t)) {
+        seenTokens.add(t);
+        tokens.push(t);
+      }
+    });
   });
 
   // 3. Dispatch Firebase Push Notifications if tokens and messaging service are available
+  // Data-only message (no `notification` block) — prevents Android from showing 2 notifications
   let fcmSentCount = 0;
   if (messaging && tokens.length > 0) {
     try {
       const payload = {
-        notification: {
-          title: title,
-          body: message,
-          ...(imageUrl && { imageUrl })
-        },
         data: {
           type: 'admin_announcement',
           title: title,
