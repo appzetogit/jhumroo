@@ -504,13 +504,41 @@ export const getSuggestedUsers = asyncHandler(async (req, res) => {
 export const updateFCMToken = asyncHandler(async (req, res) => {
   const { fcmTokenMobile, fcmToken, token, platform } = req.body;
 
-  if (fcmTokenMobile) req.user.fcmTokenMobile = fcmTokenMobile;
-  if (fcmToken) req.user.fcmToken = fcmToken;
-
-  if (token) {
+  // Handle explicit clear (empty string) — wipe both token fields
+  if (fcmToken === '') {
+    req.user.fcmToken = '';
+    req.user.fcmTokenMobile = '';
+  } else if (fcmTokenMobile === '') {
+    req.user.fcmToken = '';
+    req.user.fcmTokenMobile = '';
+  } else if (fcmToken) {
+    // Registering a web/PWA token:
+    // Store in fcmToken and clear fcmTokenMobile if it holds a DIFFERENT token
+    // (same device — prevents dual push to the same device from two token fields)
+    if (req.user.fcmTokenMobile && req.user.fcmTokenMobile !== fcmToken) {
+      console.log(`[FCM] Clearing stale fcmTokenMobile — new web token registered for user ${req.user._id}`);
+      req.user.fcmTokenMobile = '';
+    }
+    req.user.fcmToken = fcmToken;
+  } else if (fcmTokenMobile) {
+    // Registering a native mobile token:
+    // Store in fcmTokenMobile and clear fcmToken if it holds a DIFFERENT token
+    if (req.user.fcmToken && req.user.fcmToken !== fcmTokenMobile) {
+      console.log(`[FCM] Clearing stale fcmToken — new mobile token registered for user ${req.user._id}`);
+      req.user.fcmToken = '';
+    }
+    req.user.fcmTokenMobile = fcmTokenMobile;
+  } else if (token) {
+    // Legacy: generic token field with optional platform hint
     if (platform === 'app' || platform === 'mobile') {
+      if (req.user.fcmToken && req.user.fcmToken !== token) {
+        req.user.fcmToken = '';
+      }
       req.user.fcmTokenMobile = token;
     } else {
+      if (req.user.fcmTokenMobile && req.user.fcmTokenMobile !== token) {
+        req.user.fcmTokenMobile = '';
+      }
       req.user.fcmToken = token;
     }
   }

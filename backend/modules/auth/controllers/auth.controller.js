@@ -97,14 +97,22 @@ export const verifyOTP = asyncHandler(async (req, res) => {
     });
   }
 
-  // Store FCM tokens if provided
-  if (fcmTokenMobile) user.fcmTokenMobile = fcmTokenMobile;
-  if (fcmToken) user.fcmToken = fcmToken;
+  // Store FCM tokens if provided — clear stale tokens in the other field to prevent dual-push
+  if (fcmTokenMobile) {
+    if (user.fcmToken && user.fcmToken !== fcmTokenMobile) user.fcmToken = '';
+    user.fcmTokenMobile = fcmTokenMobile;
+  }
+  if (fcmToken) {
+    if (user.fcmTokenMobile && user.fcmTokenMobile !== fcmToken) user.fcmTokenMobile = '';
+    user.fcmToken = fcmToken;
+  }
 
   if (token) {
     if (platform === 'app' || platform === 'mobile') {
+      if (user.fcmToken && user.fcmToken !== token) user.fcmToken = '';
       user.fcmTokenMobile = token;
     } else {
+      if (user.fcmTokenMobile && user.fcmTokenMobile !== token) user.fcmTokenMobile = '';
       user.fcmToken = token;
     }
   }
