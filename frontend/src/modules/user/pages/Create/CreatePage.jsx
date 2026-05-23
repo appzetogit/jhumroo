@@ -312,6 +312,8 @@ const CreatePage = () => {
   const [isRendering, setIsRendering] = useState(false);
   const [renderProgress, setRenderProgress] = useState(0);
   const [isUploading, setUploading] = useState(false);
+  const [coverImageUrl, setCoverImageUrl] = useState(null); // user-selected or auto-generated cover
+  const coverInputRef = useRef(null);
   const [textStartTime, setTextStartTime] = useState(0);
   const [textEndTime, setTextEndTime] = useState(5); // Default 5 seconds
   const [selectedStickerId, setSelectedStickerId] = useState(null);
@@ -1936,6 +1938,7 @@ const CreatePage = () => {
                 setCurrentClipIndex(0);
                 setLocationSearchResults([]);
                 setIsSearchingLocation(false);
+                setCoverImageUrl(null);
             }, 1500);
         };
 
@@ -1955,7 +1958,8 @@ const CreatePage = () => {
                 isAgeRestricted: postState.audienceControls,
                 location: postState.location,
                 music: musicPayload,
-                edits: editsPayload
+                edits: editsPayload,
+                ...(coverImageUrl && { thumbnailUrl: coverImageUrl })
             };
 
             const response = await reelService.completeUpload(postData);
@@ -1977,6 +1981,9 @@ const CreatePage = () => {
             formData.append('autoCaptions', postState.autoCaptions);
             formData.append('captionLanguage', postState.captionLanguage || 'English');
             formData.append('isAgeRestricted', postState.audienceControls);
+            if (coverImageUrl) {
+                formData.append('thumbnailUrl', coverImageUrl);
+            }
             
             if (postState.location) {
                 formData.append('location', typeof postState.location === 'object' ? JSON.stringify(postState.location) : postState.location);
@@ -3770,16 +3777,32 @@ const CreatePage = () => {
             />
             <button
               type="button"
-              onClick={() => {}}
+              onClick={() => coverInputRef.current?.click()}
               className="relative h-[110px] w-[82px] overflow-hidden rounded-[6px] border border-black/10"
             >
-              {previewUrl ? (
+              {/* Hidden file input */}
+              <input
+                ref={coverInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  const url = URL.createObjectURL(file);
+                  setCoverImageUrl(url);
+                  e.target.value = '';
+                }}
+              />
+              {coverImageUrl ? (
+                <img src={coverImageUrl} alt="Cover" className="h-full w-full object-cover" />
+              ) : previewUrl ? (
                 <video src={previewUrl} className="h-full w-full object-cover" />
               ) : (
-                selectedMedia.image && <img src={selectedMedia.image} alt="Cover" className="h-full w-full object-cover" />
+                selectedMedia?.image && <img src={selectedMedia.image} alt="Cover" className="h-full w-full object-cover" />
               )}
               <span className="absolute inset-x-0 bottom-0 bg-black/55 px-2 py-2 text-left text-[11px] font-medium text-white">
-                Select cover
+                {coverImageUrl ? 'Change cover' : 'Select cover'}
               </span>
             </button>
           </div>
@@ -3865,25 +3888,7 @@ const CreatePage = () => {
             </div>
           </button>
 
-          <div className="flex gap-2 overflow-x-auto no-scrollbar rounded-[10px] bg-white px-4 py-3">
-            {CREATE_LOCATION_CHIPS.map((chipLabel) => (
-              <button
-                key={chipLabel}
-                type="button"
-                onClick={() =>
-                  setPostState((currentState) => ({
-                    ...currentState,
-                    location: chipLabel,
-                  }))
-                }
-                className={`shrink-0 rounded-[4px] border px-3 py-1.5 text-[12px] ${
-                  postState.location === chipLabel ? 'border-[#fe2c55] text-[#fe2c55]' : 'border-black/10 text-black/70'
-                }`}
-              >
-                {chipLabel}
-              </button>
-            ))}
-          </div>
+
 
         </div>
 
@@ -3928,17 +3933,7 @@ const CreatePage = () => {
             </div>
           ))}
 
-          <button
-            type="button"
-            onClick={() => pushStage('more-options')}
-            className="flex w-full items-center justify-between py-3 active:opacity-80"
-          >
-            <div>
-              <p className="text-left text-[15px]">More options</p>
-              <p className="mt-1 text-left text-[12px] text-black/35">Branded content</p>
-            </div>
-            <BiChevronRight size={18} className="text-black/35" />
-          </button>
+
         </div>
 
         <div className="px-4 pb-28">

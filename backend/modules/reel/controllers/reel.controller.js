@@ -101,19 +101,26 @@ export const completeUpload = asyncHandler(async (req, res) => {
     isAgeRestricted,
     location, 
     music,
-    edits 
+    edits,
+    thumbnailUrl  // Optional: client-generated cover thumbnail
   } = req.body;
 
-  // Create initial reel record
+  // Get raw video URL
+  const rawUrl = await getFileUrl(key);
+
+  // Create reel record — mark as 'completed' immediately so it shows
+  // in the feed right away. Background processing will update the
+  // video URL and thumbnail once FFmpeg finishes.
   const reel = await Reel.create({
     _id: videoId,
     user: req.user._id,
     video: {
-      url: await getFileUrl(key),
+      url: rawUrl,
       publicId: key,
+      thumbnail: thumbnailUrl || '', // Use client-provided thumbnail if available
       duration: 0, // Will be updated after processing
     },
-    rawVideoUrl: await getFileUrl(key),
+    rawVideoUrl: rawUrl,
     caption: caption || '',
     audience: audience || 'everyone',
     allowComments: allowComments !== 'false' && allowComments !== false,
@@ -136,7 +143,7 @@ export const completeUpload = asyncHandler(async (req, res) => {
       duration: music.clipDuration || music.duration || 15
     } : undefined,
     edits: edits ? (typeof edits === 'string' ? JSON.parse(edits) : edits) : undefined,
-    status: 'pending'
+    status: 'completed'  // Immediately visible in feed
   });
 
   // Update user reel count
@@ -147,38 +154,28 @@ export const completeUpload = asyncHandler(async (req, res) => {
   // Handle mentions
   handleMentionNotifications(reel, req.user._id);
 
-  // Trigger background processing (Audio Merging)
-  reel.status = 'processing';
-  await reel.save();
-
-  // Non-blocking processing
+  // Non-blocking background processing (merges audio, extracts duration)
+  // This will update the video URL and thumbnail once done.
   processReelWithAudio(reel._id, key, reel.music)
     .then(async (processed) => {
       console.log(`[ReelController] Processing successful for ${reel._id}`);
       await Reel.findByIdAndUpdate(reel._id, {
         'video.url': processed.videoUrl,
         'video.publicId': processed.videoKey,
-        'video.thumbnail': processed.thumbnailUrl,
+        // Only overwrite thumbnail if client didn't provide one
+        ...(!thumbnailUrl && { 'video.thumbnail': processed.thumbnailUrl }),
         'video.duration': processed.duration || 0,
-        status: 'completed'
       });
     })
     .catch(async (err) => {
-      console.error(`[ReelController] Processing failed for ${reel._id}:`, err);
-      // Fallback: If processing fails (e.g. FFmpeg not installed on live server), mark as completed
-      // using the raw video URL and a high-quality fallback thumbnail so the reel is successfully published.
-      const fallbackUrl = reel.rawVideoUrl || reel.video?.url || (await getFileUrl(key));
-      await Reel.findByIdAndUpdate(reel._id, {
-        'video.url': fallbackUrl,
-        'video.thumbnail': '',
-        status: 'completed'
-      });
-      console.log(`[ReelController] Gracefully fell back to completed status for reel ${reel._id}`);
+      // Processing failed (e.g. FFmpeg not on live server) — reel is
+      // already 'completed' with raw URL, so no further action needed.
+      console.error(`[ReelController] Background processing failed for ${reel._id}:`, err);
     });
 
   res.status(201).json({
     success: true,
-    message: 'Upload completed, processing started',
+    message: 'Reel published successfully',
     reel
   });
 });
