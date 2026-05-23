@@ -376,10 +376,12 @@ export const acceptFollowRequest = asyncHandler(async (req, res) => {
 
   // Create/Update 'follow' notification for current user (the one who accepted)
   // This ensures it shows up in their activity list as "X started following you"
+  // skipPush=true because this is an in-app activity record, not an alert for them
   await createNotification({
     recipient: req.user._id,
     sender: userId,
-    type: 'follow'
+    type: 'follow',
+    skipPush: true
   });
 
   // Cleanup: Delete the old follow_request notification

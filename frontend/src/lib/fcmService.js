@@ -7,6 +7,8 @@ import { getMessaging, getToken, onMessage, isSupported } from "firebase/messagi
 import { userService } from "../services";
 
 let messagingInstance = null;
+// Singleton promise to ensure service worker is only registered once
+let swRegistrationPromise = null;
 
 async function getFCMInstance() {
   if (messagingInstance) return messagingInstance;
@@ -27,6 +29,26 @@ async function getFCMInstance() {
   }
   
   return null;
+}
+
+/**
+ * Register service worker exactly once and return a singleton promise
+ */
+function getServiceWorkerRegistration() {
+  if (!swRegistrationPromise && "serviceWorker" in navigator) {
+    swRegistrationPromise = navigator.serviceWorker
+      .register("/firebase-messaging-sw.js")
+      .then(async (reg) => {
+        await navigator.serviceWorker.ready;
+        return reg;
+      })
+      .catch((err) => {
+        console.error("[FCM] Service worker registration failed:", err);
+        swRegistrationPromise = null; // allow retry on next call
+        return null;
+      });
+  }
+  return swRegistrationPromise;
 }
 
 /**
@@ -58,11 +80,8 @@ export async function getFcmToken() {
 
     const vapidKey = import.meta.env.VITE_FIREBASE_VAPID_KEY || "BOJhJlQwJQPP5z4H5ssXAg7Cw1hbjRTBC16kU5YRNMZU2A_Bu0a81rtlGpenwbvEqLcMcRhPfN0Fk88Dl7vvAIg";
 
-    let serviceWorkerRegistration;
-    if ("serviceWorker" in navigator) {
-      serviceWorkerRegistration = await navigator.serviceWorker.register("/firebase-messaging-sw.js");
-      await navigator.serviceWorker.ready;
-    }
+    // Use singleton SW registration to prevent multiple instances
+    const serviceWorkerRegistration = await getServiceWorkerRegistration();
 
     const token = await getToken(messaging, {
       vapidKey: String(vapidKey).trim(),
@@ -95,13 +114,12 @@ export async function registerFcmToken(options = {}) {
 }
 
 /**
- * Remove FCM token on logout
+ * Remove FCM token on logout - clears token from backend without re-fetching
  */
 export async function removeFcmToken() {
   try {
-    const token = await getFcmToken();
-    if (!token) return;
-
+    // Directly clear the token from backend — no need to call getFcmToken() here
+    // (which would unnecessarily re-register the SW and request permission again)
     await userService.updateFCMToken({ fcmToken: "" });
     console.log("[FCM] Token unregistered from backend on logout");
   } catch (err) {
@@ -121,18 +139,23 @@ export async function onForegroundMessage(callback) {
 
     // Set up the message handler
     const unsubscribe = onMessage(messaging, (payload) => {
-      const tag = payload.data?.tag || payload.data?.reelId || payload.data?.commentId;
-      if (tag) {
-        const notificationKey = `fcm_notification_${tag}`;
-        const lastShown = sessionStorage.getItem(notificationKey);
-        const now = Date.now();
-        
-        // If same notification was shown in last 2 seconds, skip duplicates
-        if (lastShown && (now - parseInt(lastShown)) < 2000) {
-          return;
-        }
-        sessionStorage.setItem(notificationKey, now.toString());
+      // Build a deduplication key from type + senderId + reelId/commentId
+      // This covers all notification types, not just those with a tag field
+      const type = payload.data?.type || 'unknown';
+      const senderId = payload.data?.senderId || '';
+      const reelId = payload.data?.reelId || '';
+      const commentId = payload.data?.commentId || '';
+      const dedupeKey = `fcm_fg_${type}_${senderId}_${reelId}_${commentId}`;
+
+      const lastShown = sessionStorage.getItem(dedupeKey);
+      const now = Date.now();
+
+      // Suppress if the same notification was already handled within 3 seconds
+      if (lastShown && (now - parseInt(lastShown)) < 3000) {
+        console.log('[FCM] Suppressing duplicate foreground notification:', dedupeKey);
+        return;
       }
+      sessionStorage.setItem(dedupeKey, now.toString());
       
       if (callback && typeof callback === 'function') {
         callback(payload);

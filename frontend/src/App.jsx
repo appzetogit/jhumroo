@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { registerFcmToken, onForegroundMessage, removeFcmToken } from './lib/fcmService';
 import { BrowserRouter as Router, Routes, Route, useLocation, Navigate, useNavigate } from 'react-router-dom';
 import BottomNavBar from './modules/user/components/navigation/BottomNavBar';
@@ -173,6 +173,9 @@ const AppContent = () => {
     }, [location.pathname]);
 
     // Sync FCM Token and set up foreground listener when authenticated
+    // We use a ref to ensure only one listener is active at a time
+    const fcmUnsubscribeRef = useRef(null);
+
     useEffect(() => {
         if (isAuthenticated && appState === 'main') {
             const syncFcm = async () => {
@@ -186,27 +189,28 @@ const AppContent = () => {
             const timer = setTimeout(syncFcm, 1000); // Small buffer to ensure session is stable
 
             // Setup foreground messaging listener
-            let unsubscribe = () => {};
+            // IMPORTANT: We do NOT call `new Notification()` here because the
+            // Service Worker's onBackgroundMessage already handles showing the OS
+            // notification. Calling new Notification() here causes duplicates.
+            // Use this handler only for in-app UI updates (e.g., toasts, badge counts).
             onForegroundMessage((payload) => {
-                console.log('[FCM] Foreground notification payload:', payload);
-                
-                // Show browser Notification if permitted
-                if (Notification.permission === 'granted') {
-                  const title = payload.notification?.title || payload.data?.title || 'Jhumroo';
-                  const body = payload.notification?.body || payload.data?.body || '';
-                  new Notification(title, {
-                    body: body,
-                    icon: '/favicon.svg',
-                    tag: payload.data?.tag || payload.data?.reelId || 'jhumroo_foreground',
-                  });
-                }
+                console.log('[FCM] Foreground notification received (in-app only):', payload?.data?.type);
+                // Add in-app notification badge/toast here if needed.
+                // Do NOT call new Notification() - the service worker handles OS notifications.
             }).then(unsub => {
-                unsubscribe = unsub;
+                // Cleanup any previously registered listener before setting the new one
+                if (fcmUnsubscribeRef.current) {
+                    fcmUnsubscribeRef.current();
+                }
+                fcmUnsubscribeRef.current = unsub;
             });
 
             return () => {
                 clearTimeout(timer);
-                if (unsubscribe) unsubscribe();
+                if (fcmUnsubscribeRef.current) {
+                    fcmUnsubscribeRef.current();
+                    fcmUnsubscribeRef.current = null;
+                }
             };
         }
     }, [isAuthenticated, appState]);

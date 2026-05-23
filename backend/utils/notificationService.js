@@ -4,9 +4,17 @@ import Follow from '../models/Follow.model.js';
 import { messaging } from '../config/firebase.js';
 
 /**
- * Create an in-app notification and send a push notification via FCM
+ * Create an in-app notification and optionally send a push notification via FCM
+ * @param {object} options
+ * @param {string} options.recipient - Recipient user ID
+ * @param {string} options.sender - Sender user ID  
+ * @param {string} options.type - Notification type
+ * @param {string} [options.reel] - Reel ID (optional)
+ * @param {string} [options.comment] - Comment ID (optional)
+ * @param {string} [options.text] - Custom text (optional)
+ * @param {boolean} [options.skipPush=false] - If true, skip FCM push (in-app only)
  */
-export const createNotification = async ({ recipient, sender, type, reel, comment, text }) => {
+export const createNotification = async ({ recipient, sender, type, reel, comment, text, skipPush = false }) => {
   try {
     // Avoid self-notifications
     if (recipient.toString() === sender.toString()) {
@@ -56,15 +64,17 @@ export const createNotification = async ({ recipient, sender, type, reel, commen
       text
     });
 
-    // Send push notification if messaging is initialized
-    if (messaging) {
+    // Send push notification if messaging is initialized and not suppressed
+    if (!skipPush && messaging) {
       try {
         // Fetch recipient's FCM tokens
         const user = await User.findById(recipient).select('fcmToken fcmTokenMobile username fullName');
         const senderUser = await User.findById(sender).select('username fullName');
         
         if (user && (user.fcmToken || user.fcmTokenMobile)) {
-          const tokens = [user.fcmToken, user.fcmTokenMobile].filter(t => t && t.trim() !== '');
+          // Deduplicate tokens — same token can be stored in both fields (e.g., single device)
+          const rawTokens = [user.fcmToken, user.fcmTokenMobile].filter(t => t && t.trim() !== '');
+          const tokens = [...new Set(rawTokens)];
           
           if (tokens.length > 0) {
             const senderName = senderUser.fullName || senderUser.username || 'Someone';
