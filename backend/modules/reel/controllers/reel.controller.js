@@ -297,6 +297,29 @@ export const createReel = asyncHandler(async (req, res) => {
 });
 
 /**
+ * Deterministically shuffles an array using a numeric seed.
+ * Uses a basic LCG-based pseudo-random generator to ensure consistency.
+ */
+const seededShuffle = (array, seed) => {
+  const shuffled = [...array];
+  let m = shuffled.length, t, i;
+  let currentSeed = seed;
+  
+  const lcg = () => {
+    currentSeed = (1103515245 * currentSeed + 12345) % 2147483648;
+    return currentSeed / 2147483648;
+  };
+
+  while (m) {
+    i = Math.floor(lcg() * m--);
+    t = shuffled[m];
+    shuffled[m] = shuffled[i];
+    shuffled[i] = t;
+  }
+  return shuffled;
+};
+
+/**
  * @desc    Get feed reels (For You page)
  * @route   GET /api/reels/feed
  * @access  Public
@@ -314,24 +337,26 @@ export const getFeedReels = asyncHandler(async (req, res) => {
   }
 
   const limit = Math.min(parseInt(req.query.limit) || 10, 20);
-  const cursor = req.query.cursor; // Format: base64(score_id)
+  const cursor = req.query.cursor;
 
-  let lastScore = undefined;
-  let lastId = null;
+  let seed;
+  let offset = 0;
+
   if (cursor) {
     try {
       const decoded = Buffer.from(cursor, 'base64').toString('ascii');
-      const [s, id] = decoded.split('_');
-      lastScore = parseFloat(s);
-      lastId = id;
+      const [parsedSeed, parsedOffset] = decoded.split('_');
+      seed = parseInt(parsedSeed);
+      offset = parseInt(parsedOffset);
     } catch (e) {
       console.error('[getFeedReels] Cursor decoding failed:', e);
+      seed = Math.floor(Math.random() * 1000000);
+      offset = 0;
     }
+  } else {
+    seed = Math.floor(Math.random() * 1000000);
+    offset = 0;
   }
-
-  // 1. Personalized Content (80%)
-  const personalizedLimit = Math.ceil(limit * 0.8);
-  const explorationLimit = limit - personalizedLimit;
 
   // Build query based on audience privacy
   let baseQuery = { isActive: true, status: 'completed' };
@@ -355,17 +380,13 @@ export const getFeedReels = asyncHandler(async (req, res) => {
     ];
   }
 
-  // Optimize: Retrieve a candidate pool of the 300 most recent active reels matching the privacy rules
-  // This avoids a full collection scan during the complex scoring aggregation pipeline.
-  const candidateReels = await Reel.find(baseQuery)
+  // Retrieve candidate pool of the 1000 most recent active reels matching the privacy rules
+  const candidates = await Reel.find(baseQuery)
     .sort({ createdAt: -1 })
-    .limit(300)
-    .select('_id')
+    .limit(1000)
     .lean();
 
-  const candidateIds = candidateReels.map(r => r._id);
-
-  if (candidateIds.length === 0) {
+  if (candidates.length === 0) {
     return res.status(200).json({
       success: true,
       reels: [],
@@ -374,54 +395,43 @@ export const getFeedReels = asyncHandler(async (req, res) => {
     });
   }
 
-  const queryWithCandidates = { _id: { $in: candidateIds } };
+  let pageReels = [];
+  let hasMore = false;
+  let nextCursor = null;
 
-  // Generate Personalized Pipeline
-  const personalizedPipeline = await RecommendationEngine.getRecommendationPipeline(
-    req.user?._id, 
-    { limit: personalizedLimit + 1, lastScore, lastId, query: queryWithCandidates, isExploration: false }
-  );
+  const latestReel = candidates[0];
+  const remainingCandidates = candidates.slice(1);
 
-  // Generate Exploration Pipeline (20%)
-  const explorationPipeline = await RecommendationEngine.getRecommendationPipeline(
-    req.user?._id,
-    { limit: explorationLimit, query: queryWithCandidates, isExploration: true }
-  );
+  // Shuffle remaining reels deterministically with the session seed
+  const shuffled = seededShuffle(remainingCandidates, seed);
 
-  const [personalizedResults, explorationResults] = await Promise.all([
-    Reel.aggregate(personalizedPipeline),
-    Reel.aggregate(explorationPipeline)
-  ]);
-
-  // Combine and deduplicate
-  const seenIds = new Set();
-  const combinedResults = [];
-  
-  // Interleave results or just append exploration
-  personalizedResults.slice(0, personalizedLimit).forEach(r => {
-    combinedResults.push(r);
-    seenIds.add(r._id.toString());
-  });
-
-  explorationResults.forEach(r => {
-    if (!seenIds.has(r._id.toString())) {
-      combinedResults.push(r);
-      seenIds.add(r._id.toString());
+  if (offset === 0) {
+    // First page: return latest reel at index 0 + first batch of shuffled
+    const firstBatch = shuffled.slice(0, limit - 1);
+    pageReels = [latestReel, ...firstBatch];
+    
+    const nextOffset = firstBatch.length;
+    hasMore = shuffled.length > nextOffset;
+    if (hasMore) {
+      nextCursor = Buffer.from(`${seed}_${nextOffset}`).toString('base64');
     }
-  });
+  } else {
+    // Subsequent pages: return batch of shuffled from offset
+    const batch = shuffled.slice(offset, offset + limit);
+    pageReels = batch;
+    
+    const nextOffset = offset + batch.length;
+    hasMore = shuffled.length > nextOffset;
+    if (hasMore) {
+      nextCursor = Buffer.from(`${seed}_${nextOffset}`).toString('base64');
+    }
+  }
 
   // Populate user data
-  const reels = await Reel.populate(combinedResults.slice(0, limit), [
+  const reels = await Reel.populate(pageReels, [
     { path: 'user', select: 'username fullName profilePicture isVerified downloadPrivacy' },
     { path: 'music.audioId' }
   ]);
-
-  const hasMore = personalizedResults.length > personalizedLimit;
-  let nextCursor = null;
-  if (hasMore) {
-    const lastReel = reels[reels.length - 1];
-    nextCursor = Buffer.from(`${lastReel.finalScore}_${lastReel._id}`).toString('base64');
-  }
 
   // Inject Ads and Like/Save status
   if (reels.length > 0) {
