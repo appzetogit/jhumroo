@@ -11,6 +11,7 @@ const VideoCard = ({ videoData, isActive }) => {
   const watchStartTimeRef = useRef(null);
   const replayCountRef = useRef(0);
   const viewTrackedRef = useRef(false);
+  const audioTrackRef = useRef(null); // Added for dynamic audio track sync
   
   const [playing, setPlaying] = useState(false);
   const [showHeart, setShowHeart] = useState(false);
@@ -120,6 +121,86 @@ const VideoCard = ({ videoData, isActive }) => {
       }
     };
   }, [isActive, isImageAd, localVideoData.hlsUrl, localVideoData.video?.url, localVideoData.url]);
+
+  // Audio track synchronization for raw videos with external music library sounds
+  useEffect(() => {
+    if (isImageAd) return;
+
+    const video = videoRef.current;
+    const videoSrc = localVideoData.hlsUrl || localVideoData.video?.url || localVideoData.url;
+    const isRawVideo = videoSrc && (videoSrc.includes('/raw/') || videoSrc.includes('recording.webm'));
+    const hasExternalMusic = localVideoData.music && localVideoData.music.url && isRawVideo;
+
+    if (!hasExternalMusic) {
+      if (audioTrackRef.current) {
+        audioTrackRef.current.pause();
+        audioTrackRef.current = null;
+      }
+      return;
+    }
+
+    console.log(`[VideoCard:${reelId}] Setting up dynamic audio track sync for raw video with music:`, localVideoData.music.url);
+
+    if (!audioTrackRef.current || audioTrackRef.current.src !== localVideoData.music.url) {
+      if (audioTrackRef.current) audioTrackRef.current.pause();
+      audioTrackRef.current = new Audio(localVideoData.music.url);
+      audioTrackRef.current.loop = true;
+    }
+
+    const audio = audioTrackRef.current;
+    audio.muted = isMuted;
+
+    const syncAudio = () => {
+      if (!video || !audio) return;
+      const targetTime = (localVideoData.music.startTime || 0) + video.currentTime;
+      const diff = Math.abs(audio.currentTime - targetTime);
+      if (diff > 0.15) {
+        audio.currentTime = targetTime;
+      }
+    };
+
+    const handlePlay = () => {
+      audio.muted = isMuted;
+      syncAudio();
+      audio.play().catch(err => console.warn("Failed to play dynamic audio track:", err));
+    };
+
+    const handlePause = () => {
+      audio.pause();
+    };
+
+    const handleTimeUpdate = () => {
+      syncAudio();
+    };
+
+    const handleSeeking = () => {
+      syncAudio();
+    };
+
+    video.addEventListener('play', handlePlay);
+    video.addEventListener('pause', handlePause);
+    video.addEventListener('timeupdate', handleTimeUpdate);
+    video.addEventListener('seeking', handleSeeking);
+
+    // Sync current playing state
+    if (playing && isActive) {
+      handlePlay();
+    } else {
+      handlePause();
+    }
+
+    return () => {
+      if (video) {
+        video.removeEventListener('play', handlePlay);
+        video.removeEventListener('pause', handlePause);
+        video.removeEventListener('timeupdate', handleTimeUpdate);
+        video.removeEventListener('seeking', handleSeeking);
+      }
+      if (audio) {
+        audio.pause();
+      }
+    };
+  }, [isActive, isImageAd, localVideoData.music, localVideoData.hlsUrl, localVideoData.video?.url, localVideoData.url, playing, isMuted]);
 
   const handlePauseAndRecord = () => {
     const video = videoRef.current;
