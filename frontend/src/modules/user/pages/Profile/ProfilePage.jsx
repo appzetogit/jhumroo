@@ -783,7 +783,7 @@ const ProfilePage = () => {
 
       {/* Vertical Reel Overlay Player */}
       {activeOverlayIndex !== null && (
-        <div className="absolute inset-x-0 top-0 bottom-[var(--bottom-nav-height)] bg-black z-[900] flex flex-col animate-fade-in">
+        <div className="absolute inset-x-0 top-0 bottom-0 bg-black z-[900] flex flex-col animate-fade-in">
           {/* Top Header */}
           <div className="absolute top-[var(--safe-area-top)] left-0 w-full flex justify-between items-center px-4 py-6 z-[950] pointer-events-none">
             <button 
