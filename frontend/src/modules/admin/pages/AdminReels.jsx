@@ -273,11 +273,21 @@ const AdminReels = () => {
                         setShowVideoModal(true);
                       }}
                     >
-                      <img 
-                        src={reel.video?.thumbnail || reel.video?.url?.replace('.mp4', '.jpg')} 
-                        className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" 
-                        alt="thumbnail"
-                      />
+                      {reel.video?.thumbnail ? (
+                        <img 
+                          src={reel.video.thumbnail} 
+                          className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" 
+                          alt="thumbnail"
+                        />
+                      ) : (
+                        <video 
+                          src={reel.video?.url} 
+                          preload="metadata"
+                          muted
+                          playsInline
+                          className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity pointer-events-none"
+                        />
+                      )}
                       <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                         <BiPlay size={24} className="text-white" />
                       </div>

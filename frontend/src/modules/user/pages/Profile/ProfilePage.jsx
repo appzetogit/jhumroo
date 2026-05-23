@@ -24,7 +24,8 @@ const VideoGrid = ({ videos, onVideoClick }) => {
   return (
     <>
       {videos.map((video, idx) => {
-        const thumbnail = video.video?.thumbnail || video.thumbnail || video.poster || video.video?.url || video.url;
+        const thumbnailSrc = video.video?.thumbnail || video.thumbnail || video.poster;
+        const hasThumbnail = thumbnailSrc && typeof thumbnailSrc === 'string' && !thumbnailSrc.endsWith('.mp4') && !thumbnailSrc.endsWith('.webm') && thumbnailSrc.trim() !== '';
         
         return (
           <div 
@@ -32,16 +33,21 @@ const VideoGrid = ({ videos, onVideoClick }) => {
             className="relative aspect-[3/4] bg-surface overflow-hidden group cursor-pointer border-[0.5px] border-white/5"
             onClick={() => onVideoClick?.(video, idx)}
           >
-            <img 
-              src={thumbnail} 
-              alt="reel-thumbnail"
-              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" 
-              onError={(e) => {
-                if (video.video?.url || video.url) {
-                  e.target.style.display = 'none';
-                }
-              }}
-            />
+            {hasThumbnail ? (
+              <img 
+                src={thumbnailSrc} 
+                alt="reel-thumbnail"
+                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" 
+              />
+            ) : (
+              <video 
+                src={video.video?.url || video.url} 
+                preload="metadata"
+                muted
+                playsInline
+                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 pointer-events-none"
+              />
+            )}
             <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="white" className="opacity-80">
                   <path d="M5 3l14 9-14 9z" />
