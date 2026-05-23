@@ -230,7 +230,7 @@ const SoundPage = () => {
               )}
               <video
                 src={video.video?.url || video.url}
-                poster={video.video?.thumbnail || video.poster}
+                poster={(video.video?.thumbnail || video.poster)?.includes('1618005182384') ? undefined : (video.video?.thumbnail || video.poster)}
                 muted
                 playsInline
                 className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"

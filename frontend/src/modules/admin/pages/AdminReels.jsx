@@ -273,7 +273,7 @@ const AdminReels = () => {
                         setShowVideoModal(true);
                       }}
                     >
-                      {reel.video?.thumbnail ? (
+                      {reel.video?.thumbnail && !reel.video.thumbnail.includes('1618005182384') ? (
                         <img 
                           src={reel.video.thumbnail} 
                           className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" 

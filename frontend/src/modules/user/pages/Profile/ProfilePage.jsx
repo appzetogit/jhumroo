@@ -25,7 +25,12 @@ const VideoGrid = ({ videos, onVideoClick }) => {
     <>
       {videos.map((video, idx) => {
         const thumbnailSrc = video.video?.thumbnail || video.thumbnail || video.poster;
-        const hasThumbnail = thumbnailSrc && typeof thumbnailSrc === 'string' && !thumbnailSrc.endsWith('.mp4') && !thumbnailSrc.endsWith('.webm') && thumbnailSrc.trim() !== '';
+        const hasThumbnail = thumbnailSrc && 
+          typeof thumbnailSrc === 'string' && 
+          !thumbnailSrc.endsWith('.mp4') && 
+          !thumbnailSrc.endsWith('.webm') && 
+          thumbnailSrc.trim() !== '' &&
+          !thumbnailSrc.includes('1618005182384');
         
         return (
           <div 

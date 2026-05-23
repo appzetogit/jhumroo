@@ -168,10 +168,9 @@ export const completeUpload = asyncHandler(async (req, res) => {
       // Fallback: If processing fails (e.g. FFmpeg not installed on live server), mark as completed
       // using the raw video URL and a high-quality fallback thumbnail so the reel is successfully published.
       const fallbackUrl = reel.rawVideoUrl || reel.video?.url || (await getFileUrl(key));
-      const fallbackThumbnail = 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=500&auto=format&fit=crop';
       await Reel.findByIdAndUpdate(reel._id, {
         'video.url': fallbackUrl,
-        'video.thumbnail': fallbackThumbnail,
+        'video.thumbnail': '',
         status: 'completed'
       });
       console.log(`[ReelController] Gracefully fell back to completed status for reel ${reel._id}`);
@@ -283,10 +282,9 @@ export const createReel = asyncHandler(async (req, res) => {
        console.error(`[ReelController] createReel processing failed:`, err);
        // Fallback: If processing fails, mark as completed using the raw video URL and fallback thumbnail
        const fallbackUrl = reel.video?.url || (await getFileUrl(s3Result.key));
-       const fallbackThumbnail = 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=500&auto=format&fit=crop';
        await Reel.findByIdAndUpdate(reel._id, {
          'video.url': fallbackUrl,
-         'video.thumbnail': fallbackThumbnail,
+         'video.thumbnail': '',
          status: 'completed'
        });
        console.log(`[ReelController] Gracefully fell back to completed status for reel ${reel._id} in createReel`);
