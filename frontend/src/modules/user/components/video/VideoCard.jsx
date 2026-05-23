@@ -385,7 +385,7 @@ const VideoCard = ({ videoData, isActive }) => {
       />
 
       {showSavedToast && (
-        <div className="absolute bottom-[calc(var(--bottom-nav-height)+16px)] left-0 right-0 mx-4 z-50 flex items-center justify-between bg-black/85 backdrop-blur-sm rounded-lg px-4 py-3 animate-scale-in">
+        <div className="absolute bottom-[calc(var(--bottom-nav-height)+32px)] left-0 right-0 mx-4 z-50 flex items-center justify-between bg-black/85 backdrop-blur-sm rounded-lg px-4 py-3 animate-scale-in">
           <div className="flex items-center gap-2">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
             <span className="text-white text-[14px] font-semibold">Added to Favorites</span>
