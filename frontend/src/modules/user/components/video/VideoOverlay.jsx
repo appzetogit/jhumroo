@@ -184,6 +184,17 @@ const VideoOverlay = ({ reelId, username, caption, musicName, isLiked, likes, co
               )}
             </div>
 
+            {/* Location tag if exists */}
+            {videoData.location?.name && (
+              <div className="flex items-center gap-1.5 text-[11px] font-bold text-white/95 bg-black/35 backdrop-blur-md px-2.5 py-1 rounded-full mb-2 pointer-events-auto w-fit border border-white/5 shadow-sm">
+                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fe2c55" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="animate-bounce">
+                  <path d="M12 2a8 8 0 0 0-8 8c0 5.25 8 12 8 12s8-6.75 8-12a8 8 0 0 0-8-8z"></path>
+                  <circle cx="12" cy="10" r="3" fill="#fe2c55"></circle>
+                </svg>
+                <span>{videoData.location.name}</span>
+              </div>
+            )}
+
             <div className="text-base mb-2 leading-tight">
               {isExpanded ? (
                 <span className="pointer-events-auto">{caption}</span>
@@ -287,7 +298,7 @@ const VideoOverlay = ({ reelId, username, caption, musicName, isLiked, likes, co
              
 
              {/* Share */}
-             <div className="flex flex-col items-center text-white tap-effect" onClick={(e) => { e.stopPropagation(); setIsShareOpen(true); }} style={{ pointerEvents: 'auto' }}>
+             <div className="flex flex-col items-center text-white tap-effect" onClick={(e) => { e.stopPropagation(); handleShare('general'); }} style={{ pointerEvents: 'auto' }}>
                 <svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="white" stroke="white" strokeWidth="0" strokeLinecap="round" strokeLinejoin="round">
                     <path d="m22 2-7 20-4-9-9-4Z"></path>
                     <path d="M22 2 11 13"></path>
@@ -374,7 +385,7 @@ const VideoOverlay = ({ reelId, username, caption, musicName, isLiked, likes, co
          onSaveClick={onSaveClick}
          onShareClick={() => {
            setIsMoreOpen(false);
-           setIsShareOpen(true);
+           handleShare('general');
          }}
          onReportClick={() => {
            setIsMoreOpen(false);

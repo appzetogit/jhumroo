@@ -43,6 +43,32 @@ const StatCard = ({ label, value, icon, accent, subValue }) => (
   </div>
 );
 
+const CustomTooltip = ({ active, payload, label }) => {
+  if (active && payload && payload.length) {
+    const total = payload[0].value || 0;
+    
+    return (
+      <div className="custom-chart-tooltip" style={{
+        backgroundColor: '#0b0b0f',
+        border: '1px solid rgba(255, 255, 255, 0.1)',
+        padding: '10px 14px',
+        borderRadius: '8px',
+        color: '#ffffff',
+        fontSize: '13px',
+        fontFamily: 'inherit',
+        boxShadow: '0 8px 30px rgba(0, 0, 0, 0.5)'
+      }}>
+        <div style={{ fontWeight: 'bold', marginBottom: '4px', color: '#9ca3af' }}>{label}</div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '20px' }}>
+          <span style={{ color: '#a855f7' }}>Users:</span>
+          <span style={{ fontWeight: 'bold' }}>{total.toLocaleString()}</span>
+        </div>
+      </div>
+    );
+  }
+  return null;
+};
+
 const AdminDashboard = () => {
   const [stats, setStats] = useState(null);
   const [userGrowth, setUserGrowth] = useState([]);
@@ -50,6 +76,8 @@ const AdminDashboard = () => {
   const [watchTimeAnalytics, setWatchTimeAnalytics] = useState([]);
   const [topCreators, setTopCreators] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [selectedYear, setSelectedYear] = useState('2026');
+  const [selectedMonth, setSelectedMonth] = useState('All');
 
   useEffect(() => {
     const fetchData = async () => {
@@ -57,7 +85,7 @@ const AdminDashboard = () => {
         setLoading(true);
         const [dashStats, growth, content, watchTime, creators] = await Promise.all([
           adminAnalyticsService.getDashboardStats(),
-          adminAnalyticsService.getUserGrowth(7),
+          adminAnalyticsService.getUserGrowth(365),
           adminAnalyticsService.getContentAnalytics(7),
           adminAnalyticsService.getWatchTimeAnalytics(7),
           adminAnalyticsService.getTopUsers('reels', 5)
@@ -103,10 +131,94 @@ const AdminDashboard = () => {
   }
 
   const formatWatchTime = (seconds) => {
-    if (seconds < 60) return `${seconds}s`;
-    if (seconds < 3600) return `${(seconds / 60).toFixed(1)}m`;
-    return `${(seconds / 3600).toFixed(1)}h`;
+    if (seconds < 60) return `${seconds} secs`;
+    if (seconds < 3600) return `${(seconds / 60).toFixed(1)} mins`;
+    return `${(seconds / 3600).toFixed(1)} hrs`;
   };
+
+  const getFilteredChartData = () => {
+    if (!userGrowth || userGrowth.length === 0) return [];
+    
+    const currentDate = new Date();
+    const currentYearNum = currentDate.getFullYear();
+    const currentMonthIndex = currentDate.getMonth(); // 0-11
+    const currentDayNum = currentDate.getDate();
+    
+    const yearNum = parseInt(selectedYear);
+    
+    // Sort userGrowth by date to ensure sequential order
+    const sortedGrowth = [...userGrowth].sort((a, b) => a.date.localeCompare(b.date));
+    
+    // Helper to get real cumulative users on a specific date (YYYY-MM-DD)
+    const getCumulativeOnDate = (targetDateStr) => {
+      let latestEntry = null;
+      for (let i = 0; i < sortedGrowth.length; i++) {
+        if (sortedGrowth[i].date <= targetDateStr) {
+          latestEntry = sortedGrowth[i];
+        } else {
+          break;
+        }
+      }
+      
+      if (latestEntry) {
+        return latestEntry.totalUsers;
+      }
+      
+      // Fallback: baseline users before our 365-day dataset started
+      const firstEntry = sortedGrowth[0];
+      return Math.max(0, firstEntry.totalUsers - firstEntry.newUsers);
+    };
+    
+    if (selectedMonth === 'All') {
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      
+      // If selected year is the current year, only show months up to the current month!
+      const targetMonths = yearNum === currentYearNum 
+        ? months.slice(0, currentMonthIndex + 1)
+        : months;
+      
+      return targetMonths.map((month, index) => {
+        const lastDay = new Date(yearNum, index + 1, 0).getDate();
+        const paddedMonth = String(index + 1).padStart(2, '0');
+        const paddedDay = String(lastDay).padStart(2, '0');
+        const targetDateStr = `${yearNum}-${paddedMonth}-${paddedDay}`;
+        
+        return {
+          dateLabel: month,
+          totalUsers: getCumulativeOnDate(targetDateStr)
+        };
+      });
+    } else {
+      const monthIndex = parseInt(selectedMonth);
+      
+      // If selected month is in the future for the current year, return empty
+      if (yearNum === currentYearNum && monthIndex > currentMonthIndex) {
+        return [];
+      }
+      
+      const daysInMonth = new Date(yearNum, monthIndex + 1, 0).getDate();
+      const paddedMonth = String(monthIndex + 1).padStart(2, '0');
+      
+      // If selected month is the current month of the current year, only show days up to the current day!
+      const targetDays = (yearNum === currentYearNum && monthIndex === currentMonthIndex)
+        ? currentDayNum
+        : daysInMonth;
+      
+      const dailyData = [];
+      for (let d = 1; d <= targetDays; d++) {
+        const paddedDay = String(d).padStart(2, '0');
+        const targetDateStr = `${yearNum}-${paddedMonth}-${paddedDay}`;
+        
+        dailyData.push({
+          dateLabel: `${d}`,
+          totalUsers: getCumulativeOnDate(targetDateStr)
+        });
+      }
+      return dailyData;
+    }
+  };
+
+  const transformedGrowth = getFilteredChartData();
 
   return (
     <div className="admin-page">
@@ -185,38 +297,87 @@ const AdminDashboard = () => {
       <div className="admin-charts-container" style={{ marginTop: '2rem' }}>
         <div className="admin-charts-row">
           {/* User Growth Chart */}
-          <div className="admin-card admin-chart-card">
-            <div className="admin-card-header">
-              <h2>User Growth</h2>
-              <span className="admin-chip">Last 7 Days</span>
+          <div className="admin-card admin-chart-card" style={{ backgroundColor: '#09090b', borderColor: 'rgba(255, 255, 255, 0.08)', display: 'flex', flexDirection: 'column' }}>
+            <div className="admin-card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+              <h2 style={{ color: '#ffffff', margin: 0 }}>User Growth</h2>
+              
+              <div style={{ display: 'flex', gap: '8px' }}>
+                {/* Month Selector */}
+                <select 
+                  value={selectedMonth}
+                  onChange={(e) => setSelectedMonth(e.target.value)}
+                  style={{
+                    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+                    border: '1px solid rgba(255, 255, 255, 0.12)',
+                    borderRadius: '8px',
+                    color: '#e4e4e7',
+                    padding: '4px 10px',
+                    fontSize: '12px',
+                    fontWeight: '600',
+                    outline: 'none',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <option value="All" style={{ backgroundColor: '#09090b', color: '#ffffff' }}>All Months</option>
+                  <option value="0" style={{ backgroundColor: '#09090b', color: '#ffffff' }}>January</option>
+                  <option value="1" style={{ backgroundColor: '#09090b', color: '#ffffff' }}>February</option>
+                  <option value="2" style={{ backgroundColor: '#09090b', color: '#ffffff' }}>March</option>
+                  <option value="3" style={{ backgroundColor: '#09090b', color: '#ffffff' }}>April</option>
+                  <option value="4" style={{ backgroundColor: '#09090b', color: '#ffffff' }}>May</option>
+                  <option value="5" style={{ backgroundColor: '#09090b', color: '#ffffff' }}>June</option>
+                  <option value="6" style={{ backgroundColor: '#09090b', color: '#ffffff' }}>July</option>
+                  <option value="7" style={{ backgroundColor: '#09090b', color: '#ffffff' }}>August</option>
+                  <option value="8" style={{ backgroundColor: '#09090b', color: '#ffffff' }}>September</option>
+                  <option value="9" style={{ backgroundColor: '#09090b', color: '#ffffff' }}>October</option>
+                  <option value="10" style={{ backgroundColor: '#09090b', color: '#ffffff' }}>November</option>
+                  <option value="11" style={{ backgroundColor: '#09090b', color: '#ffffff' }}>December</option>
+                </select>
+
+                {/* Year Selector */}
+                <select 
+                  value={selectedYear}
+                  onChange={(e) => setSelectedYear(e.target.value)}
+                  style={{
+                    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+                    border: '1px solid rgba(255, 255, 255, 0.12)',
+                    borderRadius: '8px',
+                    color: '#e4e4e7',
+                    padding: '4px 10px',
+                    fontSize: '12px',
+                    fontWeight: '600',
+                    outline: 'none',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <option value="2026" style={{ backgroundColor: '#09090b', color: '#ffffff' }}>2026</option>
+                  <option value="2025" style={{ backgroundColor: '#09090b', color: '#ffffff' }}>2025</option>
+                  <option value="2024" style={{ backgroundColor: '#09090b', color: '#ffffff' }}>2024</option>
+                </select>
+              </div>
             </div>
-            <div className="admin-chart-wrapper">
-              <ResponsiveContainer width="100%" height={300}>
-                <AreaChart data={userGrowth}>
+            <div className="admin-chart-wrapper" style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', marginTop: '1rem' }}>
+              <ResponsiveContainer width="100%" height={260}>
+                <AreaChart data={transformedGrowth} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
                   <defs>
                     <linearGradient id="colorUsers" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3}/>
-                      <stop offset="95%" stopColor="#6366f1" stopOpacity={0}/>
+                      <stop offset="5%" stopColor="#a855f7" stopOpacity={0.3}/>
+                      <stop offset="95%" stopColor="#a855f7" stopOpacity={0}/>
                     </linearGradient>
                   </defs>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255, 255, 255, 0.05)" />
                   <XAxis 
-                    dataKey="date" 
+                    dataKey="dateLabel" 
                     axisLine={false} 
                     tickLine={false} 
-                    tick={{ fill: 'rgba(255,255,255,0.5)', fontSize: 12 }}
+                    tick={{ fill: '#71717a', fontSize: 11 }}
                     dy={10}
                   />
-                  <YAxis 
-                    axisLine={false} 
-                    tickLine={false} 
-                    tick={{ fill: 'rgba(255,255,255,0.5)', fontSize: 12 }}
-                  />
+                  <YAxis hide />
                   <Tooltip 
-                    contentStyle={{ backgroundColor: '#1e1e2d', border: 'none', borderRadius: '8px', color: '#fff' }}
-                    itemStyle={{ color: '#6366f1' }}
+                    content={<CustomTooltip />} 
+                    cursor={{ stroke: 'rgba(255, 255, 255, 0.15)', strokeWidth: 1 }} 
                   />
-                  <Area type="monotone" dataKey="totalUsers" stroke="#6366f1" strokeWidth={3} fillOpacity={1} fill="url(#colorUsers)" />
+                  <Area type="monotone" dataKey="totalUsers" stroke="#a855f7" strokeWidth={3} fillOpacity={1} fill="url(#colorUsers)" />
                 </AreaChart>
               </ResponsiveContainer>
             </div>
@@ -231,21 +392,28 @@ const AdminDashboard = () => {
             <div className="admin-chart-wrapper">
               <ResponsiveContainer width="100%" height={300}>
                 <BarChart data={contentAnalytics}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(0,0,0,0.06)" />
                   <XAxis 
                     dataKey="date" 
                     axisLine={false} 
                     tickLine={false} 
-                    tick={{ fill: 'rgba(255,255,255,0.5)', fontSize: 12 }}
+                    tick={{ fill: 'var(--admin-muted)', fontSize: 11 }}
                     dy={10}
                   />
                   <YAxis 
                     axisLine={false} 
                     tickLine={false} 
-                    tick={{ fill: 'rgba(255,255,255,0.5)', fontSize: 12 }}
+                    tick={{ fill: 'var(--admin-muted)', fontSize: 11 }}
                   />
                   <Tooltip 
-                    contentStyle={{ backgroundColor: '#1e1e2d', border: 'none', borderRadius: '8px', color: '#fff' }}
+                    contentStyle={{ 
+                      backgroundColor: '#ffffff', 
+                      border: '1.5px solid var(--admin-border)', 
+                      borderRadius: '12px', 
+                      boxShadow: '0 8px 24px rgba(254, 44, 85, 0.08)',
+                      color: 'var(--admin-text)',
+                      fontSize: '12px'
+                    }}
                   />
                   <Bar dataKey="reels" fill="#f59e0b" radius={[4, 4, 0, 0]} barSize={20} />
                 </BarChart>
@@ -266,22 +434,29 @@ const AdminDashboard = () => {
             <div className="admin-chart-wrapper">
               <ResponsiveContainer width="100%" height={350}>
                 <LineChart data={watchTimeAnalytics}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(0,0,0,0.06)" />
                   <XAxis 
                     dataKey="_id" 
                     axisLine={false} 
                     tickLine={false} 
-                    tick={{ fill: 'rgba(255,255,255,0.5)', fontSize: 12 }}
+                    tick={{ fill: 'var(--admin-muted)', fontSize: 11 }}
                     dy={10}
                   />
                   <YAxis 
                     axisLine={false} 
                     tickLine={false} 
-                    tick={{ fill: 'rgba(255,255,255,0.5)', fontSize: 12 }}
-                    label={{ value: 'Seconds', angle: -90, position: 'insideLeft', fill: 'rgba(255,255,255,0.5)', offset: 10 }}
+                    tick={{ fill: 'var(--admin-muted)', fontSize: 11 }}
+                    label={{ value: 'Seconds', angle: -90, position: 'insideLeft', fill: 'var(--admin-muted)', offset: 10, fontSize: 11 }}
                   />
                   <Tooltip 
-                    contentStyle={{ backgroundColor: '#1e1e2d', border: 'none', borderRadius: '8px', color: '#fff' }}
+                    contentStyle={{ 
+                      backgroundColor: '#ffffff', 
+                      border: '1.5px solid var(--admin-border)', 
+                      borderRadius: '12px', 
+                      boxShadow: '0 8px 24px rgba(254, 44, 85, 0.08)',
+                      color: 'var(--admin-text)',
+                      fontSize: '12px'
+                    }}
                   />
                   <Legend verticalAlign="top" height={36}/>
                   <Line name="Watch Time (s)" type="monotone" dataKey="dailyWatchTime" stroke="#10b981" strokeWidth={3} dot={{ r: 4, fill: '#10b981' }} activeDot={{ r: 6 }} />

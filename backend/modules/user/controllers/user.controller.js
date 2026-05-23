@@ -253,7 +253,32 @@ export const getUserReels = asyncHandler(async (req, res) => {
     }
   }
 
-  const query = { user: user._id, isActive: true, status: 'completed' };
+  let query = { user: user._id, isActive: true, status: 'completed' };
+
+  // Filter based on audience settings for other users
+  if (!req.user || req.user._id.toString() !== user._id.toString()) {
+    let isFollowing = false;
+    let isFollower = false;
+
+    if (req.user) {
+      const [follow, incoming] = await Promise.all([
+        Follow.findOne({ follower: req.user._id, following: user._id, status: 'accepted' }),
+        Follow.findOne({ follower: user._id, following: req.user._id, status: 'accepted' })
+      ]);
+      isFollowing = !!follow;
+      isFollower = !!incoming;
+    }
+
+    const allowedAudiences = ['everyone'];
+    if (isFollowing) {
+      allowedAudiences.push('followers');
+    }
+    if (isFollower) {
+      allowedAudiences.push('following');
+    }
+
+    query.audience = { $in: allowedAudiences };
+  }
 
   const reels = await Reel.find(query)
     .sort({ createdAt: -1 })

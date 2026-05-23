@@ -283,6 +283,8 @@ const CreatePage = () => {
   });
   const [tagInfoSeen, setTagInfoSeen] = useState(false);
   const [selectedLocationQuery, setSelectedLocationQuery] = useState('');
+  const [locationSearchResults, setLocationSearchResults] = useState([]);
+  const [isSearchingLocation, setIsSearchingLocation] = useState(false);
   const [storyAllowComments, setStoryAllowComments] = useState(true);
   const [syncingSound, setSyncingSound] = useState(false);
   const [soundBrowserTab, setSoundBrowserTab] = useState('recommended');
@@ -343,7 +345,9 @@ const CreatePage = () => {
       const url = selectedSound.url || selectedSound.audioUrl;
       const audio = new Audio(url);
       audio.currentTime = selectedSound.clipStart || 0;
-      audio.play().catch(err => console.error("Recording audio playback failed:", err));
+      audio.play().catch(err => {
+        if (err.name !== 'AbortError') console.error("Recording audio playback failed:", err);
+      });
       recordingAudioRef.current = audio;
 
       // Handle loop or stop if needed, but usually we just play for the duration of recording
@@ -388,12 +392,16 @@ const CreatePage = () => {
         
         const onCanPlay = () => {
           audio.currentTime = selectedSound.clipStart || 0;
-          audio.play().catch(err => console.error("Preview audio playback failed:", err));
+          audio.play().catch(err => {
+            if (err.name !== 'AbortError') console.error("Preview audio playback failed:", err);
+          });
         };
         
         audio.addEventListener('canplay', onCanPlay, { once: true });
       } else {
-        previewAudioRef.current.play().catch(err => console.error("Preview audio playback failed:", err));
+        previewAudioRef.current.play().catch(err => {
+          if (err.name !== 'AbortError') console.error("Preview audio playback failed:", err);
+        });
       }
     } else {
       if (previewAudioRef.current) {
@@ -496,6 +504,28 @@ const CreatePage = () => {
         if (cachedVideo) {
             setVideoFile(cachedVideo);
             setPreviewUrl(URL.createObjectURL(cachedVideo));
+        } else {
+            // Starting fresh (no video cache found) - Clear stale creation storage and reset state
+            localStorage.removeItem('create_postState');
+            localStorage.removeItem('create_activeStickers');
+            localStorage.removeItem('create_activeOverlays');
+            localStorage.removeItem('create_selectedSounds');
+            localStorage.removeItem('create_overlayText');
+            localStorage.removeItem('create_overlayFont');
+            localStorage.removeItem('create_overlayColor');
+            localStorage.removeItem('create_overlayFontSize');
+            localStorage.removeItem('create_textPos');
+            localStorage.removeItem('create_textRotation');
+            localStorage.removeItem('create_stageStack');
+            localStorage.removeItem('create_recordStatus');
+            localStorage.removeItem('create_recordedSeconds');
+
+            setPostState(createInitialPostState());
+            setActiveStickers([]);
+            setActiveOverlays([]);
+            setSelectedSounds([]);
+            setOverlayText('');
+            setVideoDuration(0);
         }
       } catch (err) {
         console.error("Error restoring from cache:", err);
@@ -1074,15 +1104,158 @@ const CreatePage = () => {
     return { id: 'captured', image: CREATE_CANVAS_IMAGE, duration: '00:07', type: 'video' };
   }, [CREATE_CANVAS_IMAGE]);
 
-  const locationResults = useMemo(() => {
-    const normalizedQuery = selectedLocationQuery.trim().toLowerCase();
-    if (!normalizedQuery) {
-      return CREATE_LOCATION_RESULTS;
+  // Geolocation Reverse-Geocoding on Mount or when panel opens
+  useEffect(() => {
+    const stageName = stageStack[stageStack.length - 1];
+    if (stageName !== 'location') {
+      return;
     }
 
-    return CREATE_LOCATION_RESULTS.filter((locationItem) =>
-      [locationItem.title, locationItem.subtitle].join(' ').toLowerCase().includes(normalizedQuery),
-    );
+    const fetchCurrentLocation = () => {
+      if (!navigator.geolocation) return;
+      
+      setIsSearchingLocation(true);
+      navigator.geolocation.getCurrentPosition(
+        async (position) => {
+          try {
+            const { latitude, longitude } = position.coords;
+            const response = await fetch(
+              `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=18&addressdetails=1`,
+              {
+                headers: {
+                  'User-Agent': 'JhumrooReelsApp/1.0 (contact@jhumroo.com)'
+                }
+              }
+            );
+            const item = await response.json();
+            if (item && item.address) {
+              const addr = item.address;
+              const state = addr.state || '';
+              const country = addr.country || '';
+              
+              const nearbyList = [];
+              const addedTitles = new Set();
+              
+              const addLocation = (name, typeLabel) => {
+                if (!name || name.trim().length < 2) return;
+                
+                let title = name;
+                let subtitle = '';
+                
+                if (state && name !== state) {
+                  subtitle = `${state}, ${country}`;
+                } else {
+                  subtitle = country;
+                }
+                
+                // Deduplicate items based on title
+                if (!addedTitles.has(title.toLowerCase())) {
+                  addedTitles.add(title.toLowerCase());
+                  nearbyList.push({
+                    id: `nearby-${typeLabel}-${Date.now()}-${Math.random()}`,
+                    title: title,
+                    subtitle: subtitle,
+                    isCurrent: true
+                  });
+                }
+              };
+              
+              // 1. Point of interest / Amenity
+              const poi = addr.amenity || addr.shop || addr.tourism || addr.historic || addr.leisure || addr.building;
+              addLocation(poi, 'poi');
+              
+              // 2. Road name
+              addLocation(addr.road, 'road');
+              
+              // 3. Suburb / Neighborhood
+              addLocation(addr.neighbourhood || addr.suburb, 'suburb');
+              
+              // 4. City / Town
+              addLocation(addr.city || addr.town || addr.village, 'city');
+              
+              // 5. County / District
+              addLocation(addr.county || addr.state_district, 'district');
+              
+              // 6. State
+              addLocation(addr.state, 'state');
+
+              setLocationSearchResults(nearbyList);
+            }
+          } catch (err) {
+            console.error("Reverse geocoding failed:", err);
+          } finally {
+            setIsSearchingLocation(false);
+          }
+        },
+        (error) => {
+          console.warn("Geolocation failed or denied:", error);
+          setIsSearchingLocation(false);
+        },
+        { enableHighAccuracy: true, timeout: 5000, maximumAge: 60000 }
+      );
+    };
+
+    fetchCurrentLocation();
+  }, [stageStack]);
+
+  // Debounced API search for location using Nominatim OpenStreetMap
+  useEffect(() => {
+    if (!selectedLocationQuery.trim()) {
+      // Keep current location if populated, otherwise empty out
+      setLocationSearchResults(prev => prev.some(l => l.isCurrent) ? [prev.find(l => l.isCurrent)] : []);
+      return;
+    }
+
+    const delayDebounceFn = setTimeout(async () => {
+      setIsSearchingLocation(true);
+      try {
+        const query = encodeURIComponent(selectedLocationQuery.trim());
+        const response = await fetch(
+          `https://nominatim.openstreetmap.org/search?format=json&q=${query}&addressdetails=1&limit=10`,
+          {
+            headers: {
+              'User-Agent': 'JhumrooReelsApp/1.0 (contact@jhumroo.com)'
+            }
+          }
+        );
+        const data = await response.json();
+        
+        if (Array.isArray(data)) {
+          const mapped = data.map((item) => {
+            const addr = item.address || {};
+            const city = addr.city || addr.town || addr.village || addr.suburb || addr.municipality || item.name;
+            const state = addr.state || '';
+            
+            let title = city;
+            if (state) title += `, ${state}`;
+            
+            return {
+              id: item.place_id.toString(),
+              title: title || item.name,
+              subtitle: item.display_name,
+            };
+          });
+
+          // Filter out duplicates
+          const unique = [];
+          const seen = new Set();
+          for (const loc of mapped) {
+            if (!seen.has(loc.subtitle)) {
+              seen.add(loc.subtitle);
+              unique.push(loc);
+            }
+          }
+
+          setLocationSearchResults(unique);
+        }
+      } catch (err) {
+        console.error("Location search failed:", err);
+      } finally {
+        setIsSearchingLocation(false);
+      }
+    }, 600); // 600ms debounce
+
+    return () => clearTimeout(delayDebounceFn);
   }, [selectedLocationQuery]);
 
   useEffect(() => {
@@ -1311,6 +1484,13 @@ const CreatePage = () => {
     localStorage.removeItem('create_activeStickers');
     localStorage.removeItem('create_activeOverlays');
     localStorage.removeItem('create_overlayText');
+    localStorage.removeItem('create_postState');
+    localStorage.removeItem('create_selectedSounds');
+    localStorage.removeItem('create_overlayFont');
+    localStorage.removeItem('create_overlayColor');
+    localStorage.removeItem('create_overlayFontSize');
+    localStorage.removeItem('create_textPos');
+    localStorage.removeItem('create_textRotation');
     
     // Reset Text Overlay states
     setOverlayText('');
@@ -1325,6 +1505,15 @@ const CreatePage = () => {
     setSelectedSpeed('1x');
     setIsMuted(false);
     setActiveStickers([]);
+    setActiveOverlays([]);
+    setSelectedSounds([]);
+    setPostState(createInitialPostState());
+    setVideoDuration(0);
+    setVideoThumbnails([]);
+    setClipSequence([]);
+    setCurrentClipIndex(0);
+    setLocationSearchResults([]);
+    setIsSearchingLocation(false);
   };
 
   const handleCameraToolClick = (toolId) => {
@@ -1717,6 +1906,16 @@ const CreatePage = () => {
             localStorage.removeItem('create_stageStack');
             localStorage.removeItem('create_recordStatus');
             localStorage.removeItem('create_recordedSeconds');
+            localStorage.removeItem('create_postState');
+            localStorage.removeItem('create_activeStickers');
+            localStorage.removeItem('create_activeOverlays');
+            localStorage.removeItem('create_selectedSounds');
+            localStorage.removeItem('create_overlayText');
+            localStorage.removeItem('create_overlayFont');
+            localStorage.removeItem('create_overlayColor');
+            localStorage.removeItem('create_overlayFontSize');
+            localStorage.removeItem('create_textPos');
+            localStorage.removeItem('create_textRotation');
             
             setTimeout(() => {
                 navigate('/');
@@ -1726,7 +1925,17 @@ const CreatePage = () => {
                 setPreviewUrl(null);
                 setOverlayText('');
                 setActiveStickers([]);
+                setActiveOverlays([]);
                 setSelectedFilter('Normal');
+                setSelectedSounds([]);
+                setPostState(createInitialPostState());
+                setStageStack(['camera']);
+                setVideoDuration(0);
+                setVideoThumbnails([]);
+                setClipSequence([]);
+                setCurrentClipIndex(0);
+                setLocationSearchResults([]);
+                setIsSearchingLocation(false);
             }, 1500);
         };
 
@@ -3852,51 +4061,94 @@ const CreatePage = () => {
   };
 
   const renderLocationStage = () => (
-    <div className="flex h-full flex-col bg-white text-black">
+    <div className={`flex h-full flex-col ${isDarkMode ? 'bg-[#121212] text-white' : 'bg-white text-black'}`}>
       <div
-        className="border-b border-black/5 px-4 pb-4"
+        className={`border-b ${isDarkMode ? 'border-white/10' : 'border-black/5'} px-4 pb-4`}
         style={{ paddingTop: 'max(env(safe-area-inset-top), 14px)' }}
       >
         <div className="flex items-center justify-between">
           <button type="button" onClick={handleCloseOrBack} className="active:opacity-60">
-            <BiX size={22} />
+            <BiX size={22} className={isDarkMode ? 'text-white' : 'text-black'} />
           </button>
           <h2 className="text-[18px] font-semibold">Add location</h2>
           <span className="w-6" />
         </div>
-        <div className="mt-4 flex items-center gap-3 rounded-[10px] bg-[#f4f5f7] px-3 py-2 text-black/35">
-          <BiSearch size={18} />
+        <div className={`mt-4 flex items-center gap-3 rounded-[10px] ${isDarkMode ? 'bg-white/10 text-white/50' : 'bg-[#f4f5f7] text-black/35'} px-3 py-2`}>
+          <BiSearch size={18} className={isDarkMode ? 'text-white/60' : 'text-black/40'} />
           <input
             type="text"
             placeholder="Search locations"
             value={selectedLocationQuery}
             onChange={(event) => setSelectedLocationQuery(event.target.value)}
-            className="w-full bg-transparent text-[14px] outline-none placeholder:text-black/30"
+            className={`w-full bg-transparent text-[14px] outline-none ${isDarkMode ? 'text-white placeholder:text-white/30' : 'text-black placeholder:text-black/30'}`}
           />
         </div>
       </div>
 
       <div className="flex-1 overflow-y-auto px-4 py-4 no-scrollbar">
-        <p className="mb-4 text-[12px] text-black/35">Popular places in your area</p>
-        <div className="space-y-5">
-          {locationResults.map((locationItem) => (
+        {isSearchingLocation ? (
+          <div className="flex flex-col items-center justify-center py-12">
+            <div className="w-8 h-8 rounded-full border-2 border-transparent border-t-[#fe2c55] border-r-[#fe2c55] animate-spin mb-3" />
+            <p className={`text-[14px] font-medium animate-pulse ${isDarkMode ? 'text-white/40' : 'text-black/40'}`}>Searching locations...</p>
+          </div>
+        ) : locationSearchResults.length > 0 ? (
+          <>
+            <p className={`mb-4 text-[12px] font-medium ${isDarkMode ? 'text-white/40' : 'text-black/35'}`}>
+              {selectedLocationQuery.trim() ? 'Search Results' : 'Nearby Location'}
+            </p>
+            <div className="space-y-5 animate-fadeIn">
+              {locationSearchResults.map((locationItem) => (
+                <button
+                  key={locationItem.id}
+                  type="button"
+                  onClick={() => {
+                    setPostState((currentState) => ({
+                      ...currentState,
+                      location: locationItem.title,
+                    }));
+                    popStage();
+                  }}
+                  className={`block w-full text-left active:opacity-70 border-b ${isDarkMode ? 'border-white/10' : 'border-black/[0.04]'} pb-3`}
+                >
+                  <p className={`text-[16px] font-semibold flex items-center gap-1.5 ${isDarkMode ? 'text-white/95' : 'text-black/90'}`}>
+                    {locationItem.isCurrent && <IoLocationOutline className="text-[#fe2c55] shrink-0 animate-bounce" size={18} />}
+                    <span>{locationItem.title}</span>
+                  </p>
+                  <p className={`mt-1 text-[13px] leading-normal line-clamp-2 ${isDarkMode ? 'text-white/50' : 'text-black/40'}`}>{locationItem.subtitle}</p>
+                </button>
+              ))}
+            </div>
+          </>
+        ) : selectedLocationQuery.trim() ? (
+          <div className="flex flex-col items-center justify-center py-12 text-center animate-fadeIn">
+            <IoLocationOutline size={36} className={`mb-3 ${isDarkMode ? 'text-white/30' : 'text-black/20'}`} />
+            <p className={`text-[15px] font-bold ${isDarkMode ? 'text-white/80' : 'text-black/80'}`}>No matches found</p>
+            <p className={`text-[13px] mt-1 mb-5 px-6 leading-relaxed ${isDarkMode ? 'text-white/50' : 'text-black/45'}`}>
+              We couldn't find any location matching "{selectedLocationQuery}".
+            </p>
             <button
-              key={locationItem.id}
               type="button"
               onClick={() => {
                 setPostState((currentState) => ({
                   ...currentState,
-                  location: locationItem.title,
+                  location: selectedLocationQuery.trim(),
                 }));
                 popStage();
               }}
-              className="block w-full text-left active:opacity-70"
+              className="px-6 py-2.5 rounded-full bg-[#fe2c55] text-white text-[14px] font-semibold shadow-md active:scale-95 transition-transform"
             >
-              <p className="text-[16px] font-semibold">{locationItem.title}</p>
-              <p className="mt-1 text-[13px] text-black/40">{locationItem.subtitle}</p>
+              Use "{selectedLocationQuery.trim()}"
             </button>
-          ))}
-        </div>
+          </div>
+        ) : (
+          <div className="flex flex-col items-center justify-center py-16 text-center animate-fadeIn">
+            <IoLocationOutline size={40} className={`mb-3 ${isDarkMode ? 'text-white/20' : 'text-black/15'}`} />
+            <p className={`text-[15px] font-bold ${isDarkMode ? 'text-white/60' : 'text-black/60'}`}>Search for a location</p>
+            <p className={`text-[13px] mt-1 max-w-[220px] leading-relaxed ${isDarkMode ? 'text-white/40' : 'text-black/40'}`}>
+              Type the name of a city, region, landmark, or country above to search.
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -4634,6 +4886,16 @@ const CreatePage = () => {
               localStorage.removeItem('create_recordStatus');
               localStorage.removeItem('create_recordedSeconds');
               localStorage.removeItem('create_previewUrl');
+              localStorage.removeItem('create_postState');
+              localStorage.removeItem('create_activeStickers');
+              localStorage.removeItem('create_activeOverlays');
+              localStorage.removeItem('create_selectedSounds');
+              localStorage.removeItem('create_overlayText');
+              localStorage.removeItem('create_overlayFont');
+              localStorage.removeItem('create_overlayColor');
+              localStorage.removeItem('create_overlayFontSize');
+              localStorage.removeItem('create_textPos');
+              localStorage.removeItem('create_textRotation');
               
               // Reset local state
               setVideoFile(null);
@@ -4641,6 +4903,17 @@ const CreatePage = () => {
               setRecordStatus('idle');
               setRecordedSeconds(0);
               setStageStack(['camera']);
+              setActiveStickers([]);
+              setActiveOverlays([]);
+              setSelectedFilter('Normal');
+              setSelectedSounds([]);
+              setPostState(createInitialPostState());
+              setVideoDuration(0);
+              setVideoThumbnails([]);
+              setClipSequence([]);
+              setCurrentClipIndex(0);
+              setLocationSearchResults([]);
+              setIsSearchingLocation(false);
               
               setActiveSheet(null);
               navigate(-1);
@@ -4699,6 +4972,52 @@ const CreatePage = () => {
           <div className="rounded-[18px] bg-[#4d4d55] px-6 py-5 text-center text-white shadow-xl">
             <BiMusic size={20} className="mx-auto mb-3 animate-pulse" />
             <p className="text-[15px] font-medium">Syncing sounds...</p>
+          </div>
+        </div>
+      )}
+
+      {isUploading && (
+        <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/90 backdrop-blur-2xl">
+          <div className="relative flex flex-col items-center">
+            {/* The circular double orbital loader */}
+            <div className="relative w-44 h-44 flex items-center justify-center">
+              {/* Outer Orbit Loader (Vibrant Neon Pink) */}
+              <div className="absolute w-36 h-36 rounded-full border-2 border-transparent border-t-[#fe2c55] border-r-[#fe2c55] animate-spin" style={{ animationDuration: '1.4s' }} />
+              {/* Inner Orbit Loader (Glowing Purple - Reversed) */}
+              <div className="absolute w-28 h-28 rounded-full border-2 border-transparent border-b-[#9b51e0] border-l-[#9b51e0] animate-spin" style={{ animationDuration: '0.8s', animationDirection: 'reverse' }} />
+              
+              {/* Center Thumbnail with Neon Pulsing Glow */}
+              <div className="w-20 h-20 rounded-full overflow-hidden border-2 border-[#fe2c55] shadow-[0_0_20px_rgba(254,44,85,0.5)] flex items-center justify-center bg-black/40 animate-pulse">
+                {previewUrl ? (
+                  videoFile?.type?.startsWith('image/') ? (
+                    <img src={previewUrl} alt="Thumbnail" className="w-full h-full object-cover" />
+                  ) : (
+                    <video src={previewUrl} className="w-full h-full object-cover" muted playsInline autoPlay loop />
+                  )
+                ) : (
+                  <BiMusic size={28} className="text-white animate-bounce" />
+                )}
+              </div>
+            </div>
+
+            {/* Posting title with bouncy dots */}
+            <h2 className="mt-8 text-[22px] font-black text-white tracking-wide text-center flex items-center gap-1.5 justify-center">
+              <span>Posting your reel</span>
+              <span className="flex gap-1 items-end h-5 pb-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#fe2c55] animate-bounce" style={{ animationDelay: '0ms', animationDuration: '0.6s' }} />
+                <span className="w-1.5 h-1.5 rounded-full bg-[#9b51e0] animate-bounce" style={{ animationDelay: '150ms', animationDuration: '0.6s' }} />
+                <span className="w-1.5 h-1.5 rounded-full bg-[#fe2c55] animate-bounce" style={{ animationDelay: '300ms', animationDuration: '0.6s' }} />
+              </span>
+            </h2>
+            
+            {/* Subtitle */}
+            <p className="mt-2 text-[14px] text-white/50 px-8 text-center max-w-[280px] leading-relaxed">
+              Uploading your masterpiece to Jhumroo. Please do not close the app.
+            </p>
+
+            {/* Glowing blur effects behind the loader */}
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 rounded-full bg-[#fe2c55]/10 filter blur-[80px] pointer-events-none -z-10 animate-pulse" />
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-48 h-48 rounded-full bg-[#9b51e0]/10 filter blur-[80px] pointer-events-none -z-10 animate-pulse" style={{ animationDelay: '1s' }} />
           </div>
         </div>
       )}

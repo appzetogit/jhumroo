@@ -40,6 +40,7 @@ const MoreOptionsSheet = ({
   const [currentY, setCurrentY] = useState(0);
   const [isClosing, setIsClosing] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   if (!isOpen && !isClosing) return null;
   if (!reelData && isOpen) return null;
@@ -266,10 +267,7 @@ const MoreOptionsSheet = ({
                   label="Delete" 
                   color="danger"
                   onClick={() => {
-                    if (window.confirm("Are you sure you want to delete this reel?")) {
-                      onDeleteClick();
-                      handleClose();
-                    }
+                    setShowDeleteConfirm(true);
                   }}
                 />
               </>
@@ -277,6 +275,51 @@ const MoreOptionsSheet = ({
           </ActionRow>
         </div>
       </div>
+
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 z-[6000] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-200" onClick={() => setShowDeleteConfirm(false)}>
+          <div 
+            className={`w-full max-w-[320px] rounded-[24px] p-6 text-center shadow-2xl animate-in zoom-in duration-200 border ${
+              isDarkMode 
+                ? 'bg-[#1e2030]/95 text-white border-white/10' 
+                : 'bg-white text-black border-black/10'
+            }`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-red-500/10 text-red-500 mb-4">
+              <BiTrash size={28} className="animate-pulse" />
+            </div>
+            
+            <h3 className="text-[17px] font-bold tracking-tight">Delete this Reel?</h3>
+            <p className="mt-2 text-xs opacity-50 leading-relaxed px-2">
+              This action is permanent and cannot be undone. The video will be removed from your profile and feed immediately.
+            </p>
+            
+            <div className="mt-6 flex flex-col gap-2">
+              <button
+                onClick={() => {
+                  onDeleteClick();
+                  setShowDeleteConfirm(false);
+                  handleClose();
+                }}
+                className="w-full bg-[#fe2c55] text-white py-3 rounded-full font-bold text-[14px] active:scale-95 transition-all shadow-lg shadow-[#fe2c55]/20"
+              >
+                Delete Reel
+              </button>
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                className={`w-full py-3 rounded-full font-bold text-[14px] active:scale-95 transition-all ${
+                  isDarkMode 
+                    ? 'bg-white/5 text-white hover:bg-white/10' 
+                    : 'bg-black/5 text-black hover:bg-black/10'
+                }`}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

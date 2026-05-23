@@ -194,15 +194,7 @@ const AdminNotifications = () => {
             </span>
           </div>
         </div>
-        <div className="stat-pill">
-          <BiTrendingUp size={20} className="clicks-icon" />
-          <div>
-            <span className="stat-label">Total Clicks</span>
-            <span className="stat-val">
-              {notifications.reduce((acc, curr) => acc + (curr.clicks || 0), 0)}
-            </span>
-          </div>
-        </div>
+
       </div>
 
       {/* Recent Dispatches Section */}
@@ -234,7 +226,6 @@ const AdminNotifications = () => {
                 <span>Subject & Message</span>
                 <span>Target Region</span>
                 <span>Recipients</span>
-                <span>Clicks</span>
                 <span>Sent Date</span>
               </div>
               
@@ -279,8 +270,7 @@ const AdminNotifications = () => {
                   {/* Sent Count */}
                   <span className="stat-count">{dispatch.sentCount?.toLocaleString() || 0}</span>
                   
-                  {/* Clicks */}
-                  <span className="click-count">{dispatch.clicks || 0}</span>
+
                   
                   {/* Sent Date */}
                   <span className="date-field">
@@ -688,7 +678,7 @@ const AdminNotifications = () => {
         }
         .notification-table-grid {
           display: grid;
-          grid-template-columns: 110px 1fr 200px 100px 80px 120px;
+          grid-template-columns: 110px 1fr 200px 100px 120px;
           align-items: center;
           gap: 1rem;
           padding-left: 12px;

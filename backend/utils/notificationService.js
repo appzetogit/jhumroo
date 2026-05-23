@@ -1,5 +1,6 @@
 import Notification from '../models/Notification.model.js';
 import User from '../models/User.model.js';
+import Follow from '../models/Follow.model.js';
 import { messaging } from '../config/firebase.js';
 
 /**
@@ -8,8 +9,28 @@ import { messaging } from '../config/firebase.js';
 export const createNotification = async ({ recipient, sender, type, reel, comment, text }) => {
   try {
     // Avoid self-notifications
+    if (recipient.toString() === sender.toString()) {
+      return null;
+    }
+
+    // Automatically detect and upgrade follow to follow_back if recipient is already following sender
+    if (type === 'follow') {
+      try {
+        const isFollowBack = await Follow.findOne({
+          follower: recipient,
+          following: sender,
+          status: 'accepted'
+        });
+        if (isFollowBack) {
+          type = 'follow_back';
+        }
+      } catch (err) {
+        console.error('Error checking follow back status:', err);
+      }
+    }
+
     // Avoid duplicate notifications for follows, requests, likes, and mentions
-    if (['follow', 'follow_request', 'follow_accept', 'like', 'mention'].includes(type)) {
+    if (['follow', 'follow_request', 'follow_accept', 'follow_back', 'like', 'mention'].includes(type)) {
       const existing = await Notification.findOne({
         recipient,
         sender,
@@ -63,6 +84,10 @@ export const createNotification = async ({ recipient, sender, type, reel, commen
               case 'follow':
                 title = 'New Follower';
                 body = `${senderName} started following you`;
+                break;
+              case 'follow_back':
+                title = 'New Follower';
+                body = `${senderName} followed you back`;
                 break;
               case 'follow_request':
                 title = 'Follow Request';

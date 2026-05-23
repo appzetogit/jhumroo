@@ -159,9 +159,10 @@ export const createComment = asyncHandler(async (req, res) => {
     }
   }
 
+  let parentComment = null;
   // If it's a reply, check if parent comment exists
   if (parentCommentId) {
-    const parentComment = await Comment.findById(parentCommentId);
+    parentComment = await Comment.findById(parentCommentId);
     if (!parentComment) {
       return res.status(404).json({ success: false, message: 'Parent comment not found' });
     }
@@ -188,6 +189,11 @@ export const createComment = asyncHandler(async (req, res) => {
   // Populate user details
   await comment.populate('user', 'username fullName profilePicture isVerified');
 
+  // Set of mentioned user IDs to avoid double notifications (mention + comment/reply)
+  const mentionedUserIds = new Set(
+    comment.mentions ? comment.mentions.map(id => id.toString()) : []
+  );
+
   // Trigger mention notifications if any
   if (comment.mentions && comment.mentions.length > 0) {
     comment.mentions.forEach(mentionUserId => {
@@ -203,6 +209,34 @@ export const createComment = asyncHandler(async (req, res) => {
         }).catch(err => console.error('[createComment] Mention notification failed:', err));
       }
     });
+  }
+
+  // Trigger comment/reply notifications for Reels (exclude Ads)
+  if (!isAd) {
+    if (!parentCommentId) {
+      // Top-level comment: Notify reel owner
+      if (content.user && content.user._id.toString() !== req.user._id.toString() && !mentionedUserIds.has(content.user._id.toString())) {
+        createNotification({
+          recipient: content.user._id,
+          sender: req.user._id,
+          type: 'comment',
+          reel: reelId,
+          comment: comment._id
+        }).catch(err => console.error('[createComment] Comment notification failed:', err));
+      }
+    } else {
+      // Reply: Notify parent comment owner
+      if (parentComment && parentComment.user.toString() !== req.user._id.toString() && !mentionedUserIds.has(parentComment.user.toString())) {
+        createNotification({
+          recipient: parentComment.user,
+          sender: req.user._id,
+          type: 'comment',
+          reel: reelId,
+          comment: comment._id,
+          text: 'replied to your comment'
+        }).catch(err => console.error('[createComment] Reply notification failed:', err));
+      }
+    }
   }
 
   // Add follow status for Instagram-like experience
@@ -242,8 +276,8 @@ export const getReelComments = asyncHandler(async (req, res) => {
     });
   }
 
-  // Check if comments are turned off via privacy settings (only for reels/user ads)
-  if (!isAd && content.user && content.user.commentPrivacy === 'no_one') {
+  // Check if comments are turned off via privacy settings or individual reel setting (only for reels/user ads)
+  if (!isAd && (!content.allowComments || (content.user && content.user.commentPrivacy === 'no_one'))) {
     return res.status(200).json({
       success: true,
       comments: [],

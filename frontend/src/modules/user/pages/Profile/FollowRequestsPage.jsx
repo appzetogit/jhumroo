@@ -47,6 +47,7 @@ const NotificationItem = ({ notification, onToggleFollow }) => {
   const getActionText = () => {
     switch (type) {
       case 'follow': return 'started following you.';
+      case 'follow_back': return 'followed you back.';
       case 'follow_accept': return 'accepted your follow request.';
       case 'follow_request': return 'requested to follow you.';
       case 'like': return notification.comment ? 'liked your comment:' : 'liked your video.';

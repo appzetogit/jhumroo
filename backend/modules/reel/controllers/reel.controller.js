@@ -9,7 +9,7 @@ import Follow from '../../../models/Follow.model.js';
 import Report from '../../../models/Report.model.js';
 import { createNotification } from '../../../utils/notificationService.js';
 import { asyncHandler } from '../../../middleware/errorHandler.js';
-import { uploadToS3, getPresignedUploadUrl, getFileUrl, getPresignedDownloadUrl } from '../../../utils/s3.js';
+import { uploadToS3, getPresignedUploadUrl, getFileUrl, getPresignedDownloadUrl, deleteFromS3 } from '../../../utils/s3.js';
 import { processReelWithAudio } from '../../../utils/videoProcessor.js';
 import { deleteFile } from '../../../config/cloudinary.js';
 import RecommendationEngine from '../../../utils/recommendationEngine.js';
@@ -17,6 +17,28 @@ import WatchAnalytics from '../../../models/WatchAnalytics.model.js';
 import { isUserAllowedToViewReels } from '../../../utils/geoHelper.js';
 import fs from 'fs';
 import axios from 'axios';
+
+/**
+ * Safely parses location fields from the client
+ */
+const parseLocation = (loc) => {
+  if (!loc) return undefined;
+  if (typeof loc === 'object') {
+    return loc.name ? loc : { name: loc.title || loc.name };
+  }
+  if (typeof loc === 'string') {
+    try {
+      const parsed = JSON.parse(loc);
+      if (parsed && typeof parsed === 'object') {
+        return parsed.name ? parsed : { name: parsed.title || parsed.name || loc };
+      }
+    } catch (e) {
+      // Plain text location string
+      return { name: loc };
+    }
+  }
+  return undefined;
+};
 
 /**
  * Helper to handle mention notifications for Reels
@@ -103,7 +125,7 @@ export const completeUpload = asyncHandler(async (req, res) => {
     autoCaptions: autoCaptions !== 'false' && autoCaptions !== false,
     captionLanguage: captionLanguage || 'English',
     isAgeRestricted: isAgeRestricted === 'true' || isAgeRestricted === true,
-    location: location ? (typeof location === 'string' ? JSON.parse(location) : location) : undefined,
+    location: parseLocation(location),
     music: music ? {
       name: music.title || music.name || 'Original Sound',
       artist: music.artist || 'Original Artist',
@@ -224,7 +246,7 @@ export const createReel = asyncHandler(async (req, res) => {
     autoCaptions: autoCaptions !== 'false' && autoCaptions !== false,
     captionLanguage: captionLanguage || 'English',
     isAgeRestricted: isAgeRestricted === 'true' || isAgeRestricted === true,
-    location: location ? (typeof location === 'string' ? JSON.parse(location) : location) : undefined,
+    location: parseLocation(location),
     edits: edits ? (typeof edits === 'string' ? JSON.parse(edits) : edits) : undefined,
     audience: audience || 'everyone'
   });
@@ -746,6 +768,35 @@ export const getReel = asyncHandler(async (req, res) => {
     });
   }
 
+  // Enforce audience privacy rules
+  if (reel.audience && reel.audience !== 'everyone' && (!req.user || req.user._id.toString() !== reel.user._id.toString())) {
+    let isFollowing = false;
+    let isFollower = false;
+
+    if (req.user) {
+      const [follow, incoming] = await Promise.all([
+        Follow.findOne({ follower: req.user._id, following: reel.user._id, status: 'accepted' }),
+        Follow.findOne({ follower: reel.user._id, following: req.user._id, status: 'accepted' })
+      ]);
+      isFollowing = !!follow;
+      isFollower = !!incoming;
+    }
+
+    if (reel.audience === 'followers' && !isFollowing) {
+      return res.status(403).json({
+        success: false,
+        message: "This reel is only visible to the creator's followers"
+      });
+    }
+
+    if (reel.audience === 'following' && !isFollower) {
+      return res.status(403).json({
+        success: false,
+        message: "This reel is only visible to the creator's following"
+      });
+    }
+  }
+
   // Add liked and saved status if user is authenticated
   if (req.user) {
     const [like, save] = await Promise.all([
@@ -785,8 +836,10 @@ export const deleteReel = asyncHandler(async (req, res) => {
     });
   }
 
-  // Delete video from Cloudinary
-  await deleteFile(reel.video.publicId, 'video');
+  // Delete video from S3
+  if (reel.video.publicId) {
+    await deleteFromS3(reel.video.publicId);
+  }
 
   // Get the number of likes to decrement from user stats
   const likesToDecrement = reel.stats?.likesCount || 0;

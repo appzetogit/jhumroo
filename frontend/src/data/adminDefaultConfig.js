@@ -226,8 +226,14 @@ export const getDefaultAdminConfig = () => ({
     filters: [],
     sounds: [],
     locations: {
-      chips: [],
-      results: [],
+      chips: ['Mumbai', 'Delhi', 'Bangalore', 'Goa', 'Pune', 'Lonavala'],
+      results: [
+        { id: '1', title: 'Mumbai, Maharashtra', subtitle: 'Popular city in Maharashtra, India' },
+        { id: '2', title: 'Delhi, India', subtitle: 'Capital territory of India' },
+        { id: '3', title: 'Bangalore, Karnataka', subtitle: 'Silicon Valley of India' },
+        { id: '4', title: 'Goa, India', subtitle: 'Popular beach destination' },
+        { id: '5', title: 'Pune, Maharashtra', subtitle: 'Cultural capital of Maharashtra' }
+      ],
     },
     hashtagSuggestions: [],
     linkOptions: [],
