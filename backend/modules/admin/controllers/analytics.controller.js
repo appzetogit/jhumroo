@@ -6,6 +6,8 @@ import Follow from '../../../models/Follow.model.js';
 import Report from '../../../models/Report.model.js';
 import Admin from '../../../models/Admin.model.js';
 import Ad from '../../../models/Ad.model.js';
+import Audio from '../../../models/Audio.model.js';
+import SupportRequest from '../../../models/SupportRequest.model.js';
 import { asyncHandler } from '../../../middleware/errorHandler.js';
 
 /**
@@ -29,7 +31,12 @@ export const getDashboardStats = asyncHandler(async (req, res) => {
     totalReports,
     activeUsers24h,
     liveUsers,
-    bannedUsers
+    bannedUsers,
+    totalAudio,
+    totalUserAds,
+    totalAdminAds,
+    totalBlockedUsers,
+    totalSupportPending
   ] = await Promise.all([
     User.countDocuments(),
     Reel.countDocuments(),
@@ -38,7 +45,12 @@ export const getDashboardStats = asyncHandler(async (req, res) => {
     Report.countDocuments(),
     User.countDocuments({ lastActive: { $gte: last24h } }),
     User.countDocuments({ isLive: true }),
-    User.countDocuments({ isBanned: true })
+    User.countDocuments({ isBanned: true }),
+    Audio.countDocuments(),
+    Ad.countDocuments({ onModel: 'User' }),
+    Ad.countDocuments({ onModel: 'Admin' }),
+    User.countDocuments({ isBanned: true }),
+    SupportRequest.countDocuments({ status: 'pending' })
   ]);
 
   // Get today's stats
@@ -70,18 +82,21 @@ export const getDashboardStats = asyncHandler(async (req, res) => {
     { $limit: 5 }
   ]);
 
-  // Get watch time estimate (total views * avg duration if we don't track per-view duration)
-  // Let's assume average reel duration is 15s if not specified, or use the actual duration
+  // Get watch time, total views, and total shares estimate
   const watchTimeData = await Reel.aggregate([
     {
       $group: {
         _id: null,
-        totalWatchTime: { $sum: { $multiply: ['$stats.viewsCount', '$video.duration'] } }
+        totalWatchTime: { $sum: { $multiply: ['$stats.viewsCount', '$video.duration'] } },
+        totalViews: { $sum: '$stats.viewsCount' },
+        totalShares: { $sum: '$stats.sharesCount' }
       }
     }
   ]);
 
   const totalWatchTimeSeconds = watchTimeData.length > 0 ? watchTimeData[0].totalWatchTime : 0;
+  const totalViews = watchTimeData.length > 0 ? watchTimeData[0].totalViews : 0;
+  const totalShares = watchTimeData.length > 0 ? watchTimeData[0].totalShares : 0;
 
   res.status(200).json({
     success: true,
@@ -95,7 +110,14 @@ export const getDashboardStats = asyncHandler(async (req, res) => {
         activeUsers24h,
         liveUsers,
         bannedUsers,
-        totalWatchTimeSeconds
+        totalWatchTimeSeconds,
+        totalAudio,
+        totalUserAds,
+        totalAdminAds,
+        totalBlockedUsers,
+        totalSupportPending,
+        totalViews,
+        totalShares
       },
       today: {
         newUsers: newUsersToday,
@@ -121,12 +143,12 @@ export const getDashboardStats = asyncHandler(async (req, res) => {
  * @access  Private/Admin
  */
 export const getUserGrowth = asyncHandler(async (req, res) => {
-  const { days = 30 } = req.query;
+  const { days = 365 } = req.query;
 
   const startDate = new Date();
   startDate.setDate(startDate.getDate() - parseInt(days));
 
-  // Aggregate users by day
+  // Aggregate users by day within the requested period
   const userGrowth = await User.aggregate([
     {
       $match: {
@@ -146,8 +168,13 @@ export const getUserGrowth = asyncHandler(async (req, res) => {
     }
   ]);
 
-  // Get cumulative total
-  let cumulative = await User.countDocuments({ createdAt: { $lt: startDate } });
+  // Baseline = users registered before the start date
+  const baseline = await User.countDocuments({ createdAt: { $lt: startDate } });
+  // Overall total users (for fallback when no growth data exists in range)
+  const totalUsersCount = await User.countDocuments();
+
+  // Build cumulative growth data
+  let cumulative = baseline;
   const growthData = userGrowth.map(item => {
     cumulative += item.count;
     return {
@@ -160,7 +187,115 @@ export const getUserGrowth = asyncHandler(async (req, res) => {
   res.status(200).json({
     success: true,
     period: `Last ${days} days`,
+    baseline,
+    totalUsersCount,
     data: growthData
+  });
+});
+
+/**
+ * @desc    Get reels growth analytics (monthly, by year)
+ * @route   GET /api/admin/analytics/reels-growth
+ * @access  Private/Admin
+ */
+export const getReelsGrowth = asyncHandler(async (req, res) => {
+  const { year } = req.query;
+  const targetYear = parseInt(year) || new Date().getFullYear();
+
+  const startDate = new Date(`${targetYear}-01-01T00:00:00.000Z`);
+  const endDate = new Date(`${targetYear + 1}-01-01T00:00:00.000Z`);
+
+  // Aggregate reels by month for the given year
+  const reelsGrowth = await Reel.aggregate([
+    {
+      $match: {
+        createdAt: { $gte: startDate, $lt: endDate }
+      }
+    },
+    {
+      $group: {
+        _id: { $month: '$createdAt' },
+        newReels: { $sum: 1 }
+      }
+    },
+    { $sort: { _id: 1 } }
+  ]);
+
+  // Build a full 12-month array filled with real or 0 counts
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth() + 1; // 1-12
+
+  const monthlyData = months.map((label, i) => {
+    const monthNum = i + 1;
+    // Don't show future months for current year
+    if (targetYear === currentYear && monthNum > currentMonth) return null;
+    const entry = reelsGrowth.find(r => r._id === monthNum);
+    return {
+      month: label,
+      newReels: entry ? entry.newReels : 0
+    };
+  }).filter(Boolean);
+
+  // Overall totals for context
+  const totalReelsCount = await Reel.countDocuments();
+  const yearReelsCount = monthlyData.reduce((sum, m) => sum + m.newReels, 0);
+
+  res.status(200).json({
+    success: true,
+    year: targetYear,
+    totalReelsCount,
+    yearReelsCount,
+    data: monthlyData
+  });
+});
+
+/**
+ * @desc    Get new users monthly (by year)
+ * @route   GET /api/admin/analytics/new-users-monthly
+ * @access  Private/Admin
+ */
+export const getNewUsersMonthly = asyncHandler(async (req, res) => {
+  const { year } = req.query;
+  const targetYear = parseInt(year) || new Date().getFullYear();
+
+  const startDate = new Date(`${targetYear}-01-01T00:00:00.000Z`);
+  const endDate = new Date(`${targetYear + 1}-01-01T00:00:00.000Z`);
+
+  // Aggregate new signups by month
+  const signups = await User.aggregate([
+    { $match: { createdAt: { $gte: startDate, $lt: endDate } } },
+    {
+      $group: {
+        _id: { $month: '$createdAt' },
+        newUsers: { $sum: 1 }
+      }
+    },
+    { $sort: { _id: 1 } }
+  ]);
+
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth() + 1;
+
+  const monthlyData = months.map((label, i) => {
+    const monthNum = i + 1;
+    if (targetYear === currentYear && monthNum > currentMonth) return null;
+    const entry = signups.find(s => s._id === monthNum);
+    return { month: label, newUsers: entry ? entry.newUsers : 0 };
+  }).filter(Boolean);
+
+  const totalUsersCount = await User.countDocuments();
+  const yearUsersCount = monthlyData.reduce((sum, m) => sum + m.newUsers, 0);
+
+  res.status(200).json({
+    success: true,
+    year: targetYear,
+    totalUsersCount,
+    yearUsersCount,
+    data: monthlyData
   });
 });
 

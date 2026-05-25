@@ -1,16 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  BiTrendingUp, 
   BiUser, 
   BiVideo, 
-  BiShieldQuarter, 
-  BiPulse, 
-  BiBroadcast, 
-  BiCloudUpload, 
-  BiUserPlus,
-  BiTimeFive,
-  BiBarChartAlt2,
-  BiCheckCircle
+  BiCloudUpload,
+  BiMusic,
+  BiSolidMegaphone,
+  BiShieldQuarter,
+  BiSupport,
+  BiBlock,
+  BiTrendingUp,
+  BiCheckCircle,
+  BiHeart,
+  BiMessageRounded,
+  BiShareAlt,
+  BiShow
 } from 'react-icons/bi';
 import { 
   LineChart, 
@@ -49,16 +52,16 @@ const CustomTooltip = ({ active, payload, label }) => {
     
     return (
       <div className="custom-chart-tooltip" style={{
-        backgroundColor: '#0b0b0f',
-        border: '1px solid rgba(255, 255, 255, 0.1)',
+        backgroundColor: '#ffffff',
+        border: '1.5px solid var(--admin-border)',
         padding: '10px 14px',
         borderRadius: '8px',
-        color: '#ffffff',
+        color: 'var(--admin-text)',
         fontSize: '13px',
         fontFamily: 'inherit',
-        boxShadow: '0 8px 30px rgba(0, 0, 0, 0.5)'
+        boxShadow: '0 8px 24px rgba(254, 44, 85, 0.08)'
       }}>
-        <div style={{ fontWeight: 'bold', marginBottom: '4px', color: '#9ca3af' }}>{label}</div>
+        <div style={{ fontWeight: 'bold', marginBottom: '4px', color: 'var(--admin-muted)' }}>{label}</div>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: '20px' }}>
           <span style={{ color: '#a855f7' }}>Users:</span>
           <span style={{ fontWeight: 'bold' }}>{total.toLocaleString()}</span>
@@ -72,27 +75,41 @@ const CustomTooltip = ({ active, payload, label }) => {
 const AdminDashboard = () => {
   const [stats, setStats] = useState(null);
   const [userGrowth, setUserGrowth] = useState([]);
+  const [growthBaseline, setGrowthBaseline] = useState(0);
+  const [totalUsersCount, setTotalUsersCount] = useState(0);
+  const [reelsGrowth, setReelsGrowth] = useState([]);
+  const [selectedReelsYear, setSelectedReelsYear] = useState(String(new Date().getFullYear()));
+  const [newUsersMonthly, setNewUsersMonthly] = useState([]);
+  const [newUsersYearTotal, setNewUsersYearTotal] = useState(0);
+  const [selectedNewUsersYear, setSelectedNewUsersYear] = useState(String(new Date().getFullYear()));
   const [contentAnalytics, setContentAnalytics] = useState([]);
   const [watchTimeAnalytics, setWatchTimeAnalytics] = useState([]);
   const [topCreators, setTopCreators] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [selectedYear, setSelectedYear] = useState('2026');
+  const [selectedYear, setSelectedYear] = useState(String(new Date().getFullYear()));
   const [selectedMonth, setSelectedMonth] = useState('All');
 
   useEffect(() => {
     const fetchData = async () => {
       try {
         setLoading(true);
-        const [dashStats, growth, content, watchTime, creators] = await Promise.all([
+        const [dashStats, growth, reelsData, newUsersData, content, watchTime, creators] = await Promise.all([
           adminAnalyticsService.getDashboardStats(),
           adminAnalyticsService.getUserGrowth(365),
+          adminAnalyticsService.getReelsGrowth(new Date().getFullYear()),
+          adminAnalyticsService.getNewUsersMonthly(new Date().getFullYear()),
           adminAnalyticsService.getContentAnalytics(7),
           adminAnalyticsService.getWatchTimeAnalytics(7),
           adminAnalyticsService.getTopUsers('reels', 5)
         ]);
 
         setStats(dashStats.stats);
-        setUserGrowth(growth.data);
+        setUserGrowth(growth.data || []);
+        setGrowthBaseline(growth.baseline || 0);
+        setTotalUsersCount(growth.totalUsersCount || 0);
+        setReelsGrowth(reelsData.data || []);
+        setNewUsersMonthly(newUsersData.data || []);
+        setNewUsersYearTotal(newUsersData.yearUsersCount || 0);
         if (creators && creators.users) {
           setTopCreators(creators.users);
         }
@@ -121,6 +138,23 @@ const AdminDashboard = () => {
     fetchData();
   }, []);
 
+  // Refetch reels growth when year changes
+  useEffect(() => {
+    adminAnalyticsService.getReelsGrowth(selectedReelsYear)
+      .then(res => setReelsGrowth(res.data || []))
+      .catch(err => console.error('Reels growth fetch error:', err));
+  }, [selectedReelsYear]);
+
+  // Refetch new users monthly when year changes
+  useEffect(() => {
+    adminAnalyticsService.getNewUsersMonthly(selectedNewUsersYear)
+      .then(res => {
+        setNewUsersMonthly(res.data || []);
+        setNewUsersYearTotal(res.yearUsersCount || 0);
+      })
+      .catch(err => console.error('New users monthly fetch error:', err));
+  }, [selectedNewUsersYear]);
+
   if (loading || !stats) {
     return (
       <div className="admin-page admin-loading">
@@ -137,82 +171,62 @@ const AdminDashboard = () => {
   };
 
   const getFilteredChartData = () => {
-    if (!userGrowth || userGrowth.length === 0) return [];
-    
     const currentDate = new Date();
     const currentYearNum = currentDate.getFullYear();
-    const currentMonthIndex = currentDate.getMonth(); // 0-11
+    const currentMonthIndex = currentDate.getMonth();
     const currentDayNum = currentDate.getDate();
-    
     const yearNum = parseInt(selectedYear);
-    
-    // Sort userGrowth by date to ensure sequential order
+
+    // Sort growth entries by date
     const sortedGrowth = [...userGrowth].sort((a, b) => a.date.localeCompare(b.date));
-    
-    // Helper to get real cumulative users on a specific date (YYYY-MM-DD)
+
+    // For a given date string, return the best known cumulative user count
     const getCumulativeOnDate = (targetDateStr) => {
+      // Find the latest entry on or before targetDate
       let latestEntry = null;
-      for (let i = 0; i < sortedGrowth.length; i++) {
-        if (sortedGrowth[i].date <= targetDateStr) {
-          latestEntry = sortedGrowth[i];
-        } else {
-          break;
-        }
+      for (const entry of sortedGrowth) {
+        if (entry.date <= targetDateStr) latestEntry = entry;
+        else break;
       }
-      
-      if (latestEntry) {
-        return latestEntry.totalUsers;
+      if (latestEntry) return latestEntry.totalUsers;
+
+      // If targetDate is AFTER all our entries → return the overall total
+      if (sortedGrowth.length > 0 && targetDateStr > sortedGrowth[sortedGrowth.length - 1].date) {
+        return totalUsersCount;
       }
-      
-      // Fallback: baseline users before our 365-day dataset started
-      const firstEntry = sortedGrowth[0];
-      return Math.max(0, firstEntry.totalUsers - firstEntry.newUsers);
+
+      // If targetDate is BEFORE all entries → return baseline (users before 365-day window)
+      return growthBaseline;
     };
-    
+
     if (selectedMonth === 'All') {
       const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-      
-      // If selected year is the current year, only show months up to the current month!
-      const targetMonths = yearNum === currentYearNum 
+      const targetMonths = yearNum === currentYearNum
         ? months.slice(0, currentMonthIndex + 1)
         : months;
-      
+
       return targetMonths.map((month, index) => {
         const lastDay = new Date(yearNum, index + 1, 0).getDate();
         const paddedMonth = String(index + 1).padStart(2, '0');
         const paddedDay = String(lastDay).padStart(2, '0');
         const targetDateStr = `${yearNum}-${paddedMonth}-${paddedDay}`;
-        
-        return {
-          dateLabel: month,
-          totalUsers: getCumulativeOnDate(targetDateStr)
-        };
+        return { dateLabel: month, totalUsers: getCumulativeOnDate(targetDateStr) };
       });
     } else {
       const monthIndex = parseInt(selectedMonth);
-      
-      // If selected month is in the future for the current year, return empty
-      if (yearNum === currentYearNum && monthIndex > currentMonthIndex) {
-        return [];
-      }
-      
+      if (yearNum === currentYearNum && monthIndex > currentMonthIndex) return [];
+
       const daysInMonth = new Date(yearNum, monthIndex + 1, 0).getDate();
       const paddedMonth = String(monthIndex + 1).padStart(2, '0');
-      
-      // If selected month is the current month of the current year, only show days up to the current day!
       const targetDays = (yearNum === currentYearNum && monthIndex === currentMonthIndex)
         ? currentDayNum
         : daysInMonth;
-      
+
       const dailyData = [];
       for (let d = 1; d <= targetDays; d++) {
         const paddedDay = String(d).padStart(2, '0');
         const targetDateStr = `${yearNum}-${paddedMonth}-${paddedDay}`;
-        
-        dailyData.push({
-          dateLabel: `${d}`,
-          totalUsers: getCumulativeOnDate(targetDateStr)
-        });
+        dailyData.push({ dateLabel: `${d}`, totalUsers: getCumulativeOnDate(targetDateStr) });
       }
       return dailyData;
     }
@@ -234,8 +248,8 @@ const AdminDashboard = () => {
         </div>
       </div>
 
-      {/* Main Stats Grid */}
-      <div className="admin-grid admin-stats-grid">
+      {/* Main Stats Grid — 12 cards */}
+      <div className="admin-grid admin-stats-grid-8" style={{ marginBottom: '0' }}>
         <StatCard
           label="Total Users"
           value={stats?.overview?.totalUsers?.toLocaleString() || '0'}
@@ -244,52 +258,72 @@ const AdminDashboard = () => {
           subValue={stats?.today?.newUsers ? `+${stats.today.newUsers} today` : null}
         />
         <StatCard
-          label="Daily Active Users"
-          value={stats?.overview?.activeUsers24h?.toLocaleString() || '0'}
-          icon={<BiPulse size={24} />}
-          accent="#10b981"
-        />
-        <StatCard
-          label="Total Videos"
+          label="Total Reels"
           value={stats?.overview?.totalReels?.toLocaleString() || '0'}
           icon={<BiVideo size={24} />}
           accent="#f59e0b"
           subValue={stats?.today?.newReels ? `+${stats.today.newReels} today` : null}
         />
         <StatCard
-          label="Pending Reports"
-          value={stats?.pendingReports?.total || '0'}
-          icon={<BiShieldQuarter size={24} />}
-          accent="#ef4444"
-          subValue={stats?.pendingReports?.critical > 0 ? `${stats.pendingReports.critical} critical` : null}
-        />
-      </div>
-
-      {/* Secondary Stats Row */}
-      <div className="admin-grid admin-stats-grid-small" style={{ marginTop: '1.5rem' }}>
-        <StatCard
-          label="Live Users"
-          value={stats?.overview?.liveUsers || '0'}
-          icon={<BiBroadcast size={20} />}
-          accent="#ec4899"
-        />
-        <StatCard
           label="Today's Uploads"
-          value={stats?.today?.newReels || '0'}
-          icon={<BiCloudUpload size={20} />}
+          value={stats?.today?.newReels?.toLocaleString() || '0'}
+          icon={<BiCloudUpload size={24} />}
           accent="#3b82f6"
         />
         <StatCard
-          label="New Signups"
-          value={stats?.today?.newUsers || '0'}
-          icon={<BiUserPlus size={20} />}
+          label="Total Audio"
+          value={stats?.overview?.totalAudio?.toLocaleString() || '0'}
+          icon={<BiMusic size={24} />}
+          accent="#10b981"
+        />
+        <StatCard
+          label="Total User Ads"
+          value={stats?.overview?.totalUserAds?.toLocaleString() || '0'}
+          icon={<BiSolidMegaphone size={24} />}
+          accent="#ec4899"
+        />
+        <StatCard
+          label="Total Admin Ads"
+          value={stats?.overview?.totalAdminAds?.toLocaleString() || '0'}
+          icon={<BiShieldQuarter size={24} />}
           accent="#8b5cf6"
         />
         <StatCard
-          label="Total Watch Time"
-          value={formatWatchTime(stats?.overview?.totalWatchTimeSeconds || 0)}
-          icon={<BiTimeFive size={20} />}
+          label="Total Blocked Users"
+          value={stats?.overview?.totalBlockedUsers?.toLocaleString() || '0'}
+          icon={<BiBlock size={24} />}
+          accent="#ef4444"
+        />
+        <StatCard
+          label="Support Requests Pending"
+          value={stats?.overview?.totalSupportPending?.toLocaleString() || '0'}
+          icon={<BiSupport size={24} />}
           accent="#14b8a6"
+        />
+        <StatCard
+          label="Total Views"
+          value={stats?.overview?.totalViews?.toLocaleString() || '0'}
+          icon={<BiShow size={24} />}
+          accent="#06b6d4"
+        />
+        <StatCard
+          label="Total Likes"
+          value={stats?.overview?.totalLikes?.toLocaleString() || '0'}
+          icon={<BiHeart size={24} />}
+          accent="#f43f5e"
+        />
+        <StatCard
+          label="Total Comments"
+          value={stats?.overview?.totalComments?.toLocaleString() || '0'}
+          icon={<BiMessageRounded size={24} />}
+          accent="#a855f7"
+          subValue={stats?.today?.newComments ? `+${stats.today.newComments} today` : null}
+        />
+        <StatCard
+          label="Total Share"
+          value={stats?.overview?.totalShares?.toLocaleString() || '0'}
+          icon={<BiShareAlt size={24} />}
+          accent="#0ea5e9"
         />
       </div>
 
@@ -297,9 +331,9 @@ const AdminDashboard = () => {
       <div className="admin-charts-container" style={{ marginTop: '2rem' }}>
         <div className="admin-charts-row">
           {/* User Growth Chart */}
-          <div className="admin-card admin-chart-card" style={{ backgroundColor: '#09090b', borderColor: 'rgba(255, 255, 255, 0.08)', display: 'flex', flexDirection: 'column' }}>
+          <div className="admin-card admin-chart-card" style={{ display: 'flex', flexDirection: 'column' }}>
             <div className="admin-card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
-              <h2 style={{ color: '#ffffff', margin: 0 }}>User Growth</h2>
+              <h2 style={{ margin: 0 }}>User Growth</h2>
               
               <div style={{ display: 'flex', gap: '8px' }}>
                 {/* Month Selector */}
@@ -307,10 +341,10 @@ const AdminDashboard = () => {
                   value={selectedMonth}
                   onChange={(e) => setSelectedMonth(e.target.value)}
                   style={{
-                    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-                    border: '1px solid rgba(255, 255, 255, 0.12)',
+                    backgroundColor: '#fff',
+                    border: '1px solid var(--admin-border)',
                     borderRadius: '8px',
-                    color: '#e4e4e7',
+                    color: 'var(--admin-text)',
                     padding: '4px 10px',
                     fontSize: '12px',
                     fontWeight: '600',
@@ -318,19 +352,19 @@ const AdminDashboard = () => {
                     cursor: 'pointer'
                   }}
                 >
-                  <option value="All" style={{ backgroundColor: '#09090b', color: '#ffffff' }}>All Months</option>
-                  <option value="0" style={{ backgroundColor: '#09090b', color: '#ffffff' }}>January</option>
-                  <option value="1" style={{ backgroundColor: '#09090b', color: '#ffffff' }}>February</option>
-                  <option value="2" style={{ backgroundColor: '#09090b', color: '#ffffff' }}>March</option>
-                  <option value="3" style={{ backgroundColor: '#09090b', color: '#ffffff' }}>April</option>
-                  <option value="4" style={{ backgroundColor: '#09090b', color: '#ffffff' }}>May</option>
-                  <option value="5" style={{ backgroundColor: '#09090b', color: '#ffffff' }}>June</option>
-                  <option value="6" style={{ backgroundColor: '#09090b', color: '#ffffff' }}>July</option>
-                  <option value="7" style={{ backgroundColor: '#09090b', color: '#ffffff' }}>August</option>
-                  <option value="8" style={{ backgroundColor: '#09090b', color: '#ffffff' }}>September</option>
-                  <option value="9" style={{ backgroundColor: '#09090b', color: '#ffffff' }}>October</option>
-                  <option value="10" style={{ backgroundColor: '#09090b', color: '#ffffff' }}>November</option>
-                  <option value="11" style={{ backgroundColor: '#09090b', color: '#ffffff' }}>December</option>
+                  <option value="All">All Months</option>
+                  <option value="0">January</option>
+                  <option value="1">February</option>
+                  <option value="2">March</option>
+                  <option value="3">April</option>
+                  <option value="4">May</option>
+                  <option value="5">June</option>
+                  <option value="6">July</option>
+                  <option value="7">August</option>
+                  <option value="8">September</option>
+                  <option value="9">October</option>
+                  <option value="10">November</option>
+                  <option value="11">December</option>
                 </select>
 
                 {/* Year Selector */}
@@ -338,10 +372,10 @@ const AdminDashboard = () => {
                   value={selectedYear}
                   onChange={(e) => setSelectedYear(e.target.value)}
                   style={{
-                    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-                    border: '1px solid rgba(255, 255, 255, 0.12)',
+                    backgroundColor: '#fff',
+                    border: '1px solid var(--admin-border)',
                     borderRadius: '8px',
-                    color: '#e4e4e7',
+                    color: 'var(--admin-text)',
                     padding: '4px 10px',
                     fontSize: '12px',
                     fontWeight: '600',
@@ -349,9 +383,9 @@ const AdminDashboard = () => {
                     cursor: 'pointer'
                   }}
                 >
-                  <option value="2026" style={{ backgroundColor: '#09090b', color: '#ffffff' }}>2026</option>
-                  <option value="2025" style={{ backgroundColor: '#09090b', color: '#ffffff' }}>2025</option>
-                  <option value="2024" style={{ backgroundColor: '#09090b', color: '#ffffff' }}>2024</option>
+                  <option value="2026">2026</option>
+                  <option value="2025">2025</option>
+                  <option value="2024">2024</option>
                 </select>
               </div>
             </div>
@@ -364,18 +398,18 @@ const AdminDashboard = () => {
                       <stop offset="95%" stopColor="#a855f7" stopOpacity={0}/>
                     </linearGradient>
                   </defs>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255, 255, 255, 0.05)" />
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(0,0,0,0.06)" />
                   <XAxis 
                     dataKey="dateLabel" 
                     axisLine={false} 
                     tickLine={false} 
-                    tick={{ fill: '#71717a', fontSize: 11 }}
+                    tick={{ fill: 'var(--admin-muted)', fontSize: 11 }}
                     dy={10}
                   />
                   <YAxis hide />
                   <Tooltip 
                     content={<CustomTooltip />} 
-                    cursor={{ stroke: 'rgba(255, 255, 255, 0.15)', strokeWidth: 1 }} 
+                    cursor={{ stroke: 'rgba(0, 0, 0, 0.1)', strokeWidth: 1 }} 
                   />
                   <Area type="monotone" dataKey="totalUsers" stroke="#a855f7" strokeWidth={3} fillOpacity={1} fill="url(#colorUsers)" />
                 </AreaChart>
@@ -383,85 +417,163 @@ const AdminDashboard = () => {
             </div>
           </div>
 
-          {/* Video Uploads Chart */}
-          <div className="admin-card admin-chart-card">
-            <div className="admin-card-header">
-              <h2>Video Uploads</h2>
-              <span className="admin-chip">Content Velocity</span>
+          {/* Reels Growth Chart */}
+          <div className="admin-card admin-chart-card" style={{ display: 'flex', flexDirection: 'column' }}>
+            <div className="admin-card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+              <h2 style={{ margin: 0 }}>Reels Growth</h2>
+              <select
+                value={selectedReelsYear}
+                onChange={(e) => setSelectedReelsYear(e.target.value)}
+                style={{
+                  backgroundColor: '#fff',
+                  border: '1px solid var(--admin-border)',
+                  borderRadius: '8px',
+                  color: 'var(--admin-text)',
+                  padding: '4px 10px',
+                  fontSize: '12px',
+                  fontWeight: '600',
+                  outline: 'none',
+                  cursor: 'pointer'
+                }}
+              >
+                <option value={String(new Date().getFullYear())}>{new Date().getFullYear()}</option>
+                <option value={String(new Date().getFullYear() - 1)}>{new Date().getFullYear() - 1}</option>
+                <option value={String(new Date().getFullYear() - 2)}>{new Date().getFullYear() - 2}</option>
+              </select>
             </div>
-            <div className="admin-chart-wrapper">
-              <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={contentAnalytics}>
+            <div className="admin-chart-wrapper" style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', marginTop: '1rem' }}>
+              <ResponsiveContainer width="100%" height={260}>
+                <AreaChart data={reelsGrowth} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="colorReels" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.3}/>
+                      <stop offset="95%" stopColor="#f59e0b" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(0,0,0,0.06)" />
-                  <XAxis 
-                    dataKey="date" 
-                    axisLine={false} 
-                    tickLine={false} 
+                  <XAxis
+                    dataKey="month"
+                    axisLine={false}
+                    tickLine={false}
                     tick={{ fill: 'var(--admin-muted)', fontSize: 11 }}
                     dy={10}
                   />
-                  <YAxis 
-                    axisLine={false} 
-                    tickLine={false} 
-                    tick={{ fill: 'var(--admin-muted)', fontSize: 11 }}
-                  />
-                  <Tooltip 
-                    contentStyle={{ 
-                      backgroundColor: '#ffffff', 
-                      border: '1.5px solid var(--admin-border)', 
-                      borderRadius: '12px', 
+                  <YAxis hide />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: '#ffffff',
+                      border: '1.5px solid var(--admin-border)',
+                      borderRadius: '12px',
                       boxShadow: '0 8px 24px rgba(254, 44, 85, 0.08)',
                       color: 'var(--admin-text)',
-                      fontSize: '12px'
+                      fontSize: '12px',
+                      fontFamily: 'inherit'
                     }}
+                    formatter={(value) => [value.toLocaleString(), 'New Reels']}
+                    cursor={{ stroke: 'rgba(0,0,0,0.1)', strokeWidth: 1 }}
                   />
-                  <Bar dataKey="reels" fill="#f59e0b" radius={[4, 4, 0, 0]} barSize={20} />
-                </BarChart>
+                  <Area type="monotone" dataKey="newReels" stroke="#f59e0b" strokeWidth={3} fillOpacity={1} fill="url(#colorReels)" />
+                </AreaChart>
               </ResponsiveContainer>
             </div>
           </div>
         </div>
 
         <div className="admin-charts-row" style={{ marginTop: '2rem' }}>
-          {/* Watch Time Analytics */}
+          {/* New Signups Monthly Chart */}
           <div className="admin-card admin-chart-card full-width">
-            <div className="admin-card-header">
-              <h2>Watch Time Analytics</h2>
-              <div className="admin-header-info">
-                <span className="admin-chip">Platform Engagement</span>
+            <div className="admin-card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+              <div>
+                <h2 style={{ margin: 0 }}>New Signups</h2>
+                <p style={{ margin: '4px 0 0', fontSize: '12px', color: 'var(--admin-muted)' }}>
+                  Monthly new user registrations
+                  {newUsersYearTotal > 0 && (
+                    <span style={{ marginLeft: '8px', fontWeight: '700', color: '#6366f1' }}>
+                      · {newUsersYearTotal.toLocaleString()} this year
+                    </span>
+                  )}
+                </p>
+              </div>
+              {/* 4-Year filter */}
+              <div style={{ display: 'flex', gap: '6px' }}>
+                {[0, 1, 2, 3].map(offset => {
+                  const yr = String(new Date().getFullYear() - offset);
+                  return (
+                    <button
+                      key={yr}
+                      onClick={() => setSelectedNewUsersYear(yr)}
+                      style={{
+                        padding: '5px 14px',
+                        borderRadius: '999px',
+                        border: '1px solid',
+                        borderColor: selectedNewUsersYear === yr ? '#6366f1' : 'var(--admin-border)',
+                        background: selectedNewUsersYear === yr ? '#6366f1' : '#fff',
+                        color: selectedNewUsersYear === yr ? '#fff' : 'var(--admin-muted)',
+                        fontSize: '12px',
+                        fontWeight: '600',
+                        cursor: 'pointer',
+                        transition: 'all 0.18s ease'
+                      }}
+                    >
+                      {yr}
+                    </button>
+                  );
+                })}
               </div>
             </div>
-            <div className="admin-chart-wrapper">
-              <ResponsiveContainer width="100%" height={350}>
-                <LineChart data={watchTimeAnalytics}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(0,0,0,0.06)" />
-                  <XAxis 
-                    dataKey="_id" 
-                    axisLine={false} 
-                    tickLine={false} 
-                    tick={{ fill: 'var(--admin-muted)', fontSize: 11 }}
-                    dy={10}
+            <div className="admin-chart-wrapper" style={{ marginTop: '1rem' }}>
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={newUsersMonthly} margin={{ top: 10, right: 16, left: 0, bottom: 0 }} barSize={32}>
+                  <defs>
+                    <linearGradient id="colorNewUsers" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#6366f1" stopOpacity={1} />
+                      <stop offset="100%" stopColor="#818cf8" stopOpacity={0.7} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(0,0,0,0.05)" />
+                  <XAxis
+                    dataKey="month"
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fill: 'var(--admin-muted)', fontSize: 11, fontWeight: 600 }}
+                    dy={8}
                   />
-                  <YAxis 
-                    axisLine={false} 
-                    tickLine={false} 
+                  <YAxis
+                    axisLine={false}
+                    tickLine={false}
                     tick={{ fill: 'var(--admin-muted)', fontSize: 11 }}
-                    label={{ value: 'Seconds', angle: -90, position: 'insideLeft', fill: 'var(--admin-muted)', offset: 10, fontSize: 11 }}
+                    width={40}
+                    allowDecimals={false}
+                    domain={[0, 'auto']}
+                    tickFormatter={(v) => Number.isInteger(v) ? v : ''}
                   />
-                  <Tooltip 
-                    contentStyle={{ 
-                      backgroundColor: '#ffffff', 
-                      border: '1.5px solid var(--admin-border)', 
-                      borderRadius: '12px', 
-                      boxShadow: '0 8px 24px rgba(254, 44, 85, 0.08)',
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: '#ffffff',
+                      border: '1.5px solid var(--admin-border)',
+                      borderRadius: '12px',
+                      boxShadow: '0 8px 24px rgba(99, 102, 241, 0.12)',
                       color: 'var(--admin-text)',
-                      fontSize: '12px'
+                      fontSize: '13px',
+                      fontFamily: 'inherit',
+                      padding: '10px 14px'
                     }}
+                    formatter={(value) => [value.toLocaleString(), 'New Users']}
+                    cursor={{ fill: 'rgba(99, 102, 241, 0.05)' }}
                   />
-                  <Legend verticalAlign="top" height={36}/>
-                  <Line name="Watch Time (s)" type="monotone" dataKey="dailyWatchTime" stroke="#10b981" strokeWidth={3} dot={{ r: 4, fill: '#10b981' }} activeDot={{ r: 6 }} />
-                  <Line name="Total Views" type="monotone" dataKey="totalViews" stroke="#3b82f6" strokeWidth={2} strokeDasharray="5 5" />
-                </LineChart>
+                  <Legend
+                    verticalAlign="top"
+                    height={32}
+                    formatter={() => 'New Signups'}
+                    wrapperStyle={{ fontSize: '12px', color: '#6366f1', fontWeight: 600 }}
+                  />
+                  <Bar
+                    dataKey="newUsers"
+                    fill="url(#colorNewUsers)"
+                    radius={[6, 6, 0, 0]}
+                    name="New Signups"
+                  />
+                </BarChart>
               </ResponsiveContainer>
             </div>
           </div>

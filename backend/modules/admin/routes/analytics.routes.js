@@ -2,6 +2,8 @@ import express from 'express';
 import {
   getDashboardStats,
   getUserGrowth,
+  getReelsGrowth,
+  getNewUsersMonthly,
   getContentAnalytics,
   getWatchTimeAnalytics,
   getTopUsers,
@@ -27,6 +29,10 @@ router.get('/health', getPlatformHealth);
 // User analytics
 router.get('/user-growth', getUserGrowth);
 router.get('/top-users', getTopUsers);
+
+// Reels growth
+router.get('/reels-growth', getReelsGrowth);
+router.get('/new-users-monthly', getNewUsersMonthly);
 
 // Content analytics
 router.get('/content', getContentAnalytics);

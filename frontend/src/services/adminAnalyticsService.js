@@ -4,8 +4,16 @@ export const getDashboardStats = async () => {
   return await api.get('/admin/analytics/dashboard');
 };
 
-export const getUserGrowth = async (days = 30) => {
+export const getUserGrowth = async (days = 365) => {
   return await api.get(`/admin/analytics/user-growth?days=${days}`);
+};
+
+export const getReelsGrowth = async (year) => {
+  return await api.get(`/admin/analytics/reels-growth?year=${year || new Date().getFullYear()}`);
+};
+
+export const getNewUsersMonthly = async (year) => {
+  return await api.get(`/admin/analytics/new-users-monthly?year=${year || new Date().getFullYear()}`);
 };
 
 export const getContentAnalytics = async (days = 30) => {
@@ -37,6 +45,8 @@ export const getAdsAnalytics = async (params = {}) => {
 const adminAnalyticsService = {
   getDashboardStats,
   getUserGrowth,
+  getReelsGrowth,
+  getNewUsersMonthly,
   getContentAnalytics,
   getWatchTimeAnalytics,
   getPlatformHealth,

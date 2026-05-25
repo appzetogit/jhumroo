@@ -928,6 +928,24 @@
   gap: 16px;
 }
 
+.admin-stats-grid-8 {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+}
+
+@media (max-width: 1200px) {
+  .admin-stats-grid-8 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .admin-stats-grid-8 {
+    grid-template-columns: 1fr;
+  }
+}
+
 .admin-stat-card {
   display: flex;
   align-items: center;
