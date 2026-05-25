@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense, useReducer } from 'react';
 import { 
   BiUser, 
   BiVideo, 
@@ -15,21 +15,33 @@ import {
   BiShareAlt,
   BiShow
 } from 'react-icons/bi';
-import { 
-  LineChart, 
-  Line, 
-  AreaChart, 
-  Area, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
-  ResponsiveContainer,
-  BarChart,
-  Bar,
-  Legend
-} from 'recharts';
 import adminAnalyticsService from '../../../services/adminAnalyticsService';
+
+// Lazy load Recharts for optimal code splitting
+const AreaChart = React.lazy(() => import('recharts').then(m => ({ default: m.AreaChart })));
+const Area = React.lazy(() => import('recharts').then(m => ({ default: m.Area })));
+const XAxis = React.lazy(() => import('recharts').then(m => ({ default: m.XAxis })));
+const YAxis = React.lazy(() => import('recharts').then(m => ({ default: m.YAxis })));
+const CartesianGrid = React.lazy(() => import('recharts').then(m => ({ default: m.CartesianGrid })));
+const Tooltip = React.lazy(() => import('recharts').then(m => ({ default: m.Tooltip })));
+const ResponsiveContainer = React.lazy(() => import('recharts').then(m => ({ default: m.ResponsiveContainer })));
+const BarChart = React.lazy(() => import('recharts').then(m => ({ default: m.BarChart })));
+const Bar = React.lazy(() => import('recharts').then(m => ({ default: m.Bar })));
+const Legend = React.lazy(() => import('recharts').then(m => ({ default: m.Legend })));
+
+const CURRENT_YEAR = new Date().getFullYear();
+
+// Static constants to avoid unnecessary object re-allocations on render (no-new-object-as-prop)
+const AXIS_TICK_STYLE = { fill: 'var(--admin-muted)', fontSize: 11 };
+const AXIS_TICK_STYLE_BOLD = { fill: 'var(--admin-muted)', fontSize: 11, fontWeight: 600 };
+const Y_AXIS_DOMAIN = [0, 'auto'];
+const BAR_RADIUS = [6, 6, 0, 0];
+
+// Static helpers to avoid inline function allocations (no-new-function-as-prop)
+const reelsTooltipFormatter = (value) => [value.toLocaleString(), 'New Reels'];
+const integerTickFormatter = (v) => Number.isInteger(v) ? v : '';
+const usersTooltipFormatter = (value) => [value.toLocaleString(), 'New Users'];
+const newSignupsLegendFormatter = () => 'New Signups';
 
 const StatCard = ({ label, value, icon, accent, subValue }) => (
   <div className="admin-card admin-stat-card">
@@ -51,16 +63,7 @@ const CustomTooltip = ({ active, payload, label }) => {
     const total = payload[0].value || 0;
     
     return (
-      <div className="custom-chart-tooltip" style={{
-        backgroundColor: '#ffffff',
-        border: '1.5px solid var(--admin-border)',
-        padding: '10px 14px',
-        borderRadius: '8px',
-        color: 'var(--admin-text)',
-        fontSize: '13px',
-        fontFamily: 'inherit',
-        boxShadow: '0 8px 24px rgba(254, 44, 85, 0.08)'
-      }}>
+      <div className="custom-chart-tooltip">
         <div style={{ fontWeight: 'bold', marginBottom: '4px', color: 'var(--admin-muted)' }}>{label}</div>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: '20px' }}>
           <span style={{ color: '#a855f7' }}>Users:</span>
@@ -72,103 +75,32 @@ const CustomTooltip = ({ active, payload, label }) => {
   return null;
 };
 
-const AdminDashboard = () => {
-  const [stats, setStats] = useState(null);
-  const [userGrowth, setUserGrowth] = useState([]);
-  const [growthBaseline, setGrowthBaseline] = useState(0);
-  const [totalUsersCount, setTotalUsersCount] = useState(0);
-  const [reelsGrowth, setReelsGrowth] = useState([]);
-  const [selectedReelsYear, setSelectedReelsYear] = useState(String(new Date().getFullYear()));
-  const [newUsersMonthly, setNewUsersMonthly] = useState([]);
-  const [newUsersYearTotal, setNewUsersYearTotal] = useState(0);
-  const [selectedNewUsersYear, setSelectedNewUsersYear] = useState(String(new Date().getFullYear()));
-  const [contentAnalytics, setContentAnalytics] = useState([]);
-  const [watchTimeAnalytics, setWatchTimeAnalytics] = useState([]);
-  const [topCreators, setTopCreators] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [selectedYear, setSelectedYear] = useState(String(new Date().getFullYear()));
+// 1. Self-contained User Growth Chart component
+const UserGrowthChart = () => {
+  // Combined state object to avoid multiple setState cascading updates
+  const [growthData, setGrowthData] = useState(undefined);
+  const [selectedYear, setSelectedYear] = useState(String(CURRENT_YEAR));
   const [selectedMonth, setSelectedMonth] = useState('All');
 
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setLoading(true);
-        const [dashStats, growth, reelsData, newUsersData, content, watchTime, creators] = await Promise.all([
-          adminAnalyticsService.getDashboardStats(),
-          adminAnalyticsService.getUserGrowth(365),
-          adminAnalyticsService.getReelsGrowth(new Date().getFullYear()),
-          adminAnalyticsService.getNewUsersMonthly(new Date().getFullYear()),
-          adminAnalyticsService.getContentAnalytics(7),
-          adminAnalyticsService.getWatchTimeAnalytics(7),
-          adminAnalyticsService.getTopUsers('reels', 5)
-        ]);
-
-        setStats(dashStats.stats);
-        setUserGrowth(growth.data || []);
-        setGrowthBaseline(growth.baseline || 0);
-        setTotalUsersCount(growth.totalUsersCount || 0);
-        setReelsGrowth(reelsData.data || []);
-        setNewUsersMonthly(newUsersData.data || []);
-        setNewUsersYearTotal(newUsersData.yearUsersCount || 0);
-        if (creators && creators.users) {
-          setTopCreators(creators.users);
-        }
-        
-        // Transform content analytics for easier charting
-        const combinedContent = content.data.reels.map(item => {
-          const day = item._id;
-          const comments = content.data.comments.find(c => c._id === day)?.count || 0;
-          const likes = content.data.likes.find(l => l._id === day)?.count || 0;
-          return {
-            date: day,
-            reels: item.count,
-            comments,
-            likes
-          };
+    adminAnalyticsService.getUserGrowth(365)
+      .then(res => {
+        setGrowthData({
+          list: res.data || [],
+          baseline: res.baseline || 0,
+          total: res.totalUsersCount || 0
         });
-        setContentAnalytics(combinedContent);
-        setWatchTimeAnalytics(watchTime.data);
-      } catch (error) {
-        console.error('Error fetching dashboard data:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchData();
+      })
+      .catch(err => console.error('User growth fetch error:', err));
   }, []);
 
-  // Refetch reels growth when year changes
-  useEffect(() => {
-    adminAnalyticsService.getReelsGrowth(selectedReelsYear)
-      .then(res => setReelsGrowth(res.data || []))
-      .catch(err => console.error('Reels growth fetch error:', err));
-  }, [selectedReelsYear]);
-
-  // Refetch new users monthly when year changes
-  useEffect(() => {
-    adminAnalyticsService.getNewUsersMonthly(selectedNewUsersYear)
-      .then(res => {
-        setNewUsersMonthly(res.data || []);
-        setNewUsersYearTotal(res.yearUsersCount || 0);
-      })
-      .catch(err => console.error('New users monthly fetch error:', err));
-  }, [selectedNewUsersYear]);
-
-  if (loading || !stats) {
+  if (growthData === undefined) {
     return (
-      <div className="admin-page admin-loading">
+      <div className="admin-card admin-chart-card admin-loading-placeholder" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '320px' }}>
         <div className="admin-loader"></div>
-        <p>{loading ? 'Loading real-time analytics...' : 'Failed to load dashboard data.'}</p>
       </div>
     );
   }
-
-  const formatWatchTime = (seconds) => {
-    if (seconds < 60) return `${seconds} secs`;
-    if (seconds < 3600) return `${(seconds / 60).toFixed(1)} mins`;
-    return `${(seconds / 3600).toFixed(1)} hrs`;
-  };
 
   const getFilteredChartData = () => {
     const currentDate = new Date();
@@ -177,12 +109,9 @@ const AdminDashboard = () => {
     const currentDayNum = currentDate.getDate();
     const yearNum = parseInt(selectedYear);
 
-    // Sort growth entries by date
-    const sortedGrowth = [...userGrowth].sort((a, b) => a.date.localeCompare(b.date));
+    const sortedGrowth = growthData.list.toSorted((a, b) => a.date.localeCompare(b.date));
 
-    // For a given date string, return the best known cumulative user count
     const getCumulativeOnDate = (targetDateStr) => {
-      // Find the latest entry on or before targetDate
       let latestEntry = null;
       for (const entry of sortedGrowth) {
         if (entry.date <= targetDateStr) latestEntry = entry;
@@ -190,13 +119,11 @@ const AdminDashboard = () => {
       }
       if (latestEntry) return latestEntry.totalUsers;
 
-      // If targetDate is AFTER all our entries → return the overall total
       if (sortedGrowth.length > 0 && targetDateStr > sortedGrowth[sortedGrowth.length - 1].date) {
-        return totalUsersCount;
+        return growthData.total;
       }
 
-      // If targetDate is BEFORE all entries → return baseline (users before 365-day window)
-      return growthBaseline;
+      return growthData.baseline;
     };
 
     if (selectedMonth === 'All') {
@@ -235,420 +162,515 @@ const AdminDashboard = () => {
   const transformedGrowth = getFilteredChartData();
 
   return (
-    <div className="admin-page">
-      <div className="admin-page-header">
+    <div className="admin-card admin-chart-card" style={{ display: 'flex', flexDirection: 'column' }}>
+      <div className="admin-card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+        <h2 style={{ margin: 0 }}>User Growth</h2>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <select 
+            value={selectedMonth}
+            onChange={(e) => setSelectedMonth(e.target.value)}
+            className="admin-select"
+          >
+            <option value="All">All Months</option>
+            <option value="0">January</option>
+            <option value="1">February</option>
+            <option value="2">March</option>
+            <option value="3">April</option>
+            <option value="4">May</option>
+            <option value="5">June</option>
+            <option value="6">July</option>
+            <option value="7">August</option>
+            <option value="8">September</option>
+            <option value="9">October</option>
+            <option value="10">November</option>
+            <option value="11">December</option>
+          </select>
+          <select 
+            value={selectedYear}
+            onChange={(e) => setSelectedYear(e.target.value)}
+            className="admin-select"
+          >
+            <option value="2026">2026</option>
+            <option value="2025">2025</option>
+            <option value="2024">2024</option>
+          </select>
+        </div>
+      </div>
+      <div className="admin-chart-wrapper" style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', marginTop: '1rem' }}>
+        <ResponsiveContainer width="100%" height={260}>
+          <AreaChart data={transformedGrowth} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
+            <defs>
+              <linearGradient id="colorUsers" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor="#a855f7" stopOpacity={0.3}/>
+                <stop offset="95%" stopColor="#a855f7" stopOpacity={0}/>
+              </linearGradient>
+            </defs>
+            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(0,0,0,0.06)" />
+            <XAxis 
+              dataKey="dateLabel" 
+              axisLine={false} 
+              tickLine={false} 
+              tick={AXIS_TICK_STYLE}
+              dy={10}
+            />
+            <YAxis hide />
+            <Tooltip 
+              content={<CustomTooltip />} 
+              cursor={{ stroke: 'rgba(0, 0, 0, 0.1)', strokeWidth: 1 }} 
+            />
+            <Area type="monotone" dataKey="totalUsers" stroke="#a855f7" strokeWidth={3} fillOpacity={1} fill="url(#colorUsers)" />
+          </AreaChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+};
+
+// 2. Self-contained Reels Growth Chart component
+const ReelsGrowthChart = () => {
+  const [selectedReelsYear, setSelectedReelsYear] = useState(String(CURRENT_YEAR));
+  const [reelsGrowth, setReelsGrowth] = useState(undefined);
+
+  useEffect(() => {
+    adminAnalyticsService.getReelsGrowth(selectedReelsYear)
+      .then(res => setReelsGrowth(res.data || []))
+      .catch(err => console.error('Reels growth fetch error:', err));
+  }, [selectedReelsYear]);
+
+  const handleYearChange = (e) => {
+    setSelectedReelsYear(e.target.value);
+    setReelsGrowth(undefined); // Implicit loading state triggers loader
+  };
+
+  if (reelsGrowth === undefined) {
+    return (
+      <div className="admin-card admin-chart-card admin-loading-placeholder" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '320px' }}>
+        <div className="admin-loader"></div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="admin-card admin-chart-card" style={{ display: 'flex', flexDirection: 'column' }}>
+      <div className="admin-card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+        <h2 style={{ margin: 0 }}>Reels Growth</h2>
+        <select
+          value={selectedReelsYear}
+          onChange={handleYearChange}
+          className="admin-select"
+        >
+          <option value={String(CURRENT_YEAR)}>{CURRENT_YEAR}</option>
+          <option value={String(CURRENT_YEAR - 1)}>{CURRENT_YEAR - 1}</option>
+          <option value={String(CURRENT_YEAR - 2)}>{CURRENT_YEAR - 2}</option>
+        </select>
+      </div>
+      <div className="admin-chart-wrapper" style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', marginTop: '1rem' }}>
+        <ResponsiveContainer width="100%" height={260}>
+          <AreaChart data={reelsGrowth} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
+            <defs>
+              <linearGradient id="colorReels" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.3}/>
+                <stop offset="95%" stopColor="#f59e0b" stopOpacity={0}/>
+              </linearGradient>
+            </defs>
+            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(0,0,0,0.06)" />
+            <XAxis
+              dataKey="month"
+              axisLine={false}
+              tickLine={false}
+              tick={AXIS_TICK_STYLE}
+              dy={10}
+            />
+            <YAxis hide />
+            <Tooltip
+              contentStyle={{
+                backgroundColor: '#ffffff',
+                border: '1.5px solid var(--admin-border)',
+                borderRadius: '12px',
+                boxShadow: '0 8px 24px rgba(254, 44, 85, 0.08)',
+                color: 'var(--admin-text)',
+                fontSize: '12px',
+                fontFamily: 'inherit'
+              }}
+              formatter={reelsTooltipFormatter}
+              cursor={{ stroke: 'rgba(0,0,0,0.1)', strokeWidth: 1 }}
+            />
+            <Area type="monotone" dataKey="newReels" stroke="#f59e0b" strokeWidth={3} fillOpacity={1} fill="url(#colorReels)" />
+          </AreaChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+};
+
+// 3. Self-contained New Signups Chart component
+const NewSignupsChart = () => {
+  const [selectedNewUsersYear, setSelectedNewUsersYear] = useState(String(CURRENT_YEAR));
+  const [signupsData, setSignupsData] = useState(undefined);
+
+  useEffect(() => {
+    adminAnalyticsService.getNewUsersMonthly(selectedNewUsersYear)
+      .then(res => {
+        setSignupsData({
+          list: res.data || [],
+          total: res.yearUsersCount || 0
+        });
+      })
+      .catch(err => console.error('New users monthly fetch error:', err));
+  }, [selectedNewUsersYear]);
+
+  const handleYearChange = (yr) => {
+    setSelectedNewUsersYear(yr);
+    setSignupsData(undefined); // Implicit loading state triggers loader
+  };
+
+  if (signupsData === undefined) {
+    return (
+      <div className="admin-card admin-chart-card full-width admin-loading-placeholder" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '360px' }}>
+        <div className="admin-loader"></div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="admin-card admin-chart-card full-width">
+      <div className="admin-card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
         <div>
-          <h1>Dashboard</h1>
-          <p>Real-time pulse of your Jhumroo ecosystem.</p>
+          <h2 style={{ margin: 0 }}>New Signups</h2>
+          <p style={{ margin: '4px 0 0 0', display: 'flex', alignItems: 'center', flexWrap: 'wrap' }}>
+            Monthly count of new users registered on the platform.
+            {signupsData.total > 0 && (
+              <span style={{ marginLeft: '8px', fontWeight: '700', color: '#6366f1' }}>
+                · {signupsData.total.toLocaleString()} this year
+              </span>
+            )}
+          </p>
         </div>
-        <div className="admin-header-actions">
-          <span className="admin-status-pill">
-            <span className="pulse-dot"></span> Live Updates
-          </span>
-        </div>
-      </div>
-
-      {/* Main Stats Grid — 12 cards */}
-      <div className="admin-grid admin-stats-grid-8" style={{ marginBottom: '0' }}>
-        <StatCard
-          label="Total Users"
-          value={stats?.overview?.totalUsers?.toLocaleString() || '0'}
-          icon={<BiUser size={24} />}
-          accent="#6366f1"
-          subValue={stats?.today?.newUsers ? `+${stats.today.newUsers} today` : null}
-        />
-        <StatCard
-          label="Total Reels"
-          value={stats?.overview?.totalReels?.toLocaleString() || '0'}
-          icon={<BiVideo size={24} />}
-          accent="#f59e0b"
-          subValue={stats?.today?.newReels ? `+${stats.today.newReels} today` : null}
-        />
-        <StatCard
-          label="Today's Uploads"
-          value={stats?.today?.newReels?.toLocaleString() || '0'}
-          icon={<BiCloudUpload size={24} />}
-          accent="#3b82f6"
-        />
-        <StatCard
-          label="Total Audio"
-          value={stats?.overview?.totalAudio?.toLocaleString() || '0'}
-          icon={<BiMusic size={24} />}
-          accent="#10b981"
-        />
-        <StatCard
-          label="Total User Ads"
-          value={stats?.overview?.totalUserAds?.toLocaleString() || '0'}
-          icon={<BiSolidMegaphone size={24} />}
-          accent="#ec4899"
-        />
-        <StatCard
-          label="Total Admin Ads"
-          value={stats?.overview?.totalAdminAds?.toLocaleString() || '0'}
-          icon={<BiShieldQuarter size={24} />}
-          accent="#8b5cf6"
-        />
-        <StatCard
-          label="Total Blocked Users"
-          value={stats?.overview?.totalBlockedUsers?.toLocaleString() || '0'}
-          icon={<BiBlock size={24} />}
-          accent="#ef4444"
-        />
-        <StatCard
-          label="Support Requests Pending"
-          value={stats?.overview?.totalSupportPending?.toLocaleString() || '0'}
-          icon={<BiSupport size={24} />}
-          accent="#14b8a6"
-        />
-        <StatCard
-          label="Total Views"
-          value={stats?.overview?.totalViews?.toLocaleString() || '0'}
-          icon={<BiShow size={24} />}
-          accent="#06b6d4"
-        />
-        <StatCard
-          label="Total Likes"
-          value={stats?.overview?.totalLikes?.toLocaleString() || '0'}
-          icon={<BiHeart size={24} />}
-          accent="#f43f5e"
-        />
-        <StatCard
-          label="Total Comments"
-          value={stats?.overview?.totalComments?.toLocaleString() || '0'}
-          icon={<BiMessageRounded size={24} />}
-          accent="#a855f7"
-          subValue={stats?.today?.newComments ? `+${stats.today.newComments} today` : null}
-        />
-        <StatCard
-          label="Total Share"
-          value={stats?.overview?.totalShares?.toLocaleString() || '0'}
-          icon={<BiShareAlt size={24} />}
-          accent="#0ea5e9"
-        />
-      </div>
-
-      {/* Charts Section */}
-      <div className="admin-charts-container" style={{ marginTop: '2rem' }}>
-        <div className="admin-charts-row">
-          {/* User Growth Chart */}
-          <div className="admin-card admin-chart-card" style={{ display: 'flex', flexDirection: 'column' }}>
-            <div className="admin-card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
-              <h2 style={{ margin: 0 }}>User Growth</h2>
-              
-              <div style={{ display: 'flex', gap: '8px' }}>
-                {/* Month Selector */}
-                <select 
-                  value={selectedMonth}
-                  onChange={(e) => setSelectedMonth(e.target.value)}
-                  style={{
-                    backgroundColor: '#fff',
-                    border: '1px solid var(--admin-border)',
-                    borderRadius: '8px',
-                    color: 'var(--admin-text)',
-                    padding: '4px 10px',
-                    fontSize: '12px',
-                    fontWeight: '600',
-                    outline: 'none',
-                    cursor: 'pointer'
-                  }}
-                >
-                  <option value="All">All Months</option>
-                  <option value="0">January</option>
-                  <option value="1">February</option>
-                  <option value="2">March</option>
-                  <option value="3">April</option>
-                  <option value="4">May</option>
-                  <option value="5">June</option>
-                  <option value="6">July</option>
-                  <option value="7">August</option>
-                  <option value="8">September</option>
-                  <option value="9">October</option>
-                  <option value="10">November</option>
-                  <option value="11">December</option>
-                </select>
-
-                {/* Year Selector */}
-                <select 
-                  value={selectedYear}
-                  onChange={(e) => setSelectedYear(e.target.value)}
-                  style={{
-                    backgroundColor: '#fff',
-                    border: '1px solid var(--admin-border)',
-                    borderRadius: '8px',
-                    color: 'var(--admin-text)',
-                    padding: '4px 10px',
-                    fontSize: '12px',
-                    fontWeight: '600',
-                    outline: 'none',
-                    cursor: 'pointer'
-                  }}
-                >
-                  <option value="2026">2026</option>
-                  <option value="2025">2025</option>
-                  <option value="2024">2024</option>
-                </select>
-              </div>
-            </div>
-            <div className="admin-chart-wrapper" style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', marginTop: '1rem' }}>
-              <ResponsiveContainer width="100%" height={260}>
-                <AreaChart data={transformedGrowth} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="colorUsers" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#a855f7" stopOpacity={0.3}/>
-                      <stop offset="95%" stopColor="#a855f7" stopOpacity={0}/>
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(0,0,0,0.06)" />
-                  <XAxis 
-                    dataKey="dateLabel" 
-                    axisLine={false} 
-                    tickLine={false} 
-                    tick={{ fill: 'var(--admin-muted)', fontSize: 11 }}
-                    dy={10}
-                  />
-                  <YAxis hide />
-                  <Tooltip 
-                    content={<CustomTooltip />} 
-                    cursor={{ stroke: 'rgba(0, 0, 0, 0.1)', strokeWidth: 1 }} 
-                  />
-                  <Area type="monotone" dataKey="totalUsers" stroke="#a855f7" strokeWidth={3} fillOpacity={1} fill="url(#colorUsers)" />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-
-          {/* Reels Growth Chart */}
-          <div className="admin-card admin-chart-card" style={{ display: 'flex', flexDirection: 'column' }}>
-            <div className="admin-card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
-              <h2 style={{ margin: 0 }}>Reels Growth</h2>
-              <select
-                value={selectedReelsYear}
-                onChange={(e) => setSelectedReelsYear(e.target.value)}
-                style={{
-                  backgroundColor: '#fff',
-                  border: '1px solid var(--admin-border)',
-                  borderRadius: '8px',
-                  color: 'var(--admin-text)',
-                  padding: '4px 10px',
-                  fontSize: '12px',
-                  fontWeight: '600',
-                  outline: 'none',
-                  cursor: 'pointer'
-                }}
+        <div style={{ display: 'flex', gap: '6px' }}>
+          {[0, 1, 2, 3].map(offset => {
+            const yr = String(CURRENT_YEAR - offset);
+            return (
+              <button
+                key={yr}
+                type="button"
+                onClick={() => handleYearChange(yr)}
+                className={`admin-filter-pill ${selectedNewUsersYear === yr ? 'active' : ''}`}
               >
-                <option value={String(new Date().getFullYear())}>{new Date().getFullYear()}</option>
-                <option value={String(new Date().getFullYear() - 1)}>{new Date().getFullYear() - 1}</option>
-                <option value={String(new Date().getFullYear() - 2)}>{new Date().getFullYear() - 2}</option>
-              </select>
-            </div>
-            <div className="admin-chart-wrapper" style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', marginTop: '1rem' }}>
-              <ResponsiveContainer width="100%" height={260}>
-                <AreaChart data={reelsGrowth} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="colorReels" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.3}/>
-                      <stop offset="95%" stopColor="#f59e0b" stopOpacity={0}/>
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(0,0,0,0.06)" />
-                  <XAxis
-                    dataKey="month"
-                    axisLine={false}
-                    tickLine={false}
-                    tick={{ fill: 'var(--admin-muted)', fontSize: 11 }}
-                    dy={10}
-                  />
-                  <YAxis hide />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: '#ffffff',
-                      border: '1.5px solid var(--admin-border)',
-                      borderRadius: '12px',
-                      boxShadow: '0 8px 24px rgba(254, 44, 85, 0.08)',
-                      color: 'var(--admin-text)',
-                      fontSize: '12px',
-                      fontFamily: 'inherit'
-                    }}
-                    formatter={(value) => [value.toLocaleString(), 'New Reels']}
-                    cursor={{ stroke: 'rgba(0,0,0,0.1)', strokeWidth: 1 }}
-                  />
-                  <Area type="monotone" dataKey="newReels" stroke="#f59e0b" strokeWidth={3} fillOpacity={1} fill="url(#colorReels)" />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-        </div>
-
-        <div className="admin-charts-row" style={{ marginTop: '2rem' }}>
-          {/* New Signups Monthly Chart */}
-          <div className="admin-card admin-chart-card full-width">
-            <div className="admin-card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
-              <div>
-                <h2 style={{ margin: 0 }}>New Signups</h2>
-                <p style={{ margin: '4px 0 0', fontSize: '12px', color: 'var(--admin-muted)' }}>
-                  Monthly new user registrations
-                  {newUsersYearTotal > 0 && (
-                    <span style={{ marginLeft: '8px', fontWeight: '700', color: '#6366f1' }}>
-                      · {newUsersYearTotal.toLocaleString()} this year
-                    </span>
-                  )}
-                </p>
-              </div>
-              {/* 4-Year filter */}
-              <div style={{ display: 'flex', gap: '6px' }}>
-                {[0, 1, 2, 3].map(offset => {
-                  const yr = String(new Date().getFullYear() - offset);
-                  return (
-                    <button
-                      key={yr}
-                      onClick={() => setSelectedNewUsersYear(yr)}
-                      style={{
-                        padding: '5px 14px',
-                        borderRadius: '999px',
-                        border: '1px solid',
-                        borderColor: selectedNewUsersYear === yr ? '#6366f1' : 'var(--admin-border)',
-                        background: selectedNewUsersYear === yr ? '#6366f1' : '#fff',
-                        color: selectedNewUsersYear === yr ? '#fff' : 'var(--admin-muted)',
-                        fontSize: '12px',
-                        fontWeight: '600',
-                        cursor: 'pointer',
-                        transition: 'all 0.18s ease'
-                      }}
-                    >
-                      {yr}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-            <div className="admin-chart-wrapper" style={{ marginTop: '1rem' }}>
-              <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={newUsersMonthly} margin={{ top: 10, right: 16, left: 0, bottom: 0 }} barSize={32}>
-                  <defs>
-                    <linearGradient id="colorNewUsers" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#6366f1" stopOpacity={1} />
-                      <stop offset="100%" stopColor="#818cf8" stopOpacity={0.7} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(0,0,0,0.05)" />
-                  <XAxis
-                    dataKey="month"
-                    axisLine={false}
-                    tickLine={false}
-                    tick={{ fill: 'var(--admin-muted)', fontSize: 11, fontWeight: 600 }}
-                    dy={8}
-                  />
-                  <YAxis
-                    axisLine={false}
-                    tickLine={false}
-                    tick={{ fill: 'var(--admin-muted)', fontSize: 11 }}
-                    width={40}
-                    allowDecimals={false}
-                    domain={[0, 'auto']}
-                    tickFormatter={(v) => Number.isInteger(v) ? v : ''}
-                  />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: '#ffffff',
-                      border: '1.5px solid var(--admin-border)',
-                      borderRadius: '12px',
-                      boxShadow: '0 8px 24px rgba(99, 102, 241, 0.12)',
-                      color: 'var(--admin-text)',
-                      fontSize: '13px',
-                      fontFamily: 'inherit',
-                      padding: '10px 14px'
-                    }}
-                    formatter={(value) => [value.toLocaleString(), 'New Users']}
-                    cursor={{ fill: 'rgba(99, 102, 241, 0.05)' }}
-                  />
-                  <Legend
-                    verticalAlign="top"
-                    height={32}
-                    formatter={() => 'New Signups'}
-                    wrapperStyle={{ fontSize: '12px', color: '#6366f1', fontWeight: 600 }}
-                  />
-                  <Bar
-                    dataKey="newUsers"
-                    fill="url(#colorNewUsers)"
-                    radius={[6, 6, 0, 0]}
-                    name="New Signups"
-                  />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
+                {yr}
+              </button>
+            );
+          })}
         </div>
       </div>
+      <div className="admin-chart-wrapper" style={{ marginTop: '1rem' }}>
+        <ResponsiveContainer width="100%" height={300}>
+          <BarChart data={signupsData.list} margin={{ top: 10, right: 16, left: 0, bottom: 0 }} barSize={32}>
+            <defs>
+              <linearGradient id="colorNewUsers" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#6366f1" stopOpacity={1} />
+                <stop offset="100%" stopColor="#818cf8" stopOpacity={0.7} />
+              </linearGradient>
+            </defs>
+            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(0,0,0,0.05)" />
+            <XAxis
+              dataKey="month"
+              axisLine={false}
+              tickLine={false}
+              tick={AXIS_TICK_STYLE_BOLD}
+              dy={8}
+            />
+            <YAxis
+              axisLine={false}
+              tickLine={false}
+              tick={AXIS_TICK_STYLE}
+              width={40}
+              allowDecimals={false}
+              domain={Y_AXIS_DOMAIN}
+              tickFormatter={integerTickFormatter}
+            />
+            <Tooltip
+              contentStyle={{
+                backgroundColor: '#ffffff',
+                border: '1.5px solid var(--admin-border)',
+                borderRadius: '12px',
+                boxShadow: '0 8px 24px rgba(99, 102, 241, 0.12)',
+                color: 'var(--admin-text)',
+                fontSize: '13px',
+                fontFamily: 'inherit',
+                padding: '10px 14px'
+              }}
+              formatter={usersTooltipFormatter}
+              cursor={{ fill: 'rgba(99, 102, 241, 0.05)' }}
+            />
+            <Legend
+              verticalAlign="top"
+              height={32}
+              formatter={newSignupsLegendFormatter}
+              wrapperStyle={{ fontSize: '12px', color: '#6366f1', fontWeight: 600 }}
+            />
+            <Bar
+              dataKey="newUsers"
+              fill="url(#colorNewUsers)"
+              radius={BAR_RADIUS}
+              name="New Signups"
+            />
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+};
+
+// 4. Trending Hashtags List component
+const TrendingHashtags = ({ stats }) => (
+  <div className="admin-card admin-column">
+    <div className="admin-card-header">
+      <h2>Trending Hashtags</h2>
+      <BiTrendingUp color="var(--admin-accent)" />
+    </div>
+    <div className="admin-hashtag-list">
+      {stats?.trendingHashtags && stats.trendingHashtags.length > 0 ? (
+        stats.trendingHashtags.map((item, index) => (
+          <div key={item.tag} className="admin-hashtag-item">
+            <div className="hashtag-rank">#{index + 1}</div>
+            <div className="hashtag-info">
+              <span className="hashtag-name">#{item.tag}</span>
+              <span className="hashtag-count">{item.count.toLocaleString()} videos</span>
+            </div>
+            <div className="hashtag-bar-bg">
+              <div 
+                className="hashtag-bar-fill" 
+                style={{ width: `${(item.count / stats.trendingHashtags[0].count) * 100}%` }}
+              ></div>
+            </div>
+          </div>
+        ))
+      ) : (
+        <p className="admin-empty-state">No hashtags trending yet.</p>
+      )}
+    </div>
+  </div>
+);
+
+// 5. Top Creators List component
+const TopCreators = ({ topCreators }) => (
+  <div className="admin-card admin-column">
+    <div className="admin-card-header">
+      <h2>Top 5 Reel Creators</h2>
+      <BiVideo color="var(--admin-accent)" />
+    </div>
+    <div className="admin-creator-list">
+      {topCreators && topCreators.length > 0 ? (
+        topCreators.map((creator, index) => (
+          <div key={creator._id} className="admin-creator-item">
+            <div className="creator-rank">#{index + 1}</div>
+            <img 
+              src={creator.profilePicture?.url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${creator.username}`} 
+              alt="" 
+              className="creator-avatar"
+            />
+            <div className="creator-info">
+              <span className="creator-name">
+                {creator.fullName || creator.username}
+                {creator.isVerified && (
+                  <BiCheckCircle className="verified-badge" color="#3b82f6" style={{ display: 'inline', marginLeft: '4px', verticalAlign: 'middle' }} />
+                )}
+              </span>
+              <span className="creator-count">@{creator.username} • {creator.stats?.reelsCount || 0} reels</span>
+            </div>
+            <div className="creator-bar-bg">
+              <div 
+                className="creator-bar-fill" 
+                style={{ width: `${((creator.stats?.reelsCount || 0) / (topCreators[0]?.stats?.reelsCount || 1)) * 100}%` }}
+              ></div>
+            </div>
+          </div>
+        ))
+      ) : (
+        <p className="admin-empty-state">No creators found.</p>
+      )}
+    </div>
+  </div>
+);
+
+// 6. Header sub-component for cleaner layout
+const DashboardHeader = () => (
+  <div className="admin-page-header">
+    <div>
+      <h1>Dashboard</h1>
+      <p>Real-time pulse of your Jhumroo ecosystem.</p>
+    </div>
+    <div className="admin-header-actions">
+      <span className="admin-status-pill">
+        <span className="pulse-dot"></span> Live Updates
+      </span>
+    </div>
+  </div>
+);
+
+// 7. Stat Cards Grid sub-component for optimal lines count
+const OverviewCardsGrid = ({ stats }) => (
+  <div className="admin-grid admin-stats-grid-8" style={{ marginBottom: '0' }}>
+    <StatCard
+      label="Total Users"
+      value={stats?.overview?.totalUsers?.toLocaleString() || '0'}
+      icon={<BiUser size={24} />}
+      accent="#6366f1"
+      subValue={stats?.today?.newUsers ? `+${stats.today.newUsers} today` : null}
+    />
+    <StatCard
+      label="Total Reels"
+      value={stats?.overview?.totalReels?.toLocaleString() || '0'}
+      icon={<BiVideo size={24} />}
+      accent="#f59e0b"
+      subValue={stats?.today?.newReels ? `+${stats.today.newReels} today` : null}
+    />
+    <StatCard
+      label="Today's Uploads"
+      value={stats?.today?.newReels?.toLocaleString() || '0'}
+      icon={<BiCloudUpload size={24} />}
+      accent="#3b82f6"
+    />
+    <StatCard
+      label="Total Audio"
+      value={stats?.overview?.totalAudio?.toLocaleString() || '0'}
+      icon={<BiMusic size={24} />}
+      accent="#10b981"
+    />
+    <StatCard
+      label="Total User Ads"
+      value={stats?.overview?.totalUserAds?.toLocaleString() || '0'}
+      icon={<BiSolidMegaphone size={24} />}
+      accent="#ec4899"
+    />
+    <StatCard
+      label="Total Admin Ads"
+      value={stats?.overview?.totalAdminAds?.toLocaleString() || '0'}
+      icon={<BiShieldQuarter size={24} />}
+      accent="#8b5cf6"
+    />
+    <StatCard
+      label="Total Blocked Users"
+      value={stats?.overview?.totalBlockedUsers?.toLocaleString() || '0'}
+      icon={<BiBlock size={24} />}
+      accent="#ef4444"
+    />
+    <StatCard
+      label="Support Requests Pending"
+      value={stats?.overview?.totalSupportPending?.toLocaleString() || '0'}
+      icon={<BiSupport size={24} />}
+      accent="#14b8a6"
+    />
+    <StatCard
+      label="Total Views"
+      value={stats?.overview?.totalViews?.toLocaleString() || '0'}
+      icon={<BiShow size={24} />}
+      accent="#06b6d4"
+    />
+    <StatCard
+      label="Total Likes"
+      value={stats?.overview?.totalLikes?.toLocaleString() || '0'}
+      icon={<BiHeart size={24} />}
+      accent="#f43f5e"
+    />
+    <StatCard
+      label="Total Comments"
+      value={stats?.overview?.totalComments?.toLocaleString() || '0'}
+      icon={<BiMessageRounded size={24} />}
+      accent="#a855f7"
+      subValue={stats?.today?.newComments ? `+${stats.today.newComments} today` : null}
+    />
+    <StatCard
+      label="Total Share"
+      value={stats?.overview?.totalShares?.toLocaleString() || '0'}
+      icon={<BiShareAlt size={24} />}
+      accent="#0ea5e9"
+    />
+  </div>
+);
+
+const dashboardReducer = (state, action) => {
+  if (action.type === 'SET_DATA') {
+    return {
+      stats: action.payload.stats,
+      topCreators: action.payload.creators,
+      isLoaded: true
+    };
+  }
+  return state;
+};
+
+const INITIAL_STATE = {
+  stats: undefined,
+  topCreators: [],
+  isLoaded: false
+};
+
+const AdminDashboard = () => {
+  const [state, dispatch] = useReducer(dashboardReducer, INITIAL_STATE);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [dashStats, creators] = await Promise.all([
+          adminAnalyticsService.getDashboardStats(),
+          adminAnalyticsService.getTopUsers('reels', 5)
+        ]);
+
+        dispatch({
+          type: 'SET_DATA',
+          payload: {
+            stats: dashStats.stats,
+            creators: creators?.users || []
+          }
+        });
+      } catch (error) {
+        console.error('Error fetching dashboard data:', error);
+      }
+    };
+
+    fetchData();
+  }, []);
+
+  if (!state.isLoaded) {
+    return (
+      <div className="admin-page admin-loading">
+        <div className="admin-loader"></div>
+        <p>Loading real-time analytics…</p>
+      </div>
+    );
+  }
+
+  const { stats, topCreators } = state;
+
+  return (
+    <div className="admin-page">
+      <DashboardHeader />
+      <OverviewCardsGrid stats={stats} />
+
+      {/* Charts Section with Suspense for lazy loading */}
+      <Suspense fallback={
+        <div className="admin-page admin-loading" style={{ height: '300px' }}>
+          <div className="admin-loader"></div>
+          <p>Loading interactive widgets…</p>
+        </div>
+      }>
+        <div className="admin-charts-container" style={{ marginTop: '2rem' }}>
+          <div className="admin-charts-row">
+            <UserGrowthChart />
+            <ReelsGrowthChart />
+          </div>
+          
+          <div className="admin-charts-row" style={{ marginTop: '2rem' }}>
+            <NewSignupsChart />
+          </div>
+        </div>
+      </Suspense>
 
       {/* Trending & Top Creators Section */}
       <div className="admin-columns" style={{ marginTop: '2rem' }}>
-        {/* Trending Hashtags */}
-        <div className="admin-card admin-column">
-          <div className="admin-card-header">
-            <h2>Trending Hashtags</h2>
-            <BiTrendingUp color="var(--admin-accent)" />
-          </div>
-          <div className="admin-hashtag-list">
-            {stats.trendingHashtags && stats.trendingHashtags.length > 0 ? (
-              stats.trendingHashtags.map((item, index) => (
-                <div key={item.tag} className="admin-hashtag-item">
-                  <div className="hashtag-rank">#{index + 1}</div>
-                  <div className="hashtag-info">
-                    <span className="hashtag-name">#{item.tag}</span>
-                    <span className="hashtag-count">{item.count.toLocaleString()} videos</span>
-                  </div>
-                  <div className="hashtag-bar-bg">
-                    <div 
-                      className="hashtag-bar-fill" 
-                      style={{ width: `${(item.count / stats.trendingHashtags[0].count) * 100}%` }}
-                    ></div>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <p className="admin-empty-state">No hashtags trending yet.</p>
-            )}
-          </div>
-        </div>
-
-        {/* Top 5 Reel Creators */}
-        <div className="admin-card admin-column">
-          <div className="admin-card-header">
-            <h2>Top 5 Reel Creators</h2>
-            <BiVideo color="var(--admin-accent)" />
-          </div>
-          <div className="admin-creator-list">
-            {topCreators && topCreators.length > 0 ? (
-              topCreators.map((creator, index) => (
-                <div key={creator._id} className="admin-creator-item">
-                  <div className="creator-rank">#{index + 1}</div>
-                  <img 
-                    src={creator.profilePicture?.url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${creator.username}`} 
-                    alt="" 
-                    className="creator-avatar"
-                  />
-                  <div className="creator-info">
-                    <span className="creator-name">
-                      {creator.fullName || creator.username}
-                      {creator.isVerified && (
-                        <BiCheckCircle className="verified-badge" color="#3b82f6" style={{ display: 'inline', marginLeft: '4px', verticalAlign: 'middle' }} />
-                      )}
-                    </span>
-                    <span className="creator-count">@{creator.username} • {creator.stats?.reelsCount || 0} reels</span>
-                  </div>
-                  <div className="creator-bar-bg">
-                    <div 
-                      className="creator-bar-fill" 
-                      style={{ width: `${((creator.stats?.reelsCount || 0) / (topCreators[0]?.stats?.reelsCount || 1)) * 100}%` }}
-                    ></div>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <p className="admin-empty-state">No creators found.</p>
-            )}
-          </div>
-        </div>
+        <TrendingHashtags stats={stats} />
+        <TopCreators topCreators={topCreators} />
       </div>
 
       <style>{`
@@ -660,11 +682,16 @@ const AdminDashboard = () => {
           height: 60vh;
           color: rgba(255,255,255,0.6);
         }
+        .admin-loading-placeholder {
+          background: #fff;
+          border: 1px solid var(--admin-border);
+          border-radius: 12px;
+        }
         .admin-loader {
           width: 40px;
           height: 40px;
-          border: 3px solid rgba(255,255,255,0.1);
-          border-top-color: var(--admin-primary);
+          border: 3px solid rgba(0,0,0,0.05);
+          border-top-color: #6366f1;
           border-radius: 50%;
           animation: admin-spin 1s linear infinite;
           margin-bottom: 1rem;
@@ -754,21 +781,22 @@ const AdminDashboard = () => {
         }
         .hashtag-rank {
           font-weight: 700;
-          color: rgba(255,255,255,0.3);
+          color: var(--admin-muted);
           font-size: 1.1rem;
+          opacity: 0.6;
         }
         .hashtag-name {
           font-weight: 600;
-          color: #fff;
+          color: var(--admin-text);
           display: block;
         }
         .hashtag-count {
           font-size: 0.8rem;
-          color: rgba(255,255,255,0.5);
+          color: var(--admin-muted);
         }
         .hashtag-bar-bg {
           height: 6px;
-          background: rgba(255,255,255,0.05);
+          background: rgba(0,0,0,0.05);
           border-radius: 3px;
           overflow: hidden;
         }

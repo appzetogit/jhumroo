@@ -928,6 +928,46 @@
   gap: 16px;
 }
 
+.admin-select {
+  background-color: #fff;
+  border: 1px solid var(--admin-border);
+  border-radius: 8px;
+  color: var(--admin-text);
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.admin-filter-pill {
+  padding: 5px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--admin-border);
+  background: #fff;
+  color: var(--admin-muted);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease;
+}
+
+.admin-filter-pill.active {
+  background: #6366f1;
+  border-color: #6366f1;
+  color: #fff;
+}
+
+.custom-chart-tooltip {
+  background-color: #ffffff;
+  border: 1.5px solid var(--admin-border);
+  padding: 10px 14px;
+  border-radius: 8px;
+  color: var(--admin-text);
+  font-size: 13px;
+  font-family: inherit;
+  box-shadow: 0 8px 24px rgba(254, 44, 85, 0.08);
+}
+
 .admin-stats-grid-8 {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
