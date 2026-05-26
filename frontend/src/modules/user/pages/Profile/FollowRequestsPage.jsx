@@ -47,7 +47,7 @@ const NotificationItem = ({ notification, onToggleFollow }) => {
   const getActionText = () => {
     switch (type) {
       case 'follow': return 'started following you.';
-      case 'follow_back': return 'followed you back.';
+      case 'follow_back': return sender?.isFollower ? 'followed you back.' : 'started following you.';
       case 'follow_accept': return 'accepted your follow request.';
       case 'follow_request': return 'requested to follow you.';
       case 'like': return notification.comment ? 'liked your comment:' : 'liked your video.';
@@ -113,7 +113,7 @@ const NotificationItem = ({ notification, onToggleFollow }) => {
                 : 'bg-[#0095F6] text-white border-transparent'
             }`}
           >
-            {loading ? '...' : followStatus === 'accepted' ? 'Following' : followStatus === 'pending' ? 'Requested' : 'Follow back'}
+            {loading ? '...' : followStatus === 'accepted' ? 'Following' : followStatus === 'pending' ? 'Requested' : (sender?.isFollower ? 'Follow back' : 'Follow')}
           </button>
         </div>
       )}

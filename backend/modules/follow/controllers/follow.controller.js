@@ -94,8 +94,8 @@ export const unfollowUser = asyncHandler(async (req, res) => {
   // Delete ALL follow-related notifications between these two users (both ways)
   await Notification.deleteMany({
     $or: [
-      { recipient: userId, sender: req.user._id, type: { $in: ['follow', 'follow_request', 'follow_accept'] } },
-      { recipient: req.user._id, sender: userId, type: { $in: ['follow', 'follow_request', 'follow_accept'] } }
+      { recipient: userId, sender: req.user._id, type: { $in: ['follow', 'follow_request', 'follow_accept', 'follow_back'] } },
+      { recipient: req.user._id, sender: userId, type: { $in: ['follow', 'follow_request', 'follow_accept', 'follow_back'] } }
     ]
   });
 
@@ -282,8 +282,8 @@ export const removeFollower = asyncHandler(async (req, res) => {
   // Delete ALL follow-related notifications between these two users (both ways)
   await Notification.deleteMany({
     $or: [
-      { recipient: userId, sender: req.user._id, type: { $in: ['follow', 'follow_request', 'follow_accept'] } },
-      { recipient: req.user._id, sender: userId, type: { $in: ['follow', 'follow_request', 'follow_accept'] } }
+      { recipient: userId, sender: req.user._id, type: { $in: ['follow', 'follow_request', 'follow_accept', 'follow_back'] } },
+      { recipient: req.user._id, sender: userId, type: { $in: ['follow', 'follow_request', 'follow_accept', 'follow_back'] } }
     ]
   });
 

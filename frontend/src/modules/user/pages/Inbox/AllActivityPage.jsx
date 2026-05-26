@@ -21,7 +21,7 @@ const ActivityItem = ({ item }) => {
       case 'mention': return 'mentioned you in a comment';
       case 'message': return 'sent you a message';
       case 'follow': return 'started following you';
-      case 'follow_back': return 'followed you back';
+      case 'follow_back': return item.sender?.isFollower ? 'followed you back' : 'started following you';
       case 'follow_accept': return 'accepted your follow request';
       default: return null;
     }

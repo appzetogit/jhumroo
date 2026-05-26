@@ -16,7 +16,7 @@ export const getNotifications = asyncHandler(async (req, res) => {
   // This removes old duplicate data from the database
   const followNotifications = await Notification.find({ 
     recipient: req.user._id, 
-    type: { $in: ['follow', 'follow_request', 'follow_accept'] } 
+    type: { $in: ['follow', 'follow_request', 'follow_accept', 'follow_back'] } 
   }).sort({ createdAt: -1 });
 
   const seenSenders = new Set();
@@ -43,32 +43,62 @@ export const getNotifications = asyncHandler(async (req, res) => {
     .populate('reel', 'video thumbnail stats')
     .lean();
 
-  // Add following status to senders
+  // Add following and follower status to senders
   const senderIds = notifications.map(n => n.sender?._id).filter(id => !!id);
   
+  let finalNotifications = notifications;
+
   if (senderIds.length > 0) {
-    const follows = await Follow.find({
-      follower: req.user._id,
-      following: { $in: senderIds }
-    });
+    const [follows, incomingFollows] = await Promise.all([
+      Follow.find({
+        follower: req.user._id,
+        following: { $in: senderIds }
+      }),
+      Follow.find({
+        follower: { $in: senderIds },
+        following: req.user._id,
+        status: 'accepted'
+      })
+    ]);
 
     const followStatusMap = new Map();
     follows.forEach(f => followStatusMap.set(f.following.toString(), f.status));
+
+    const incomingFollowsSet = new Set(
+      incomingFollows.map(f => f.follower.toString())
+    );
+
+    const idsToDeleteOnFly = [];
 
     notifications.forEach(n => {
       if (n.sender) {
         const status = followStatusMap.get(n.sender._id.toString());
         n.sender.isFollowing = status === 'accepted';
         n.sender.followStatus = status || null;
+        n.sender.isFollower = incomingFollowsSet.has(n.sender._id.toString());
+
+        // If it's a follow/follow_back notification, but neither follows each other,
+        // it means they have both unfollowed. Clean it up from the database and filter it out.
+        if (['follow', 'follow_back'].includes(n.type) && !n.sender.isFollowing && !n.sender.isFollower) {
+          idsToDeleteOnFly.push(n._id);
+        }
       }
     });
+
+    if (idsToDeleteOnFly.length > 0) {
+      // Delete from database in background
+      Notification.deleteMany({ _id: { $in: idsToDeleteOnFly } }).exec().catch(err => {
+        console.error('Failed to delete dangling notifications:', err);
+      });
+      finalNotifications = notifications.filter(n => !idsToDeleteOnFly.includes(n._id));
+    }
   }
 
   const total = await Notification.countDocuments({ recipient: req.user._id });
 
   res.status(200).json({
     success: true,
-    notifications,
+    notifications: finalNotifications,
     pagination: {
       page,
       limit,
