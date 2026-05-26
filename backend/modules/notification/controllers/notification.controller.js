@@ -35,7 +35,10 @@ export const getNotifications = asyncHandler(async (req, res) => {
     await Notification.deleteMany({ _id: { $in: idsToDelete } });
   }
 
-  const notifications = await Notification.find({ recipient: req.user._id })
+  const notifications = await Notification.find({ 
+    recipient: req.user._id,
+    type: { $ne: 'follow_request' }
+  })
     .sort({ createdAt: -1 })
     .skip(skip)
     .limit(limit)
@@ -94,7 +97,10 @@ export const getNotifications = asyncHandler(async (req, res) => {
     }
   }
 
-  const total = await Notification.countDocuments({ recipient: req.user._id });
+  const total = await Notification.countDocuments({ 
+    recipient: req.user._id,
+    type: { $ne: 'follow_request' }
+  });
 
   res.status(200).json({
     success: true,
