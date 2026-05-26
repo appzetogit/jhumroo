@@ -4,7 +4,7 @@ import { BiArrowBack, BiChevronRight } from 'react-icons/bi';
 import followService from '../../../../services/followService';
 import notificationService from '../../../../services/notificationService';
 
-const NotificationItem = ({ notification, onToggleFollow }) => {
+const NotificationItem = ({ notification, onRefresh }) => {
   const navigate = useNavigate();
   const { sender, type, createdAt } = notification;
   const [followStatus, setFollowStatus] = useState(sender?.followStatus || (sender?.isFollowing ? 'accepted' : null));
@@ -27,6 +27,36 @@ const NotificationItem = ({ notification, onToggleFollow }) => {
       }
     } catch (error) {
       console.error('Failed to toggle follow:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAcceptRequest = async (e) => {
+    e.stopPropagation();
+    setLoading(true);
+    try {
+      const res = await followService.acceptFollowRequest(sender?._id);
+      if (res.success && onRefresh) {
+        onRefresh();
+      }
+    } catch (error) {
+      console.error('Failed to accept follow request:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRejectRequest = async (e) => {
+    e.stopPropagation();
+    setLoading(true);
+    try {
+      const res = await followService.rejectFollowRequest(sender?._id);
+      if (res.success && onRefresh) {
+        onRefresh();
+      }
+    } catch (error) {
+      console.error('Failed to reject follow request:', error);
     } finally {
       setLoading(false);
     }
@@ -92,7 +122,24 @@ const NotificationItem = ({ notification, onToggleFollow }) => {
         </p>
       </div>
 
-      {['like', 'comment', 'mention'].includes(type) ? (
+      {type === 'follow_request' ? (
+        <div className="shrink-0 flex items-center gap-2">
+          <button
+            onClick={handleAcceptRequest}
+            disabled={loading}
+            className="px-4 py-1.5 rounded-lg bg-[#0095F6] text-white text-[13px] font-bold active:scale-95 transition-all min-w-[70px] border border-transparent"
+          >
+            Confirm
+          </button>
+          <button
+            onClick={handleRejectRequest}
+            disabled={loading}
+            className="px-4 py-1.5 rounded-lg bg-gray-100 text-gray-800 border border-gray-200 text-[13px] font-bold active:scale-95 transition-all min-w-[70px]"
+          >
+            Delete
+          </button>
+        </div>
+      ) : ['like', 'comment', 'mention'].includes(type) ? (
         <div className="shrink-0 w-11 h-[60px] rounded-lg bg-gray-200 overflow-hidden border border-gray-200 flex items-center justify-center">
           <img 
             src={notification.reel?.video?.thumbnail || notification.reel?.video?.url || notification.reel?.thumbnail || notification.reel?.url} 
@@ -235,6 +282,7 @@ const FollowRequestsPage = () => {
                   <NotificationItem 
                     key={n._id} 
                     notification={n} 
+                    onRefresh={fetchAllData}
                   />
                 ))}
               </div>
