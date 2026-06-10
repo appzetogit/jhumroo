@@ -5,7 +5,7 @@ import AddToFavoritesModal from '../modals/AddToFavoritesModal';
 import reelService from '../../../../services/reelService';
 import adService from '../../../../services/adService';
 
-const VideoCard = ({ videoData, isActive }) => {
+const VideoCard = ({ videoData, isActive, preload = 'none' }) => {
   const videoRef = useRef(null);
   const hlsRef = useRef(null);
   const watchStartTimeRef = useRef(null);
@@ -133,7 +133,7 @@ const VideoCard = ({ videoData, isActive }) => {
     const isRawVideo = videoSrc && (videoSrc.includes('/raw/') || videoSrc.includes('recording.webm'));
     const hasExternalMusic = localVideoData.music && localVideoData.music.url && isRawVideo;
 
-    if (!hasExternalMusic) {
+    if (!hasExternalMusic || !isActive) {
       if (audioTrackRef.current) {
         audioTrackRef.current.pause();
         audioTrackRef.current = null;
@@ -374,6 +374,7 @@ const VideoCard = ({ videoData, isActive }) => {
               src={localVideoData.originalReel.video?.url}
               loop
               playsInline
+              preload={preload}
               muted={isMuted}
               onClick={(e) => {
                 if (e.detail === 2) handleDoubleClick();
@@ -395,7 +396,7 @@ const VideoCard = ({ videoData, isActive }) => {
               style={{ willChange: 'transform', objectFit: 'cover' }}
               loop
               playsInline
-              preload="auto"
+              preload={preload}
               muted={isMuted}
               poster={localVideoData.video?.thumbnail || localVideoData.poster}
               onClick={(e) => {
@@ -412,7 +413,7 @@ const VideoCard = ({ videoData, isActive }) => {
           style={{ willChange: 'transform', objectFit: 'cover' }}
           loop
           playsInline
-          preload="auto"
+          preload={preload}
           muted={isMuted}
           poster={localVideoData.video?.thumbnail || localVideoData.poster}
           onClick={(e) => {

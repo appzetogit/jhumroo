@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { convertToCdnUrl } from '../utils/s3.js';
 
 const adSchema = new mongoose.Schema(
   {
@@ -134,7 +135,41 @@ const adSchema = new mongoose.Schema(
     }
   },
   {
-    timestamps: true
+    timestamps: true,
+    toJSON: {
+      virtuals: true,
+      transform: function(doc, ret) {
+        if (ret.media) {
+          if (ret.media.url) {
+            ret.media.url = convertToCdnUrl(ret.media.url);
+          }
+          if (ret.media.thumbnail) {
+            ret.media.thumbnail = convertToCdnUrl(ret.media.thumbnail);
+          }
+        }
+        if (ret.music && ret.music.url) {
+          ret.music.url = convertToCdnUrl(ret.music.url);
+        }
+        return ret;
+      }
+    },
+    toObject: {
+      virtuals: true,
+      transform: function(doc, ret) {
+        if (ret.media) {
+          if (ret.media.url) {
+            ret.media.url = convertToCdnUrl(ret.media.url);
+          }
+          if (ret.media.thumbnail) {
+            ret.media.thumbnail = convertToCdnUrl(ret.media.thumbnail);
+          }
+        }
+        if (ret.music && ret.music.url) {
+          ret.music.url = convertToCdnUrl(ret.music.url);
+        }
+        return ret;
+      }
+    }
   }
 );
 

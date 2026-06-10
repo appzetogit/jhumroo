@@ -904,6 +904,7 @@ const ProfilePage = () => {
                     <VideoCard
                       videoData={video}
                       isActive={index === activeOverlayIndex}
+                      preload={index === activeOverlayIndex ? "auto" : (index === activeOverlayIndex + 1 ? "auto" : "none")}
                     />
                   ) : (
                     <div className="h-full w-full bg-black flex items-center justify-center">

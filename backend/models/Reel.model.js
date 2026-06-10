@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import { getCategoriesFromHashtags } from '../utils/interestMapping.js';
+import { convertToCdnUrl } from '../utils/s3.js';
 
 const reelSchema = new mongoose.Schema(
   {
@@ -260,20 +261,63 @@ const reelSchema = new mongoose.Schema(
     toJSON: { 
       virtuals: true,
       transform: function(doc, ret) {
-        // Ensure CloudFront URLs are used if available
         const cdnDomain = process.env.CLOUDFRONT_DOMAIN;
-        if (cdnDomain && ret.video && ret.video.publicId) {
-          ret.video.url = `https://${cdnDomain}/${ret.video.publicId}`;
-          
-          // Also update thumbnail if it's based on the same key/path
-          if (ret.video.thumbnail && (ret.video.thumbnail.includes('amazonaws.com') || !ret.video.thumbnail.startsWith('http'))) {
-             // Logic for thumbnail CloudFront URL if applicable
+        if (cdnDomain) {
+          if (ret.video) {
+            if (ret.video.publicId) {
+              ret.video.url = `https://${cdnDomain}/${ret.video.publicId}`;
+            } else if (ret.video.url) {
+              ret.video.url = convertToCdnUrl(ret.video.url);
+            }
+            if (ret.video.thumbnail) {
+              ret.video.thumbnail = convertToCdnUrl(ret.video.thumbnail);
+            }
+          }
+          if (ret.rawVideoUrl) {
+            ret.rawVideoUrl = convertToCdnUrl(ret.rawVideoUrl);
+          }
+          if (ret.music) {
+            if (ret.music.url) {
+              ret.music.url = convertToCdnUrl(ret.music.url);
+            }
+            if (ret.music.thumbnail) {
+              ret.music.thumbnail = convertToCdnUrl(ret.music.thumbnail);
+            }
           }
         }
         return ret;
       }
     },
-    toObject: { virtuals: true }
+    toObject: { 
+      virtuals: true,
+      transform: function(doc, ret) {
+        const cdnDomain = process.env.CLOUDFRONT_DOMAIN;
+        if (cdnDomain) {
+          if (ret.video) {
+            if (ret.video.publicId) {
+              ret.video.url = `https://${cdnDomain}/${ret.video.publicId}`;
+            } else if (ret.video.url) {
+              ret.video.url = convertToCdnUrl(ret.video.url);
+            }
+            if (ret.video.thumbnail) {
+              ret.video.thumbnail = convertToCdnUrl(ret.video.thumbnail);
+            }
+          }
+          if (ret.rawVideoUrl) {
+            ret.rawVideoUrl = convertToCdnUrl(ret.rawVideoUrl);
+          }
+          if (ret.music) {
+            if (ret.music.url) {
+              ret.music.url = convertToCdnUrl(ret.music.url);
+            }
+            if (ret.music.thumbnail) {
+              ret.music.thumbnail = convertToCdnUrl(ret.music.thumbnail);
+            }
+          }
+        }
+        return ret;
+      }
+    }
   }
 );
 

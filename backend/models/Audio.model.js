@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { convertToCdnUrl } from '../utils/s3.js';
 
 const audioSchema = new mongoose.Schema(
   {
@@ -34,7 +35,31 @@ const audioSchema = new mongoose.Schema(
     }
   },
   {
-    timestamps: true
+    timestamps: true,
+    toJSON: {
+      virtuals: true,
+      transform: function(doc, ret) {
+        if (ret.url) {
+          ret.url = convertToCdnUrl(ret.url);
+        }
+        if (ret.thumbnail) {
+          ret.thumbnail = convertToCdnUrl(ret.thumbnail);
+        }
+        return ret;
+      }
+    },
+    toObject: {
+      virtuals: true,
+      transform: function(doc, ret) {
+        if (ret.url) {
+          ret.url = convertToCdnUrl(ret.url);
+        }
+        if (ret.thumbnail) {
+          ret.thumbnail = convertToCdnUrl(ret.thumbnail);
+        }
+        return ret;
+      }
+    }
   }
 );
 

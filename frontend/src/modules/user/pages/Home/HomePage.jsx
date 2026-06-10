@@ -271,6 +271,7 @@ const HomePage = () => {
                   <VideoCard
                     videoData={video}
                     isActive={index === activeVideoIndex && onboardingStep !== 2}
+                    preload={index === activeVideoIndex ? "auto" : (index === activeVideoIndex + 1 ? "auto" : "none")}
                   />
                 ) : (
                   <div className="h-full w-full bg-black flex items-center justify-center">

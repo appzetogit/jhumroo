@@ -93,6 +93,29 @@ export const getSyncFileUrl = (key) => {
 };
 
 /**
+ * Convert any AWS S3 URL to CloudFront URL if CLOUDFRONT_DOMAIN is set
+ * and strip out any S3 query signatures.
+ */
+export const convertToCdnUrl = (url) => {
+  if (!url || typeof url !== 'string') return url;
+  const cdnDomain = process.env.CLOUDFRONT_DOMAIN;
+  if (!cdnDomain) return url;
+  
+  // If it's already a CloudFront URL, return it
+  if (url.includes(cdnDomain)) return url;
+  
+  // If it contains AWS S3 domain pattern
+  if (url.includes('amazonaws.com')) {
+    // Extract the key part (everything after the hostname, excluding query parameters)
+    const match = url.match(/https?:\/\/[^\/]+\/([^?]+)/);
+    if (match && match[1]) {
+      return `https://${cdnDomain}/${match[1]}`;
+    }
+  }
+  return url;
+};
+
+/**
  * Get URL for an object (Signed if private S3, direct if CloudFront)
  */
 export const getFileUrl = async (key) => {
