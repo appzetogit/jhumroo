@@ -48,9 +48,10 @@ export const useLenis = (callback, deps = []) => {
  */
 export const useInitializeLenis = (customConfig = {}) => {
   const [lenisInstance, setLenisInstance] = useState(null);
+  const setLenisInstanceRef = useRef(setLenisInstance);
+  setLenisInstanceRef.current = setLenisInstance;
   const lenisRef = useRef(null);
   const rafRef = useRef(null);
-  const location = useLocation();
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -67,7 +68,7 @@ export const useInitializeLenis = (customConfig = {}) => {
         lenis.destroy();
         lenis = null;
         lenisRef.current = null;
-        setLenisInstance(null);
+        setLenisInstanceRef.current(null);
         if (rafRef.current) {
           cancelAnimationFrame(rafRef.current);
           rafRef.current = null;
@@ -95,7 +96,7 @@ export const useInitializeLenis = (customConfig = {}) => {
       mergedConfig.wrapper = container;
       lenis = new Lenis(mergedConfig);
       lenisRef.current = lenis;
-      setLenisInstance(lenis);
+      setLenisInstanceRef.current(lenis);
 
       const handleScroll = () => {
         if (ScrollTriggerModule?.ScrollTrigger) {
@@ -173,11 +174,11 @@ export const useInitializeLenis = (customConfig = {}) => {
         lenis.destroy();
         lenis = null;
         lenisRef.current = null;
-        setLenisInstance(null);
+        setLenisInstanceRef.current(null);
       }
       activeContainer = null;
     };
-  }, [location.pathname, JSON.stringify(customConfig)]);
+  }, [JSON.stringify(customConfig)]);
 
   return lenisInstance;
 };

@@ -11,7 +11,12 @@ import {
   trackClick,
   updateAd,
   getUserAds,
-  reviewAd
+  reviewAd,
+  getAdsPricingRoute,
+  getAdsPricingAdminRoute,
+  updateAdsPricingAdminRoute,
+  verifyAdPayment,
+  getAdsPaymentRecordsAdminRoute
 } from '../controllers/ad.controller.js';
 import { protect } from '../../../middleware/auth.js';
 import { uploadAdMedia, uploadAdWithMusic } from '../../../middleware/upload.js';
@@ -19,6 +24,12 @@ import { uploadAdMedia, uploadAdWithMusic } from '../../../middleware/upload.js'
 const router = express.Router();
 
 // Static routes MUST come before parameterized /:id routes
+router.get('/pricing', getAdsPricingRoute);
+router.post('/verify-payment', protect, verifyAdPayment);
+router.get('/admin/pricing', protect, getAdsPricingAdminRoute);
+router.put('/admin/pricing', protect, updateAdsPricingAdminRoute);
+router.get('/admin/payment-records', protect, getAdsPaymentRecordsAdminRoute);
+
 router.post('/', protect, uploadAdWithMusic, createAd);
 router.get('/me', protect, getMyAds);
 router.get('/feed', protect, getAdsForFeed);

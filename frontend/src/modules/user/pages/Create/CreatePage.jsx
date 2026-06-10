@@ -42,7 +42,7 @@ import {
   IoVolumeHighOutline,
 } from 'react-icons/io5';
 import { FiScissors } from 'react-icons/fi';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useTheme } from '../../../../context/ThemeContext';
 import { useAppContent } from '../../../../hooks/useAppContent';
 import { useAuth } from '../../../../context/AuthContext';
@@ -120,6 +120,13 @@ const getToolIcon = (toolId, size = 22, isMuted = false, selectedSpeed = '1x') =
 const CreatePage = () => {
   const navigate = useNavigate();
   const { isDarkMode } = useTheme();
+  const location = useLocation();
+  const [duetVideo, setDuetVideo] = useState(() => {
+    return location.state?.duetVideo || null;
+  });
+  const [isDuetMuted, setIsDuetMuted] = useState(false);
+  const duetVideoPlayerRef = useRef(null);
+  const duetPreviewVideoPlayerRef = useRef(null);
   const { config } = useAppContent();
   const { user } = useAuth();
   const [videoFile, setVideoFile] = useState(null);
@@ -442,6 +449,48 @@ const CreatePage = () => {
     }
   }, [stage, previewUrl]);
 
+  // Synchronize original duet video playback in preview stage
+  useEffect(() => {
+    const mainVideo = previewVideoRef.current;
+    const duetVideoEl = duetPreviewVideoPlayerRef.current;
+    if (!mainVideo || !duetVideoEl || stage !== 'preview') return;
+
+    const handlePlay = () => {
+      duetVideoEl.play().catch(err => console.warn("Failed to play duet preview video:", err));
+    };
+
+    const handlePause = () => {
+      duetVideoEl.pause();
+    };
+
+    const handleTimeUpdate = () => {
+      const diff = Math.abs(duetVideoEl.currentTime - mainVideo.currentTime);
+      if (diff > 0.2) {
+        duetVideoEl.currentTime = mainVideo.currentTime;
+      }
+    };
+
+    const handleSeeking = () => {
+      duetVideoEl.currentTime = mainVideo.currentTime;
+    };
+
+    mainVideo.addEventListener('play', handlePlay);
+    mainVideo.addEventListener('pause', handlePause);
+    mainVideo.addEventListener('timeupdate', handleTimeUpdate);
+    mainVideo.addEventListener('seeking', handleSeeking);
+
+    if (!mainVideo.paused) {
+      handlePlay();
+    }
+
+    return () => {
+      mainVideo.removeEventListener('play', handlePlay);
+      mainVideo.removeEventListener('pause', handlePause);
+      mainVideo.removeEventListener('timeupdate', handleTimeUpdate);
+      mainVideo.removeEventListener('seeking', handleSeeking);
+    };
+  }, [stage, previewUrl, duetVideo]);
+
   // Sync audio playback position when clipStart changes
   useEffect(() => {
     const currentStage = stageStack[stageStack.length - 1];
@@ -476,6 +525,7 @@ const CreatePage = () => {
   }, []);
 
   useEffect(() => {
+    let timerId;
     const fetchAudios = async () => {
       try {
         const audios = await audioService.getAllAudios();
@@ -485,6 +535,22 @@ const CreatePage = () => {
       }
     };
     fetchAudios();
+
+    const fetchDuetReel = async () => {
+      const searchParams = new URLSearchParams(window.location.search);
+      const duetId = searchParams.get('duet');
+      if (duetId && !duetVideo) {
+        try {
+          const res = await reelService.getReelById(duetId);
+          if (res?.data?.success && res?.data?.reel) {
+            setDuetVideo(res.data.reel);
+          }
+        } catch (err) {
+          console.error("Failed to fetch duet video:", err);
+        }
+      }
+    };
+    fetchDuetReel();
 
     // Restore video from IndexedDB on mount
     const restoreVideo = async () => {
@@ -533,12 +599,16 @@ const CreatePage = () => {
         console.error("Error restoring from cache:", err);
       } finally {
         // Give React a moment to process the state updates above before triggering the safety check
-        setTimeout(() => {
+        timerId = setTimeout(() => {
           setIsRestoring(false);
         }, 100);
       }
     };
     restoreVideo();
+
+    return () => {
+      if (timerId) clearTimeout(timerId);
+    };
   }, []);
 
   // Generate video thumbnails for editor
@@ -1407,6 +1477,9 @@ const CreatePage = () => {
         mediaRecorderRef.current.stop();
       }
       setRecordStatus('recorded');
+      if (duetVideoPlayerRef.current) {
+        duetVideoPlayerRef.current.pause();
+      }
       return;
     }
 
@@ -1423,6 +1496,11 @@ const CreatePage = () => {
 
     setRecordedSeconds(0);
     chunksRef.current = [];
+    
+    if (duetVideoPlayerRef.current) {
+      duetVideoPlayerRef.current.currentTime = 0;
+      duetVideoPlayerRef.current.play().catch(err => console.error("Failed to play duet original video:", err));
+    }
     
     // Find supported mime type
     const types = [
@@ -1477,6 +1555,10 @@ const CreatePage = () => {
     setVideoFile(null);
     setPreviewUrl(null);
     setActiveSheet(null);
+    if (duetVideoPlayerRef.current) {
+      duetVideoPlayerRef.current.pause();
+      duetVideoPlayerRef.current.currentTime = 0;
+    }
     
     // Clear cache
     clearVideoCache();
@@ -1951,6 +2033,7 @@ const CreatePage = () => {
                 caption: postState.caption,
                 audience: postState.audience,
                 allowComments: postState.allowComments,
+                allowDuet: postState.allowDuet,
                 highQuality: postState.highQuality,
                 saveToDevice: postState.saveToDevice,
                 autoCaptions: postState.autoCaptions,
@@ -1959,6 +2042,8 @@ const CreatePage = () => {
                 location: postState.location,
                 music: musicPayload,
                 edits: editsPayload,
+                isRemix: duetVideo ? true : false,
+                originalReel: duetVideo ? duetVideo._id : undefined,
                 ...(coverImageUrl && { thumbnailUrl: coverImageUrl })
             };
 
@@ -1976,6 +2061,7 @@ const CreatePage = () => {
             formData.append('caption', postState.caption || '');
             formData.append('audience', postState.audience || 'everyone');
             formData.append('allowComments', postState.allowComments);
+            formData.append('allowDuet', postState.allowDuet);
             formData.append('highQuality', postState.highQuality);
             formData.append('saveToDevice', postState.saveToDevice);
             formData.append('autoCaptions', postState.autoCaptions);
@@ -1983,6 +2069,10 @@ const CreatePage = () => {
             formData.append('isAgeRestricted', postState.audienceControls);
             if (coverImageUrl) {
                 formData.append('thumbnailUrl', coverImageUrl);
+            }
+            if (duetVideo) {
+                formData.append('isRemix', 'true');
+                formData.append('originalReel', duetVideo._id);
             }
             
             if (postState.location) {
@@ -2650,11 +2740,40 @@ const CreatePage = () => {
             }
           `}
         </style>
-        <div className="absolute inset-0 z-0">
-          <canvas 
-            ref={canvasRef} 
-            className="h-full w-full object-cover transition-all duration-300"
-          />
+        <div className={duetVideo ? "absolute top-1/2 -translate-y-1/2 w-full aspect-[9/8] flex flex-row bg-black z-0 overflow-hidden" : "absolute inset-0 z-0 flex flex-row"}>
+          {duetVideo ? (
+            <>
+              {/* Left Column: Original Video */}
+              <div className="w-1/2 h-full bg-black relative border-r border-white/10 flex items-center justify-center">
+                <video
+                  ref={duetVideoPlayerRef}
+                  src={duetVideo.video.url}
+                  className="w-full h-full object-cover"
+                  playsInline
+                  loop
+                  muted={isDuetMuted}
+                />
+                <div className="absolute bottom-4 left-4 bg-black/60 backdrop-blur-md px-3 py-1 rounded-full text-xs font-bold text-white border border-white/10 flex items-center gap-1 z-10">
+                  <span className="w-1.5 h-1.5 bg-[#fe2c55] rounded-full animate-pulse"></span>
+                  @{duetVideo.user?.username || 'creator'}
+                </div>
+              </div>
+              {/* Right Column: Camera Canvas */}
+              <div className="w-1/2 h-full bg-black relative">
+                <canvas 
+                  ref={canvasRef} 
+                  className="w-full h-full object-cover transition-all duration-300"
+                />
+              </div>
+            </>
+          ) : (
+            <>
+              <canvas 
+                ref={canvasRef} 
+                className="h-full w-full object-cover transition-all duration-300"
+              />
+            </>
+          )}
           <video 
             ref={videoRef} 
             autoPlay 
@@ -3456,42 +3575,92 @@ const CreatePage = () => {
 
   const renderPreviewStage = () => (
     <div className={`relative h-full overflow-hidden ${isDarkMode ? 'bg-black text-white' : 'bg-[var(--theme-page-bg)] text-white'}`}>
-      {previewUrl ? (
-        videoFile?.type?.startsWith('image/') ? (
-          <img 
-            src={previewUrl} 
-            className="h-full w-full object-cover transition-all duration-500" 
-            alt="Preview"
-            style={{ 
-                transform: `rotate(${editorSettings.rotation}deg)`,
-                transformOrigin: 'center center',
-                filter: getCombinedFilter()
-            }}
-          />
+      <div className={duetVideo ? "absolute top-1/2 -translate-y-1/2 w-full aspect-[9/8] flex flex-row bg-black z-0 overflow-hidden" : "absolute inset-0 z-0 flex flex-row"}>
+        {duetVideo ? (
+          <>
+            {/* Left Side: Original Duet Video */}
+            <div className="w-1/2 h-full bg-black relative border-r border-white/10 flex items-center justify-center">
+              <video 
+                ref={duetPreviewVideoPlayerRef}
+                src={duetVideo.video.url} 
+                className="w-full h-full object-cover" 
+                loop 
+                muted={isDuetMuted}
+                playsInline
+              />
+              <div className="absolute bottom-4 left-4 bg-black/60 backdrop-blur-md px-3 py-1 rounded-full text-xs font-bold text-white border border-white/10 flex items-center gap-1 z-10">
+                <span className="w-1.5 h-1.5 bg-[#fe2c55] rounded-full animate-pulse"></span>
+                @{duetVideo.user?.username || 'creator'}
+              </div>
+            </div>
+            {/* Right Side: Recorded Video */}
+            <div className="w-1/2 h-full bg-black relative flex items-center justify-center">
+              {previewUrl ? (
+                <video 
+                  ref={previewVideoRef}
+                  src={previewUrl} 
+                  className="w-full h-full object-cover transition-all duration-500" 
+                  loop 
+                  muted={isVideoMuted}
+                  playsInline
+                  style={{ 
+                      transform: `rotate(${editorSettings.rotation}deg)`,
+                      transformOrigin: 'center center',
+                      filter: getCombinedFilter()
+                  }}
+                />
+              ) : (
+                <MediaPreview 
+                  image={selectedMedia.image} 
+                  rotation={editorSettings.rotation} 
+                  filter={selectedFilter} 
+                  className="h-full w-full" 
+                  adjustments={imageAdjustments}
+                />
+              )}
+            </div>
+          </>
         ) : (
-          <video 
-              ref={previewVideoRef}
-              src={previewUrl} 
-              className="h-full w-full object-cover transition-all duration-500" 
-              loop 
-              muted={isVideoMuted}
-              playsInline
-              style={{ 
-                  transform: `rotate(${editorSettings.rotation}deg)`,
-                  transformOrigin: 'center center',
-                  filter: getCombinedFilter()
-              }}
-          />
-        )
-      ) : (
-        <MediaPreview 
-          image={selectedMedia.image} 
-          rotation={editorSettings.rotation} 
-          filter={selectedFilter} 
-          className="h-full w-full" 
-          adjustments={imageAdjustments}
-        />
-      )}
+          <div className="w-full h-full relative">
+            {previewUrl ? (
+              videoFile?.type?.startsWith('image/') ? (
+                <img 
+                  src={previewUrl} 
+                  className="h-full w-full object-cover transition-all duration-500" 
+                  alt="Preview"
+                  style={{ 
+                      transform: `rotate(${editorSettings.rotation}deg)`,
+                      transformOrigin: 'center center',
+                      filter: getCombinedFilter()
+                  }}
+                />
+              ) : (
+                <video 
+                  ref={previewVideoRef}
+                  src={previewUrl} 
+                  className="h-full w-full object-cover transition-all duration-500" 
+                  loop 
+                  muted={isVideoMuted}
+                  playsInline
+                  style={{ 
+                      transform: `rotate(${editorSettings.rotation}deg)`,
+                      transformOrigin: 'center center',
+                      filter: getCombinedFilter()
+                  }}
+                />
+              )
+            ) : (
+              <MediaPreview 
+                image={selectedMedia.image} 
+                rotation={editorSettings.rotation} 
+                filter={selectedFilter} 
+                className="h-full w-full" 
+                adjustments={imageAdjustments}
+              />
+            )}
+          </div>
+        )}
+      </div>
 
       {/* Text Overlay Display with Drag & Rotate */}
       {overlayText && (
@@ -3916,6 +4085,10 @@ const CreatePage = () => {
             {
               key: 'highQuality',
               label: 'Allow high-quality uploads',
+            },
+            {
+              key: 'allowDuet',
+              label: 'Allow Duet',
             },
           ].map((toggleItem) => (
             <div key={toggleItem.key} className="flex items-center justify-between py-3">

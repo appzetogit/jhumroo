@@ -1,0 +1,17 @@
+{
+  "$schema": "https://react.doctor/schema/config.json",
+  "categories": {
+    "Security": "off",
+    "Bugs": "off",
+    "Performance": "off",
+    "Accessibility": "off",
+    "Maintainability": "off"
+  },
+  "rules": {
+    "react-doctor/require-reduced-motion": "error",
+    "react-doctor/effect-needs-cleanup": "error",
+    "react-doctor/no-adjust-state-on-prop-change": "error",
+    "react-doctor/no-mutable-in-deps": "error",
+    "react-doctor/no-nested-component-definition": "error"
+  }
+}

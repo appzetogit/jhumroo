@@ -255,6 +255,27 @@ const reelService = {
     }
   },
 
+  togglePinComment: async (commentId) => {
+    try {
+      const response = await api.put(`/comments/${commentId}/pin`);
+      return response;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  /**
+   * Delete comment
+   */
+  deleteComment: async (commentId) => {
+    try {
+      const response = await api.delete(`/comments/${commentId}`);
+      return response;
+    } catch (error) {
+      throw error;
+    }
+  },
+
   /**
    * Record a view for a reel
    * @param {string} reelId - Reel ID

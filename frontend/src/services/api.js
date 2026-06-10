@@ -24,9 +24,9 @@ api.interceptors.request.use(
     const userToken = localStorage.getItem('jhumroo_token');
     const adminToken = localStorage.getItem('jhumroo_admin_token');
     
-    // Distinguish between admin and user requests based on the API endpoint URL or the browser path
+    // Distinguish between admin and user requests based on the API endpoint URL or browser path (excluding user auth)
     const isAdminRequest = config.url.includes('/admin/') || 
-      (typeof window !== 'undefined' && window.location.pathname.startsWith('/admin'));
+      (typeof window !== 'undefined' && window.location.pathname.startsWith('/admin') && !config.url.includes('/auth/'));
     
     if (isAdminRequest) {
       if (adminToken) {
@@ -72,9 +72,15 @@ api.interceptors.response.use(
     if (error.response) {
       const { status, data } = error.response;
       
-      if (status === 401 && !originalRequest._retry) {
+      const isBypassRefresh = originalRequest.url.includes('/login') ||
+        originalRequest.url.includes('/logout') ||
+        originalRequest.url.includes('/refresh') ||
+        originalRequest.url.includes('/send-otp') ||
+        originalRequest.url.includes('/verify-otp');
+
+      if (status === 401 && !originalRequest._retry && !isBypassRefresh) {
         const isAdminRequest = originalRequest.url.includes('/admin/') || 
-          (typeof window !== 'undefined' && window.location.pathname.startsWith('/admin'));
+          (typeof window !== 'undefined' && window.location.pathname.startsWith('/admin') && !originalRequest.url.includes('/auth/'));
         
         if (isRefreshing) {
           return new Promise(function(resolve, reject) {
@@ -120,7 +126,8 @@ api.interceptors.response.use(
               } else {
                 localStorage.removeItem('jhumroo_token');
                 localStorage.removeItem('jhumroo_user');
-                if (!window.location.pathname.includes('/auth')) {
+                const isBrowserOnAdminRoute = typeof window !== 'undefined' && window.location.pathname.startsWith('/admin');
+                if (!isBrowserOnAdminRoute && !window.location.pathname.includes('/auth')) {
                   window.location.href = '/auth';
                 }
               }

@@ -7,6 +7,7 @@ export const createInitialPostState = () => ({
   linkType: '',
   allowComments: true,
   highQuality: true,
+  allowDuet: true,
   saveToDevice: true,
   autoCaptions: true,
   audienceControls: true,

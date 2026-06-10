@@ -3,6 +3,28 @@ import { BiX, BiChevronRight, BiCheck } from 'react-icons/bi';
 import { useTheme } from '../../../../context/ThemeContext';
 import userService from '../../../../services/userService';
 
+const Section = ({ title, children, isDarkMode }) => (
+  <div className="mb-8 px-4">
+    <h3 className={`text-[12px] font-bold uppercase tracking-wider mb-4 ${isDarkMode ? 'text-white/30' : 'text-black/30'}`}>{title}</h3>
+    <div className={`rounded-2xl overflow-hidden ${isDarkMode ? 'bg-white/5' : 'bg-black/5'}`}>
+      {children}
+    </div>
+  </div>
+);
+
+const Row = ({ label, value, onClick, isLast, isDarkMode }) => (
+  <button 
+    onClick={onClick}
+    className={`w-full flex items-center justify-between p-4 active:bg-white/5 transition-colors ${!isLast ? (isDarkMode ? 'border-b border-white/5' : 'border-b border-black/5') : ''}`}
+  >
+    <span className="text-[15px] font-semibold">{label}</span>
+    <div className="flex items-center gap-2">
+      <span className={`text-[14px] ${isDarkMode ? 'text-white/40' : 'text-black/40'}`}>{value}</span>
+      <BiChevronRight size={20} className="opacity-30" />
+    </div>
+  </button>
+);
+
 const ContentPreferencesSheet = ({ isOpen, onClose }) => {
   const { isDarkMode } = useTheme();
   const [preferences, setPreferences] = useState({
@@ -43,28 +65,6 @@ const ContentPreferencesSheet = ({ isOpen, onClose }) => {
 
   if (!isOpen) return null;
 
-  const Section = ({ title, children }) => (
-    <div className="mb-8 px-4">
-      <h3 className={`text-[12px] font-bold uppercase tracking-wider mb-4 ${isDarkMode ? 'text-white/30' : 'text-black/30'}`}>{title}</h3>
-      <div className={`rounded-2xl overflow-hidden ${isDarkMode ? 'bg-white/5' : 'bg-black/5'}`}>
-        {children}
-      </div>
-    </div>
-  );
-
-  const Row = ({ label, value, onClick, isLast }) => (
-    <button 
-      onClick={onClick}
-      className={`w-full flex items-center justify-between p-4 active:bg-white/5 transition-colors ${!isLast ? (isDarkMode ? 'border-b border-white/5' : 'border-b border-black/5') : ''}`}
-    >
-      <span className="text-[15px] font-semibold">{label}</span>
-      <div className="flex items-center gap-2">
-        <span className={`text-[14px] ${isDarkMode ? 'text-white/40' : 'text-black/40'}`}>{value}</span>
-        <BiChevronRight size={20} className="opacity-30" />
-      </div>
-    </button>
-  );
-
   return (
     <div 
       className={`fixed inset-0 z-[6000] flex flex-col justify-end ${isDarkMode ? 'bg-black/60' : 'bg-black/40'}`}
@@ -92,10 +92,11 @@ const ContentPreferencesSheet = ({ isOpen, onClose }) => {
             </div>
           ) : (
             <>
-              <Section title="Safety">
+              <Section title="Safety" isDarkMode={isDarkMode}>
                 <Row 
                   label="Sensitive Content" 
                   value={preferences.sensitiveContent} 
+                  isDarkMode={isDarkMode}
                   onClick={() => {
                     const levels = ['standard', 'less', 'more'];
                     const next = levels[(levels.indexOf(preferences.sensitiveContent) + 1) % levels.length];
@@ -104,21 +105,23 @@ const ContentPreferencesSheet = ({ isOpen, onClose }) => {
                 />
               </Section>
 
-              <Section title="Topics & Language">
+              <Section title="Topics & Language" isDarkMode={isDarkMode}>
                 <Row 
                   label="Language" 
                   value={preferences.languagePreferences[0]} 
+                  isDarkMode={isDarkMode}
                   onClick={() => {}}
                 />
                 <Row 
                   label="Manage Topics" 
                   value="12 active" 
                   isLast 
+                  isDarkMode={isDarkMode}
                   onClick={() => {}}
                 />
               </Section>
 
-              <Section title="AI Content">
+              <Section title="AI Content" isDarkMode={isDarkMode}>
                 <button 
                   onClick={() => updatePref({ aiContentVisibility: !preferences.aiContentVisibility })}
                   className="w-full flex items-center justify-between p-4"

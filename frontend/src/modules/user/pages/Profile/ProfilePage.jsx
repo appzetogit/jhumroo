@@ -12,6 +12,45 @@ import ReportSheet from '../../components/modals/ReportSheet';
 import ReportUserSheet from '../../components/modals/ReportUserSheet';
 import VideoCard from '../../components/video/VideoCard';
 
+const LazyVideo = ({ src, className }) => {
+  const [shouldLoad, setShouldLoad] = useState(false);
+  const containerRef = useRef(null);
+  const setShouldLoadRef = useRef(setShouldLoad);
+  setShouldLoadRef.current = setShouldLoad;
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setShouldLoadRef.current(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: '100px' }
+    );
+    if (containerRef.current) {
+      observer.observe(containerRef.current);
+    }
+    return () => observer.disconnect();
+  }, [src]);
+
+  return (
+    <div ref={containerRef} className="w-full h-full bg-gray-950">
+      {shouldLoad ? (
+        <video 
+          src={src} 
+          preload="metadata"
+          muted
+          playsInline
+          className={className}
+        />
+      ) : (
+        <div className="w-full h-full bg-gray-900 animate-pulse" />
+      )}
+    </div>
+  );
+};
+
 const VideoGrid = ({ videos, onVideoClick }) => {
   if (!videos || !videos.length) {
     return (
@@ -42,14 +81,12 @@ const VideoGrid = ({ videos, onVideoClick }) => {
               <img 
                 src={thumbnailSrc} 
                 alt="reel-thumbnail"
+                loading="lazy"
                 className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" 
               />
             ) : (
-              <video 
+              <LazyVideo 
                 src={video.video?.url || video.url} 
-                preload="metadata"
-                muted
-                playsInline
                 className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 pointer-events-none"
               />
             )}
@@ -94,6 +131,7 @@ const ProfilePage = () => {
   const [showOptions, setShowOptions] = useState(false);
   const [showReport, setShowReport] = useState(false);
   const [isBlocked, setIsBlocked] = useState(false);
+  const [isBlockedByThem, setIsBlockedByThem] = useState(false);
 
   const [overlayVideos, setOverlayVideos] = useState([]);
   const [activeOverlayIndex, setActiveOverlayIndex] = useState(null);
@@ -232,7 +270,12 @@ const ProfilePage = () => {
   const fetchProfileData = async () => {
     setLoading(true);
     try {
-      const profileRes = await userService.getUserByUsername(displayUsername);
+      // Fetch profile data and reels in parallel for optimal load speed
+      const [profileRes, reelsRes] = await Promise.all([
+        userService.getUserByUsername(displayUsername),
+        userService.getUserReels(displayUsername)
+      ]);
+
       if (profileRes.success) {
         setProfile(profileRes.user);
         setIsFollowing(profileRes.user.isFollowing);
@@ -240,16 +283,32 @@ const ProfilePage = () => {
         setIsFollower(profileRes.user.isFollower);
         setIncomingFollowStatus(profileRes.user.incomingFollowStatus);
         setIsBlocked(currentUser?.blockedUsers?.includes(profileRes.user._id));
+        setIsBlockedByThem(profileRes.user.isBlockedByThem || false);
+
+        if (!profileRes.user.isBlockedByThem && reelsRes.success) {
+          setUserVideos(reelsRes.reels);
+        } else {
+          setUserVideos([]);
+        }
       }
 
-      const reelsRes = await userService.getUserReels(displayUsername);
-      if (reelsRes.success) {
-        setUserVideos(reelsRes.reels);
-      }
-      
       if (isOwnProfile) {
-        fetchEngagementData();
-        fetchPendingRequestsCount();
+        // Fetch engagement data and requests count in parallel as well
+        const [pendingRes, likedRes, savedRes] = await Promise.all([
+          followService.getFollowRequestsCount(),
+          userService.getLikedReels(),
+          userService.getSavedReels()
+        ]);
+
+        if (pendingRes.success) {
+          setPendingRequestsCount(pendingRes.count);
+        }
+        if (likedRes.success) {
+          setLikedVideos(likedRes.reels);
+        }
+        if (savedRes.success) {
+          setSavedVideos(savedRes.reels);
+        }
       }
     } catch (error) {
       if (!error?.isPrivate) {
@@ -275,18 +334,24 @@ const ProfilePage = () => {
     if (!isOwnProfile) return;
     try {
       if (activeTab === 'likes') {
+        if (likedVideos.length > 0) return; // Skip if already loaded
         const likedRes = await userService.getLikedReels();
         if (likedRes.success) setLikedVideos(likedRes.reels);
       } else if (activeTab === 'saves') {
+        if (savedVideos.length > 0) return; // Skip if already loaded
         const savedRes = await userService.getSavedReels();
         if (savedRes.success) setSavedVideos(savedRes.reels);
       } else {
-        const [likedRes, savedRes] = await Promise.all([
-          userService.getLikedReels(),
-          userService.getSavedReels()
-        ]);
-        if (likedRes.success) setLikedVideos(likedRes.reels);
-        if (savedRes.success) setSavedVideos(savedRes.reels);
+        const promises = [];
+        if (likedVideos.length === 0) promises.push(userService.getLikedReels());
+        else promises.push(Promise.resolve(null));
+
+        if (savedVideos.length === 0) promises.push(userService.getSavedReels());
+        else promises.push(Promise.resolve(null));
+
+        const [likedRes, savedRes] = await Promise.all(promises);
+        if (likedRes && likedRes.success) setLikedVideos(likedRes.reels);
+        if (savedRes && savedRes.success) setSavedVideos(savedRes.reels);
       }
     } catch (error) {
       console.error('Failed to fetch engagement data:', error);
@@ -526,12 +591,14 @@ const ProfilePage = () => {
               <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
             </svg>
           </button>
-          <button 
-            onClick={() => isOwnProfile ? navigate('/settings') : setShowOptions(true)}
-            className="text-black active:opacity-60 transition-opacity"
-          >
-            {isOwnProfile ? <BiMenu size={28} /> : <BiDotsVerticalRounded size={28} />}
-          </button>
+          {!isOwnProfile && isBlockedByThem ? null : (
+            <button 
+              onClick={() => isOwnProfile ? navigate('/settings') : setShowOptions(true)}
+              className="text-black active:opacity-60 transition-opacity"
+            >
+              {isOwnProfile ? <BiMenu size={28} /> : <BiDotsVerticalRounded size={28} />}
+            </button>
+          )}
         </div>
       </div>
 
@@ -579,7 +646,14 @@ const ProfilePage = () => {
           {/* Action Buttons */}
           {!isOwnProfile && (
             <div className="flex items-center gap-2 w-full max-w-[340px] mb-6">
-              {isBlocked ? (
+              {isBlockedByThem ? (
+                <button
+                  disabled
+                  className="flex-1 h-[44px] bg-gray-100 text-gray-400 text-[15px] font-bold rounded-lg cursor-not-allowed"
+                >
+                  Profile Unavailable
+                </button>
+              ) : isBlocked ? (
                 <button
                   onClick={handleBlockToggle}
                   className="flex-1 h-[44px] bg-[#FE2C55] text-white text-[15px] font-bold rounded-lg active:scale-95 transition-all shadow-lg shadow-pink-100"
@@ -707,7 +781,15 @@ const ProfilePage = () => {
 
         {/* Video Grid Section */}
         <div className="grid grid-cols-3 gap-[1px] bg-gray-50">
-          {isBlocked ? (
+          {isBlockedByThem ? (
+            <div className="col-span-3 flex flex-col items-center justify-center py-24 gap-2 text-gray-400">
+              <div className="w-16 h-16 rounded-full border-2 border-gray-100 flex items-center justify-center mb-2">
+                <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+              </div>
+              <p className="text-[16px] font-bold text-black mb-0.5">This profile is unavailable</p>
+              <p className="text-[13px] text-gray-400">You can no longer view their content.</p>
+            </div>
+          ) : isBlocked ? (
             <div className="col-span-3 flex flex-col items-center justify-center py-24 gap-2 text-gray-400">
               <div className="w-16 h-16 rounded-full border-2 border-gray-100 flex items-center justify-center mb-2">
                 <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="6" y1="6" x2="18" y2="18"/></svg>

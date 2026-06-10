@@ -326,6 +326,30 @@ const userService = {
       throw error;
     }
   },
+
+  /**
+   * Block/Unblock commenter
+   */
+  toggleBlockCommenter: async (userId) => {
+    try {
+      const response = await api.post(`/users/${userId}/block-commenter`);
+      return response;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  /**
+   * Get blocked commenters list
+   */
+  getBlockedCommenters: async () => {
+    try {
+      const response = await api.get('/users/me/blocked-commenters');
+      return response;
+    } catch (error) {
+      throw error;
+    }
+  },
 };
 
 export default userService;

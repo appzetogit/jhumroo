@@ -1,4 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
+import duetIcon from '../../../../assets/duet_icon.png';
 import { 
   BiBookmark, 
   BiBookmarkPlus, 
@@ -12,13 +14,77 @@ import {
   BiFullscreen, 
   BiRepeat,
   BiMinusCircle,
-  BiPlusCircle
+  BiPlusCircle,
+  BiArrowFromBottom
 } from 'react-icons/bi';
 import { useTheme } from '../../../../context/ThemeContext';
 import { useAuth } from '../../../../context/AuthContext';
 import reelService from '../../../../services/reelService';
 import userService from '../../../../services/userService';
 import api from '../../../../services/api';
+
+const BubbleOptionItem = ({ icon: Icon, label, onClick, color, isActive, isDarkMode }) => (
+  <button 
+    type="button"
+    onClick={(e) => {
+      e.stopPropagation();
+      onClick();
+    }}
+    className="flex flex-col items-center gap-2 min-w-[70px] active:scale-90 transition-all"
+  >
+    <div className={`w-14 h-14 rounded-full flex items-center justify-center text-2xl transition-all ${
+      isActive 
+        ? 'bg-tiktok-red text-white' 
+        : isDarkMode ? 'bg-white/10 text-white' : 'bg-black/5 text-black'
+    } ${color ? `text-${color}` : ''}`}>
+      {typeof Icon === 'string' ? (
+        <img 
+          src={Icon} 
+          alt={label} 
+          className={`w-7 h-7 object-contain ${
+            isActive 
+              ? 'brightness-0 invert' 
+              : isDarkMode ? 'brightness-0 invert' : 'brightness-0'
+          }`} 
+        />
+      ) : (
+        <Icon />
+      )}
+    </div>
+    <span className={`text-[11px] font-bold ${isDarkMode ? 'text-white/80' : 'text-black/70'}`}>{label}</span>
+  </button>
+);
+
+const OptionItem = ({ icon: Icon, label, onClick, color, subLabel, isActive, isDarkMode }) => (
+  <button 
+    type="button"
+    onClick={(e) => {
+      e.stopPropagation();
+      onClick();
+    }}
+    className={`w-full flex items-center p-4 gap-4 active:bg-white/5 transition-all ${
+      isDarkMode ? 'border-b border-white/5' : 'border-b border-black/5'
+    }`}
+  >
+    <div className={`text-2xl flex items-center justify-center ${
+      isActive 
+        ? 'text-tiktok-red' 
+        : isDarkMode ? 'text-white/90' : 'text-black/80'
+    } ${color ? `text-${color}` : ''}`}>
+      <Icon />
+    </div>
+    <div className="flex flex-col items-start flex-1">
+      <span className={`text-[15px] font-semibold ${isDarkMode ? 'text-white/90' : 'text-black/90'}`}>{label}</span>
+      {subLabel && <span className={`text-[12px] opacity-40 font-medium ${isDarkMode ? 'text-white/60' : 'text-black/60'}`}>{subLabel}</span>}
+    </div>
+  </button>
+);
+
+const ActionRow = ({ children, horizontal }) => (
+  <div className={horizontal ? "flex justify-between px-4 py-4" : "flex flex-col"}>
+    {children}
+  </div>
+);
 
 const MoreOptionsSheet = ({ 
   isOpen, 
@@ -36,7 +102,8 @@ const MoreOptionsSheet = ({
 }) => {
   const { isDarkMode } = useTheme();
   const { user } = useAuth();
-  const [startY, setStartY] = useState(null);
+  const navigate = useNavigate();
+  const startYRef = useRef(null);
   const [currentY, setCurrentY] = useState(0);
   const [isClosing, setIsClosing] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
@@ -70,12 +137,12 @@ const MoreOptionsSheet = ({
   };
 
   const handleTouchStart = (e) => {
-    setStartY(e.touches[0].clientY);
+    startYRef.current = e.touches[0].clientY;
   };
 
   const handleTouchMove = (e) => {
-    if (startY === null) return;
-    const deltaY = e.touches[0].clientY - startY;
+    if (startYRef.current === null) return;
+    const deltaY = e.touches[0].clientY - startYRef.current;
     if (deltaY > 0) {
       setCurrentY(deltaY);
     }
@@ -87,7 +154,7 @@ const MoreOptionsSheet = ({
     } else {
       setCurrentY(0);
     }
-    setStartY(null);
+    startYRef.current = null;
   };
 
   const handleClose = () => {
@@ -103,55 +170,6 @@ const MoreOptionsSheet = ({
     onShareClick?.();
     handleClose();
   };
-
-  const BubbleOptionItem = ({ icon: Icon, label, onClick, color, isActive }) => (
-    <button 
-      onClick={(e) => {
-        e.stopPropagation();
-        onClick();
-      }}
-      className="flex flex-col items-center gap-2 min-w-[70px] active:scale-90 transition-all"
-    >
-      <div className={`w-14 h-14 rounded-full flex items-center justify-center text-2xl transition-all ${
-        isActive 
-          ? 'bg-tiktok-red text-white' 
-          : isDarkMode ? 'bg-white/10 text-white' : 'bg-black/5 text-black'
-      } ${color ? `text-${color}` : ''}`}>
-        <Icon />
-      </div>
-      <span className={`text-[11px] font-bold ${isDarkMode ? 'text-white/80' : 'text-black/70'}`}>{label}</span>
-    </button>
-  );
-
-  const OptionItem = ({ icon: Icon, label, onClick, color, subLabel, isActive }) => (
-    <button 
-      onClick={(e) => {
-        e.stopPropagation();
-        onClick();
-      }}
-      className={`w-full flex items-center p-4 gap-4 active:bg-white/5 transition-all ${
-        isDarkMode ? 'border-b border-white/5' : 'border-b border-black/5'
-      }`}
-    >
-      <div className={`text-2xl flex items-center justify-center ${
-        isActive 
-          ? 'text-tiktok-red' 
-          : isDarkMode ? 'text-white/90' : 'text-black/80'
-      } ${color ? `text-${color}` : ''}`}>
-        <Icon />
-      </div>
-      <div className="flex flex-col items-start flex-1">
-        <span className={`text-[15px] font-semibold ${isDarkMode ? 'text-white/90' : 'text-black/90'}`}>{label}</span>
-        {subLabel && <span className={`text-[12px] opacity-40 font-medium ${isDarkMode ? 'text-white/60' : 'text-black/60'}`}>{subLabel}</span>}
-      </div>
-    </button>
-  );
-
-  const ActionRow = ({ children, horizontal }) => (
-    <div className={horizontal ? "flex justify-between px-4 py-4" : "flex flex-col"}>
-      {children}
-    </div>
-  );
 
   return (
     <div 
@@ -187,6 +205,7 @@ const MoreOptionsSheet = ({
               icon={isSaved ? BiBookmark : BiBookmarkPlus} 
               label={isSaved ? "Saved" : "Save Reel"} 
               isActive={isSaved}
+              isDarkMode={isDarkMode}
               onClick={() => {
                 onSaveClick();
               }}
@@ -194,18 +213,32 @@ const MoreOptionsSheet = ({
             <BubbleOptionItem 
               icon={BiShareAlt} 
               label="Share" 
+              isDarkMode={isDarkMode}
               onClick={handleShare}
             />
+            {(!reelData?.user?.isPrivate && reelData?.allowDuet !== false) && (
+              <BubbleOptionItem 
+                icon={duetIcon} 
+                label="Duet" 
+                isDarkMode={isDarkMode}
+                onClick={() => {
+                  handleClose();
+                  navigate(`/create?duet=${reelData._id}`, { state: { duetVideo: reelData } });
+                }}
+              />
+            )}
             {((reelData?.user?.downloadPrivacy !== 'Off') && (reelData?.allowDownload !== false)) && (
               <BubbleOptionItem 
                 icon={isDownloading ? () => <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin" /> : BiDownload} 
                 label={isDownloading ? "Downloading..." : "Download"} 
+                isDarkMode={isDarkMode}
                 onClick={handleDownload}
               />
             )}
             <BubbleOptionItem 
               icon={BiFullscreen} 
               label="Fullscreen" 
+              isDarkMode={isDarkMode}
               onClick={() => {
                 onFullscreenClick();
               }}
@@ -220,6 +253,7 @@ const MoreOptionsSheet = ({
               icon={BiRepeat} 
               label="Remix" 
               subLabel="Create Side-by-side"
+              isDarkMode={isDarkMode}
               onClick={() => {
                 alert("Remix feature coming soon!");
                 handleClose();
@@ -229,6 +263,7 @@ const MoreOptionsSheet = ({
               icon={BiPlusCircle} 
               label="Interested" 
               color="success"
+              isDarkMode={isDarkMode}
               onClick={() => {
                 onInterestedClick();
                 handleClose();
@@ -238,6 +273,7 @@ const MoreOptionsSheet = ({
               icon={BiMinusCircle} 
               label="Not interested" 
               color="warning"
+              isDarkMode={isDarkMode}
               onClick={() => {
                 onNotInterestedClick();
                 handleClose();
@@ -247,6 +283,7 @@ const MoreOptionsSheet = ({
               icon={BiFlag} 
               label="Report" 
               color="danger"
+              isDarkMode={isDarkMode}
               onClick={() => {
                 onReportClick();
                 // handleClose();
@@ -257,6 +294,7 @@ const MoreOptionsSheet = ({
                 <OptionItem 
                   icon={BiEditAlt} 
                   label="Edit Reel" 
+                  isDarkMode={isDarkMode}
                   onClick={() => {
                     onEditClick();
                     // handleClose();
@@ -266,6 +304,7 @@ const MoreOptionsSheet = ({
                   icon={BiTrash} 
                   label="Delete" 
                   color="danger"
+                  isDarkMode={isDarkMode}
                   onClick={() => {
                     setShowDeleteConfirm(true);
                   }}
@@ -297,6 +336,7 @@ const MoreOptionsSheet = ({
             
             <div className="mt-6 flex flex-col gap-2">
               <button
+                type="button"
                 onClick={() => {
                   onDeleteClick();
                   setShowDeleteConfirm(false);
@@ -307,6 +347,7 @@ const MoreOptionsSheet = ({
                 Delete Reel
               </button>
               <button
+                type="button"
                 onClick={() => setShowDeleteConfirm(false)}
                 className={`w-full py-3 rounded-full font-bold text-[14px] active:scale-95 transition-all ${
                   isDarkMode 

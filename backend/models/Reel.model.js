@@ -114,6 +114,10 @@ const reelSchema = new mongoose.Schema(
       type: Boolean,
       default: true
     },
+    allowDuet: {
+      type: Boolean,
+      default: true
+    },
     highQuality: {
       type: Boolean,
       default: true

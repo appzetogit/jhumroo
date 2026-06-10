@@ -28,17 +28,57 @@ export const getUserProfile = asyncHandler(async (req, res) => {
     });
   }
 
-  // Sync stats (End-to-end reliability)
-  // 1. Re-calculate actual reels count and total likes received on those reels
-  const activeReels = await Reel.find({ user: user._id, isActive: true, status: 'completed' });
-  const actualReelsCount = activeReels.length;
-  const actualLikesCount = activeReels.reduce((sum, r) => sum + (r.stats?.likesCount || 0), 0);
+  // Check if target user has blocked current user
+  let isBlockedByThem = false;
+  if (req.user && user.blockedUsers && user.blockedUsers.some(id => id.toString() === req.user._id.toString())) {
+    isBlockedByThem = true;
+  }
 
-  // 2. Re-calculate actual followers/following counts
-  const [actualFollowersCount, actualFollowingCount] = await Promise.all([
+  if (isBlockedByThem) {
+    return res.status(200).json({
+      success: true,
+      user: {
+        _id: user._id,
+        username: 'jhumroo_user',
+        fullName: 'Jhumroo User',
+        profilePicture: {
+          url: 'https://api.dicebear.com/7.x/avataaars/svg?seed=jhumroo_user'
+        },
+        bio: 'This profile is unavailable.',
+        isPrivate: true,
+        stats: {
+          reelsCount: 0,
+          likesCount: 0,
+          followersCount: 0,
+          followingCount: 0
+        },
+        isBlockedByThem: true,
+        isFollowing: false,
+        followStatus: null,
+        isFollower: false,
+        incomingFollowStatus: null
+      }
+    });
+  }
+
+  // Sync stats (End-to-end reliability)
+  // 1. Re-calculate actual stats in parallel on MongoDB server-side using counts/aggregations
+  const [
+    actualReelsCount,
+    likesAggregation,
+    actualFollowersCount,
+    actualFollowingCount
+  ] = await Promise.all([
+    Reel.countDocuments({ user: user._id, isActive: true, status: 'completed' }),
+    Reel.aggregate([
+      { $match: { user: user._id, isActive: true, status: 'completed' } },
+      { $group: { _id: null, totalLikes: { $sum: '$stats.likesCount' } } }
+    ]),
     Follow.countDocuments({ following: user._id, status: 'accepted' }),
     Follow.countDocuments({ follower: user._id, status: 'accepted' })
   ]);
+
+  const actualLikesCount = likesAggregation[0]?.totalLikes || 0;
 
   // 3. Update if out of sync
   const statsChanged = 
@@ -66,27 +106,22 @@ export const getUserProfile = asyncHandler(async (req, res) => {
     user.stats.followingCount = actualFollowingCount;
   }
 
-  // Check if current user is following this user
+  // Check follow relationships in parallel if logged in
   let isFollowing = false;
   let followStatus = null;
   let isFollower = false;
 
   if (req.user) {
-    const follow = await Follow.findOne({
-      follower: req.user._id,
-      following: user._id
-    });
+    const [follow, incomingFollow] = await Promise.all([
+      Follow.findOne({ follower: req.user._id, following: user._id }),
+      Follow.findOne({ follower: user._id, following: req.user._id })
+    ]);
+
     if (follow) {
       isFollowing = follow.status === 'accepted';
       followStatus = follow.status;
     }
 
-    // Check if the other user follows or has requested to follow the current user
-    const incomingFollow = await Follow.findOne({
-      follower: user._id,
-      following: req.user._id
-    });
-    
     if (incomingFollow) {
       isFollower = incomingFollow.status === 'accepted';
       user.incomingFollowStatus = incomingFollow.status;
@@ -233,17 +268,20 @@ export const getUserReels = asyncHandler(async (req, res) => {
     });
   }
 
+  // Load follow status once if logged in and looking at someone else's profile
+  let isFollowing = false;
+  let isFollower = false;
+  if (req.user && req.user._id.toString() !== user._id.toString()) {
+    const [follow, incoming] = await Promise.all([
+      Follow.findOne({ follower: req.user._id, following: user._id, status: 'accepted' }),
+      Follow.findOne({ follower: user._id, following: req.user._id, status: 'accepted' })
+    ]);
+    isFollowing = !!follow;
+    isFollower = !!incoming;
+  }
+
   // Check privacy
   if (user.isPrivate && (!req.user || req.user._id.toString() !== user._id.toString())) {
-    let isFollowing = false;
-    if (req.user) {
-      const follow = await Follow.findOne({ 
-        follower: req.user._id, 
-        following: user._id,
-        status: 'accepted'
-      });
-      isFollowing = !!follow;
-    }
     if (!isFollowing) {
       return res.status(403).json({
         success: false,
@@ -257,18 +295,6 @@ export const getUserReels = asyncHandler(async (req, res) => {
 
   // Filter based on audience settings for other users
   if (!req.user || req.user._id.toString() !== user._id.toString()) {
-    let isFollowing = false;
-    let isFollower = false;
-
-    if (req.user) {
-      const [follow, incoming] = await Promise.all([
-        Follow.findOne({ follower: req.user._id, following: user._id, status: 'accepted' }),
-        Follow.findOne({ follower: user._id, following: req.user._id, status: 'accepted' })
-      ]);
-      isFollowing = !!follow;
-      isFollower = !!incoming;
-    }
-
     const allowedAudiences = ['everyone'];
     if (isFollowing) {
       allowedAudiences.push('followers');
@@ -771,6 +797,69 @@ export const deleteAccount = asyncHandler(async (req, res) => {
   res.status(200).json({
     success: true,
     message: 'Your account and all associated data have been permanently deleted.'
+  });
+});
+
+/**
+ * @desc    Block/Unblock a user from commenting
+ * @route   POST /api/users/:id/block-commenter
+ * @access  Private
+ */
+export const toggleBlockCommenter = asyncHandler(async (req, res) => {
+  const { id: targetUserId } = req.params;
+  const user = req.user;
+
+  if (targetUserId === user._id.toString()) {
+    return res.status(400).json({
+      success: false,
+      message: 'You cannot block yourself from commenting'
+    });
+  }
+
+  // Ensure blockedCommenters array exists
+  if (!user.blockedCommenters) {
+    user.blockedCommenters = [];
+  }
+
+  const isBlocked = user.blockedCommenters.includes(targetUserId);
+
+  if (isBlocked) {
+    // Unblock commenter
+    user.blockedCommenters = user.blockedCommenters.filter(id => id.toString() !== targetUserId);
+    await user.save();
+    
+    res.status(200).json({
+      success: true,
+      message: 'User unblocked from commenting successfully',
+      isBlocked: false,
+      user
+    });
+  } else {
+    // Block commenter
+    user.blockedCommenters.push(targetUserId);
+    await user.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'User blocked from commenting successfully',
+      isBlocked: true,
+      user
+    });
+  }
+});
+
+/**
+ * @desc    Get all comment-blocked users
+ * @route   GET /api/users/me/blocked-commenters
+ * @access  Private
+ */
+export const getBlockedCommenters = asyncHandler(async (req, res) => {
+  const user = await User.findById(req.user._id)
+    .populate('blockedCommenters', 'username fullName profilePicture');
+
+  res.status(200).json({
+    success: true,
+    users: user.blockedCommenters || []
   });
 });
 

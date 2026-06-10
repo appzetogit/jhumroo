@@ -16,6 +16,7 @@ import PrivacyMentionsTagsPage from './modules/user/pages/Settings/PrivacyMentio
 import PrivacyDirectMessagesPage from './modules/user/pages/Settings/PrivacyDirectMessagesPage';
 import PrivacyDownloadsPage from './modules/user/pages/Settings/PrivacyDownloadsPage';
 import BlockedAccountsPage from './modules/user/pages/Settings/BlockedAccountsPage';
+import CommentBlocksPage from './modules/user/pages/Settings/CommentBlocksPage';
 import SecurityPage from './modules/user/pages/Settings/SecurityPage';
 import SecurityAlertsPage from './modules/user/pages/Settings/SecurityAlertsPage';
 import YourDevicesPage from './modules/user/pages/Settings/YourDevicesPage';
@@ -62,7 +63,7 @@ import adminAuthService from './services/adminAuthService';
 import LenisProvider from './components/LenisProvider';
 
 const MainLayout = ({ onLogout }) => {
-  const location = useLocation();
+  const { pathname } = useLocation();
   const [showNav, setShowNav] = useState(true);
 
   // Hide nav on certain pages if needed, and handle theme
@@ -73,27 +74,27 @@ const MainLayout = ({ onLogout }) => {
     }
 
     const isChatSubPage =
-      location.pathname === '/inbox/new-message' ||
-      location.pathname.startsWith('/inbox/chat/');
+      pathname === '/inbox/new-message' ||
+      pathname.startsWith('/inbox/chat/');
     const isSettingsPage =
-      location.pathname === '/settings' ||
-      location.pathname.startsWith('/settings/');
-    const isSearchDetailPage = location.pathname.startsWith('/search/hashtag/');
+      pathname === '/settings' ||
+      pathname.startsWith('/settings/');
+    const isSearchDetailPage = pathname.startsWith('/search/hashtag/');
 
     // Hide bottom nav on sub-pages (Sound, User Profile pages, Inbox sub-pages)
     const isSubPage = 
-      location.pathname.includes('/sound/') || 
-      location.pathname === '/create' ||
-      location.pathname.startsWith('/user/') || 
-      location.pathname === '/profile/premium' ||
+      pathname.includes('/sound/') || 
+      pathname === '/create' ||
+      pathname.startsWith('/user/') || 
+      pathname === '/profile/premium' ||
       isSettingsPage ||
       isSearchDetailPage ||
       isChatSubPage ||
-      location.pathname === '/inbox/new-followers' || 
-      location.pathname === '/inbox/activity';
+      pathname === '/inbox/new-followers' || 
+      pathname === '/inbox/activity';
     
     setShowNav(!isSubPage);
-  }, [location]);
+  }, [pathname]);
 
   return (
     <>
@@ -121,6 +122,7 @@ const MainLayout = ({ onLogout }) => {
         <Route path="/settings/privacy/direct-messages" element={<PrivacyDirectMessagesPage />} />
         <Route path="/settings/privacy/downloads" element={<PrivacyDownloadsPage />} />
         <Route path="/settings/privacy/blocked-accounts" element={<BlockedAccountsPage />} />
+        <Route path="/settings/privacy/comment-blocks" element={<CommentBlocksPage />} />
         <Route path="/settings/security" element={<SecurityPage />} />
         <Route path="/settings/security/alerts" element={<SecurityAlertsPage />} />
         <Route path="/settings/security/devices" element={<YourDevicesPage />} />
@@ -146,7 +148,7 @@ const MainLayout = ({ onLogout }) => {
         <Route path="/user/requests" element={<FollowRequestsPage />} />
         <Route path="/user/requests/pending" element={<PendingRequestsPage />} />
       </Routes>
-      {showNav && <BottomNavBar isDarkTheme={location.pathname !== '/'} />}
+      {showNav && <BottomNavBar isDarkTheme={pathname !== '/'} />}
     </>
   );
 };
@@ -159,18 +161,18 @@ const AppContent = () => {
     useLiveLocation();
     const { theme } = useTheme();
     const navigate = useNavigate();
-    const location = useLocation();
+    const { pathname } = useLocation();
     const { user, isAuthenticated, isLoading, logout } = useAuth();
     const [appState, setAppState] = useState('launch'); // launch, auth, onboarding, main
 
     useEffect(() => {
-        const isAdminRoute = location.pathname.startsWith('/admin');
+        const isAdminRoute = pathname.startsWith('/admin');
         document.body.classList.toggle('app-admin-route', isAdminRoute);
 
         return () => {
           document.body.classList.remove('app-admin-route');
         };
-    }, [location.pathname]);
+    }, [pathname]);
 
     // Sync FCM Token and set up foreground listener when authenticated
     // We use a ref to ensure only one listener is active at a time
@@ -221,7 +223,7 @@ const AppContent = () => {
             if (isLoading) return;
 
             const timer = setTimeout(() => {
-                const isAdminRoute = location.pathname.startsWith('/admin');
+                const isAdminRoute = pathname.startsWith('/admin');
                 
                 if (isAdminRoute) {
                     setAppState('main');
@@ -234,14 +236,14 @@ const AppContent = () => {
                 } else {
                     setAppState('auth');
                     // Redirect legacy /welcome to / if they land on it
-                    if (location.pathname === '/welcome') {
+                    if (pathname === '/welcome') {
                       navigate('/', { replace: true });
                     }
                 }
             }, 400); // 400ms minimum splash delay for smooth transition
             return () => clearTimeout(timer);
         }
-    }, [appState, navigate, location.pathname, isAuthenticated, isLoading, user]);
+    }, [appState, navigate, pathname, isAuthenticated, isLoading, user]);
 
     const handleAuthComplete = (needsOnboarding = false) => {
         if (needsOnboarding) {
@@ -265,7 +267,7 @@ const AppContent = () => {
     };
 
     // Global suspended check for regular users
-    const isSuspended = isAuthenticated && user?.isBanned && !location.pathname.startsWith('/admin');
+    const isSuspended = isAuthenticated && user?.isBanned && !pathname.startsWith('/admin');
 
     return (
         <div className={`theme-app-shell relative w-full max-w-full h-full min-h-full mx-auto flex flex-col overflow-hidden shadow-2xl ${theme === 'light' ? 'theme-is-light' : 'theme-is-dark'}`}>

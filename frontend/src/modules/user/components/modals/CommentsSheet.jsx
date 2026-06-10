@@ -1,25 +1,42 @@
 import React, { useState } from 'react';
-import { BiX, BiSend, BiHeart, BiSolidHeart } from 'react-icons/bi';
+import { 
+  BiX, 
+  BiSend, 
+  BiHeart, 
+  BiSolidHeart,
+  BiReply,
+  BiCopy,
+  BiPin,
+  BiBlock,
+  BiTrash
+} from 'react-icons/bi';
 import { useTheme } from '../../../../context/ThemeContext';
 import { useAppContent } from '../../../../hooks/useAppContent';
 import { useAuth } from '../../../../context/AuthContext';
 import reelService from '../../../../services/reelService';
 import userService from '../../../../services/userService';
 
-const CommentsSheet = ({ isOpen, onClose, commentCount = 0, reelId, onCommentAdded }) => {
+const CommentsSheet = ({ isOpen, onClose, commentCount = 0, reelId, reelOwnerId, onCommentAdded }) => {
   const { isDarkMode } = useTheme();
   const { config } = useAppContent();
-  const { user: currentUser } = useAuth();
+  const { user: currentUser, updateUser } = useAuth();
   const quickEmojis = config?.comments?.quickEmojis || [];
   const [newComment, setNewComment] = useState('');
   const [keyboardOffset, setKeyboardOffset] = useState(0);
+  const setKeyboardOffsetRef = React.useRef(setKeyboardOffset);
+  setKeyboardOffsetRef.current = setKeyboardOffset;
   const [commentsList, setCommentsList] = useState([]);
   const [commentsDisabled, setCommentsDisabled] = useState(false);
+  const [commentsBlocked, setCommentsBlocked] = useState(false);
+  const [selectedComment, setSelectedComment] = useState(null);
+  const [isMenuUpdating, setIsMenuUpdating] = useState(false);
   const [loading, setLoading] = useState(false);
   const [replyTo, setReplyTo] = useState(null); // { id, username }
   const [mentionSuggestions, setMentionSuggestions] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [mentionSearchLoading, setMentionSearchLoading] = useState(false);
+
+  const isOwnReel = currentUser && reelOwnerId && (String(currentUser._id || currentUser.id) === String(reelOwnerId));
 
   // Mention Suggestions logic
   React.useEffect(() => {
@@ -62,6 +79,7 @@ const CommentsSheet = ({ isOpen, onClose, commentCount = 0, reelId, onCommentAdd
       if (response.success) {
         setCommentsList(response.comments);
         setCommentsDisabled(!!response.commentsDisabled);
+        setCommentsBlocked(!!response.commentsBlocked);
         if (typeof onCommentAdded === 'function') {
           onCommentAdded(response.comments.length);
         }
@@ -71,6 +89,96 @@ const CommentsSheet = ({ isOpen, onClose, commentCount = 0, reelId, onCommentAdd
     } finally {
       setLoading(false);
     }
+  };
+
+  const handlePinToggle = async (comment) => {
+    setIsMenuUpdating(true);
+    try {
+      const response = await reelService.togglePinComment(comment._id || comment.id);
+      if (response.success) {
+        fetchComments();
+        setSelectedComment(null);
+      }
+    } catch (err) {
+      console.error("Failed to toggle pin comment:", err);
+      alert(err.response?.data?.message || err.message || "Failed to toggle pin comment");
+    } finally {
+      setIsMenuUpdating(false);
+    }
+  };
+
+  const handleBlockToggle = async (comment) => {
+    const targetUserId = comment.user?._id || comment.user;
+    if (!targetUserId) return;
+    setIsMenuUpdating(true);
+    try {
+      const response = await userService.toggleBlockCommenter(targetUserId);
+      if (response.success) {
+        if (updateUser && response.user) {
+          updateUser(response.user);
+        }
+        alert(response.message);
+        setSelectedComment(null);
+      }
+    } catch (err) {
+      console.error("Failed to toggle block commenter:", err);
+      alert(err.response?.data?.message || err.message || "Failed to toggle block commenter");
+    } finally {
+      setIsMenuUpdating(false);
+    }
+  };
+
+  const handleDeleteComment = async (comment) => {
+    setIsMenuUpdating(true);
+    try {
+      const response = await reelService.deleteComment(comment._id || comment.id);
+      if (response.success) {
+        fetchComments();
+        setSelectedComment(null);
+      }
+    } catch (err) {
+      console.error("Failed to delete comment:", err);
+      alert(err.response?.data?.message || err.message || "Failed to delete comment");
+    } finally {
+      setIsMenuUpdating(false);
+    }
+  };
+
+  const handleCommentClick = (e, comment) => {
+    e.stopPropagation();
+    
+    // Get click coordinates
+    const clickX = e.clientX;
+    const clickY = e.clientY;
+    
+    // Menu dimensions estimate
+    const menuWidth = 180;
+    const menuHeight = 220; // estimate with all options
+    
+    let top = clickY;
+    let left = clickX;
+    
+    // Constrain X (horizontal)
+    if (left + menuWidth > window.innerWidth) {
+      left = window.innerWidth - menuWidth - 16;
+    }
+    if (left < 16) {
+      left = 16;
+    }
+    
+    // Constrain Y (vertical)
+    if (top + menuHeight > window.innerHeight) {
+      // Show above the click point
+      top = clickY - menuHeight;
+    }
+    if (top < 16) {
+      top = 16;
+    }
+    
+    setSelectedComment({
+      ...comment,
+      menuPos: { top, left }
+    });
   };
 
   React.useEffect(() => {
@@ -118,7 +226,7 @@ const CommentsSheet = ({ isOpen, onClose, commentCount = 0, reelId, onCommentAdd
   React.useEffect(() => {
     if (!isOpen) {
       document.body.style.overflow = '';
-      setKeyboardOffset(0);
+      setKeyboardOffsetRef.current(0);
       return;
     }
 
@@ -149,12 +257,12 @@ const CommentsSheet = ({ isOpen, onClose, commentCount = 0, reelId, onCommentAdd
 
     const syncKeyboardOffset = () => {
       if (!viewport) {
-        setKeyboardOffset(0);
+        setKeyboardOffsetRef.current(0);
         return;
       }
 
       const nextOffset = Math.max(0, lockedHeight - viewport.height - viewport.offsetTop);
-      setKeyboardOffset(nextOffset);
+      setKeyboardOffsetRef.current(nextOffset);
     };
 
     syncKeyboardOffset();
@@ -175,7 +283,7 @@ const CommentsSheet = ({ isOpen, onClose, commentCount = 0, reelId, onCommentAdd
         appShell.style.height = previousAppShellHeight;
       }
 
-      setKeyboardOffset(0);
+      setKeyboardOffsetRef.current(0);
     };
   }, [isOpen]);
 
@@ -263,8 +371,9 @@ const CommentsSheet = ({ isOpen, onClose, commentCount = 0, reelId, onCommentAdd
   if (!isOpen) return null;
 
   return (
-    <div
-      className={`absolute inset-0 z-[2000] flex flex-col justify-end touch-none comments-sheet-backdrop ${
+    <>
+      <div
+        className={`absolute inset-0 z-[2000] flex flex-col justify-end touch-none comments-sheet-backdrop ${
         isDarkMode ? 'bg-black/50' : 'bg-black/30 backdrop-blur-[2px]'
       }`}
       data-modal-open="true"
@@ -305,7 +414,11 @@ const CommentsSheet = ({ isOpen, onClose, commentCount = 0, reelId, onCommentAdd
                <div className="flex justify-center py-10 opacity-50 text-sm">No comments yet. Be the first!</div>
             ) : (
                commentsList.map(comment => (
-                  <div key={comment._id || comment.id} className="animate-fade-in">
+                  <div 
+                    key={comment._id || comment.id} 
+                    className="animate-fade-in p-1 rounded-xl transition-all cursor-pointer hover:bg-white/5 dark:hover:bg-white/5"
+                    onClick={(e) => handleCommentClick(e, comment)}
+                  >
                     <div className="flex gap-3">
                         <div className="w-8 h-8 rounded-full overflow-hidden shrink-0 border border-black/5">
                             <img 
@@ -318,12 +431,18 @@ const CommentsSheet = ({ isOpen, onClose, commentCount = 0, reelId, onCommentAdd
                             <div className="flex items-center gap-2 mb-1">
                               <span className={`text-xs font-bold ${isDarkMode ? 'text-white/50' : 'text-black/45'}`}>@{comment.user?.username || comment.user}</span>
                               <span className={`text-[10px] font-medium ${isDarkMode ? 'text-white/30' : 'text-black/30'}`}>{formatRelativeTime(comment.createdAt)}</span>
+                              {comment.isPinned && (
+                                <span className="flex items-center gap-0.5 text-[9px] font-bold text-tiktok-red bg-[#FE2C55]/10 px-1.5 py-0.5 rounded-full select-none">
+                                  📌 Pinned
+                                </span>
+                              )}
                             </div>
                             <p className={`text-sm leading-relaxed mb-1 ${isDarkMode ? 'text-white/90' : 'text-black/90'}`}>{comment.text || comment.content}</p>
                             <div className={`flex gap-4 text-xs font-semibold uppercase ${isDarkMode ? 'text-white/40' : 'text-black/40'}`}>
                                 <span 
                                   className="cursor-pointer hover:opacity-70"
-                                  onClick={() => {
+                                  onClick={(e) => {
+                                    e.stopPropagation();
                                     setReplyTo({ id: comment._id || comment.id, username: comment.user?.username || comment.username || comment.user });
                                     setNewComment(`@${comment.user?.username || comment.username || comment.user} `);
                                   }}
@@ -331,13 +450,17 @@ const CommentsSheet = ({ isOpen, onClose, commentCount = 0, reelId, onCommentAdd
                                   Reply
                                 </span>
                             </div>
-
+ 
                             {/* Show replies if any */}
                             {comment.repliesCount > 0 && (
                                <div className="mt-3 ml-2 space-y-4 pl-4">
                                   {/* If we have loaded replies or preview replies, show them */}
                                   {(loadedReplies[comment._id || comment.id] || comment.replyPreview)?.map(reply => (
-                                      <div key={reply._id || reply.id} className="flex gap-2">
+                                      <div 
+                                        key={reply._id || reply.id} 
+                                        className="flex gap-2 p-1 rounded-lg transition-all cursor-pointer hover:bg-white/5 dark:hover:bg-white/5"
+                                        onClick={(e) => handleCommentClick(e, reply)}
+                                      >
                                           <div className="w-6 h-6 rounded-full overflow-hidden shrink-0 border border-black/5">
                                               <img 
                                                 src={reply.user?.profilePicture?.url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${reply.user?.username || reply.user}`} 
@@ -354,7 +477,8 @@ const CommentsSheet = ({ isOpen, onClose, commentCount = 0, reelId, onCommentAdd
                                               <div className={`flex gap-4 text-[10px] font-semibold uppercase ${isDarkMode ? 'text-white/40' : 'text-black/40'}`}>
                                                   <span 
                                                     className="cursor-pointer hover:opacity-70"
-                                                    onClick={() => {
+                                                    onClick={(e) => {
+                                                      e.stopPropagation();
                                                       setReplyTo({ id: comment._id || comment.id, username: reply.user?.username || reply.user });
                                                       setNewComment(`@${reply.user?.username || reply.user} `);
                                                     }}
@@ -381,8 +505,20 @@ const CommentsSheet = ({ isOpen, onClose, commentCount = 0, reelId, onCommentAdd
                ))
             )}
          </div>
-
-        {!commentsDisabled ? (
+ 
+        {commentsDisabled ? (
+          <div className={`p-4 border-t text-center pb-[max(1rem,var(--safe-area-bottom))] ${
+            isDarkMode ? 'border-white/5 bg-[#161823]' : 'border-black/[0.08] bg-white'
+          }`}>
+             <p className={`text-xs opacity-50`}>The creator has turned off comments for this video.</p>
+          </div>
+        ) : commentsBlocked ? (
+          <div className={`p-6 border-t text-center pb-[max(1.5rem,var(--safe-area-bottom))] ${
+            isDarkMode ? 'border-white/5 bg-[#161823]' : 'border-black/[0.08] bg-white'
+          }`}>
+             <p className={`text-sm opacity-60 font-semibold text-[#FE2C55]`}>Comments are limited by the creator of this post.</p>
+          </div>
+        ) : (
           <div
             className={`p-4 border-t pb-[max(1rem,var(--safe-area-bottom))] ${
               isDarkMode ? 'border-white/5 bg-[#161823]' : 'border-black/[0.08] bg-white'
@@ -416,7 +552,7 @@ const CommentsSheet = ({ isOpen, onClose, commentCount = 0, reelId, onCommentAdd
                 ))}
               </div>
             )}
-
+ 
               <div className="mb-3 -mx-1 flex items-center gap-2 overflow-x-auto no-scrollbar">
                   {quickEmojis.map((emoji) => (
                     <button
@@ -464,15 +600,112 @@ const CommentsSheet = ({ isOpen, onClose, commentCount = 0, reelId, onCommentAdd
                   </div>
               </div>
           </div>
-        ) : (
-          <div className={`p-4 border-t text-center pb-[max(1rem,var(--safe-area-bottom))] ${
-            isDarkMode ? 'border-white/5 bg-[#161823]' : 'border-black/[0.08] bg-white'
-          }`}>
-             <p className={`text-xs opacity-50`}>The creator has turned off comments for this video.</p>
-          </div>
         )}
       </div>
     </div>
+
+      {/* Comment Options Popover Menu */}
+      {selectedComment && selectedComment.menuPos && (
+        <div 
+          className="fixed inset-0 z-[3000] bg-black/10 backdrop-blur-[1px] pointer-events-auto"
+          onClick={() => setSelectedComment(null)}
+        >
+          <div 
+            className={`fixed w-[180px] rounded-[18px] p-1.5 shadow-[0_10px_30px_rgba(0,0,0,0.18)] animate-scale-in border ${
+              isDarkMode 
+                ? 'bg-[#1e202f] border-white/10 text-white' 
+                : 'bg-white border-black/[0.06] text-black'
+            }`}
+            style={{ 
+              top: `${selectedComment.menuPos.top}px`, 
+              left: `${selectedComment.menuPos.left}px` 
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex flex-col gap-0.5">
+              {/* Reply Option */}
+              <button
+                type="button"
+                onClick={() => {
+                  setReplyTo({ 
+                    id: selectedComment._id || selectedComment.id, 
+                    username: selectedComment.user?.username || selectedComment.username || selectedComment.user 
+                  });
+                  setNewComment(`@${selectedComment.user?.username || selectedComment.username || selectedComment.user} `);
+                  setSelectedComment(null);
+                }}
+                className={`w-full py-2.5 px-3.5 rounded-xl font-semibold text-[13px] text-left active:scale-[0.98] transition-all flex items-center gap-3.5 ${
+                  isDarkMode ? 'hover:bg-white/5 text-white' : 'hover:bg-black/[0.04] text-black'
+                }`}
+              >
+                <BiReply size={18} className="opacity-70" />
+                Reply
+              </button>
+
+              {/* Copy Option */}
+              <button
+                type="button"
+                onClick={() => {
+                  navigator.clipboard.writeText(selectedComment.text || selectedComment.content || '');
+                  setSelectedComment(null);
+                }}
+                className={`w-full py-2.5 px-3.5 rounded-xl font-semibold text-[13px] text-left active:scale-[0.98] transition-all flex items-center gap-3.5 ${
+                  isDarkMode ? 'hover:bg-white/5 text-white' : 'hover:bg-black/[0.04] text-black'
+                }`}
+              >
+                <BiCopy size={18} className="opacity-70" />
+                Copy
+              </button>
+
+              {/* Pin Option */}
+              {isOwnReel && !selectedComment.parentComment && (
+                <button
+                  type="button"
+                  onClick={() => handlePinToggle(selectedComment)}
+                  disabled={isMenuUpdating}
+                  className={`w-full py-2.5 px-3.5 rounded-xl font-semibold text-[13px] text-left active:scale-[0.98] transition-all flex items-center gap-3.5 ${
+                    isDarkMode ? 'hover:bg-white/5 text-white' : 'hover:bg-black/[0.04] text-black'
+                  }`}
+                >
+                  <BiPin size={18} className="opacity-70" />
+                  {selectedComment.isPinned ? 'Unpin' : 'Pin'}
+                </button>
+              )}
+
+              {/* Block Option */}
+              {isOwnReel && (selectedComment.user?._id || selectedComment.user) !== currentUser?._id && (
+                <button
+                  type="button"
+                  onClick={() => handleBlockToggle(selectedComment)}
+                  disabled={isMenuUpdating}
+                  className={`w-full py-2.5 px-3.5 rounded-xl font-semibold text-[13px] text-left active:scale-[0.98] transition-all flex items-center gap-3.5 ${
+                    isDarkMode ? 'hover:bg-white/5 text-[#FE2C55]' : 'hover:bg-black/[0.04] text-[#FE2C55]'
+                  }`}
+                >
+                  <BiBlock size={18} className="opacity-70" />
+                  {currentUser?.blockedCommenters?.some(id => id.toString() === String(selectedComment.user?._id || selectedComment.user))
+                    ? 'Unblock'
+                    : 'Block'}
+                </button>
+              )}
+
+              {/* Delete Option */}
+              {(isOwnReel || (selectedComment.user?._id || selectedComment.user) === currentUser?._id) && (
+                <button
+                  type="button"
+                  onClick={() => handleDeleteComment(selectedComment)}
+                  disabled={isMenuUpdating}
+                  className="w-full py-2.5 px-3.5 rounded-xl font-semibold text-[13px] text-left active:scale-[0.98] transition-all flex items-center gap-3.5 text-red-500 hover:bg-red-500/5 dark:hover:bg-red-500/10"
+                >
+                  <BiTrash size={18} className="text-red-500" />
+                  Delete
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 };
 

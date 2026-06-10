@@ -3,6 +3,16 @@ import { BiChevronRight, BiCheckCircle } from 'react-icons/bi';
 import { useTheme } from '../../../../context/ThemeContext';
 import userService from '../../../../services/userService';
 
+const REASONS = [
+  { id: 'spam', label: 'Spam' },
+  { id: 'harassment', label: 'Harassment' },
+  { id: 'violence', label: 'Violence' },
+  { id: 'copyright', label: 'Copyright' },
+  { id: 'fake_content', label: 'Fake content' },
+  { id: 'adult_content', label: 'Adult content' },
+  { id: 'other', label: 'Something else' }
+];
+
 const ReportUserSheet = ({ isOpen, onClose, userId }) => {
   const { isDarkMode } = useTheme();
   const [step, setStep] = useState(1); // 1: list, 2: confirmation
@@ -10,16 +20,6 @@ const ReportUserSheet = ({ isOpen, onClose, userId }) => {
   const [error, setError] = useState(null);
 
   if (!isOpen) return null;
-
-  const reasons = [
-    { id: 'spam', label: 'Spam' },
-    { id: 'harassment', label: 'Harassment' },
-    { id: 'violence', label: 'Violence' },
-    { id: 'copyright', label: 'Copyright' },
-    { id: 'fake_content', label: 'Fake content' },
-    { id: 'adult_content', label: 'Adult content' },
-    { id: 'other', label: 'Something else' }
-  ];
 
   const handleReport = async (reason) => {
     setLoading(true);
@@ -75,8 +75,9 @@ const ReportUserSheet = ({ isOpen, onClose, userId }) => {
               Why are you reporting this account?
             </p>
             <div className="flex flex-col gap-1 overflow-y-auto no-scrollbar max-h-[45vh]">
-              {reasons.map((reason) => (
+              {REASONS.map((reason) => (
                 <button
+                  type="button"
                   key={reason.id}
                   disabled={loading}
                   onClick={() => handleReport(reason.id)}
@@ -100,6 +101,7 @@ const ReportUserSheet = ({ isOpen, onClose, userId }) => {
               Your report helps keep the community safe. We'll review this account shortly.
             </p>
             <button
+              type="button"
               onClick={handleClose}
               className="w-full py-4 bg-[#FE2C55] text-white font-bold rounded-xl active:scale-95 transition-all"
             >

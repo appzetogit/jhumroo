@@ -22,12 +22,11 @@ const ShareSheet = ({ isOpen, onClose, reelData, onShare }) => {
   useEffect(() => {
     if (isOpen && currentUser) {
       fetchFriends();
-    } else if (!isOpen) {
-      setSentStatus({});
     }
   }, [isOpen, currentUser]);
 
   const fetchFriends = async () => {
+    setSentStatus({});
     setLoadingFriends(true);
     try {
       let uniqueFriends = [];

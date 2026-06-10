@@ -117,11 +117,11 @@ export const createComment = asyncHandler(async (req, res) => {
   }
 
   // Check if content exists
-  let content = await Reel.findById(reelId).populate('user', 'commentPrivacy');
+  let content = await Reel.findById(reelId).populate('user', 'commentPrivacy blockedCommenters');
   let isAd = false;
   
   if (!content) {
-    content = await Ad.findById(reelId);
+    content = await Ad.findById(reelId).populate('user', 'commentPrivacy blockedCommenters');
     isAd = true;
   }
 
@@ -142,6 +142,14 @@ export const createComment = asyncHandler(async (req, res) => {
 
   // Check comment privacy settings (only for reels/user ads)
   const contentOwner = content.user;
+
+  // Check if user is blocked from commenting by the content owner
+  if (contentOwner && contentOwner.blockedCommenters && contentOwner.blockedCommenters.some(id => id.toString() === req.user._id.toString())) {
+    return res.status(403).json({
+      success: false,
+      message: 'You are blocked from commenting on this post'
+    });
+  }
   
   if (!isAd && contentOwner && contentOwner._id.toString() !== req.user._id.toString()) {
     const privacy = contentOwner.commentPrivacy || 'everyone';
@@ -176,15 +184,6 @@ export const createComment = asyncHandler(async (req, res) => {
     text: text.trim(),
     parentComment: parentCommentId || null
   });
-
-  // Update comment count on the parent content
-  if (!parentCommentId) {
-    if (isAd) {
-      await Ad.findByIdAndUpdate(reelId, { $inc: { 'stats.commentsCount': 1 } });
-    } else {
-      await Reel.findByIdAndUpdate(reelId, { $inc: { 'stats.commentsCount': 1 } });
-    }
-  }
 
   // Populate user details
   await comment.populate('user', 'username fullName profilePicture isVerified');
@@ -262,10 +261,10 @@ export const getReelComments = asyncHandler(async (req, res) => {
   const sortBy = req.query.sortBy || 'recent'; // 'recent' or 'popular'
 
   // Check if content exists
-  let content = await Reel.findById(reelId).populate('user', 'commentPrivacy');
+  let content = await Reel.findById(reelId).populate('user', 'commentPrivacy blockedCommenters');
   let isAd = false;
   if (!content) {
-    content = await Ad.findById(reelId);
+    content = await Ad.findById(reelId).populate('user', 'commentPrivacy blockedCommenters');
     isAd = true;
   }
 
@@ -295,6 +294,14 @@ export const getReelComments = asyncHandler(async (req, res) => {
     sortCriteria = { isPinned: -1, createdAt: -1 };
   }
 
+  const blockedUsers = [];
+  if (content.user && content.user.blockedCommenters && content.user.blockedCommenters.length > 0) {
+    blockedUsers.push(...content.user.blockedCommenters.map(id => id.toString()));
+  }
+  if (req.user && req.user.blockedCommenters && req.user.blockedCommenters.length > 0) {
+    blockedUsers.push(...req.user.blockedCommenters.map(id => id.toString()));
+  }
+
   const query = {
     parentComment: null,
     isDeleted: false
@@ -304,6 +311,10 @@ export const getReelComments = asyncHandler(async (req, res) => {
     query.ad = reelId;
   } else {
     query.reel = reelId;
+  }
+
+  if (blockedUsers.length > 0) {
+    query.user = { $nin: [...new Set(blockedUsers)] };
   }
 
   // Get top-level comments (no parent)
@@ -326,10 +337,14 @@ export const getReelComments = asyncHandler(async (req, res) => {
   // For each comment, get a preview of replies (first 2)
   for (let comment of enrichedComments) {
     if (comment.repliesCount > 0) {
-      const replies = await Comment.find({
+      const replyQuery = {
         parentComment: comment._id,
         isDeleted: false
-      })
+      };
+      if (blockedUsers.length > 0) {
+        replyQuery.user = { $nin: [...new Set(blockedUsers)] };
+      }
+      const replies = await Comment.find(replyQuery)
         .sort({ createdAt: 1 })
         .limit(2)
         .populate('user', 'username fullName profilePicture isVerified')
@@ -339,9 +354,15 @@ export const getReelComments = asyncHandler(async (req, res) => {
     }
   }
 
+  let commentsBlocked = false;
+  if (req.user && content.user && content.user.blockedCommenters) {
+    commentsBlocked = content.user.blockedCommenters.some(id => id.toString() === req.user._id.toString());
+  }
+
   res.status(200).json({
     success: true,
     comments: enrichedComments,
+    commentsBlocked,
     pagination: {
       currentPage: page,
       totalPages: Math.ceil(totalComments / limit),
@@ -371,21 +392,38 @@ export const getCommentReplies = asyncHandler(async (req, res) => {
     });
   }
 
-  // Get replies
-  const replies = await Comment.find({
+  // Exclude comments from users blocked by the reel owner or viewing user
+  const blockedUsers = [];
+  let content = await Reel.findById(parentComment.reel).populate('user', 'blockedCommenters');
+  if (!content && parentComment.ad) {
+    content = await Ad.findById(parentComment.ad).populate('user', 'blockedCommenters');
+  }
+
+  if (content && content.user && content.user.blockedCommenters && content.user.blockedCommenters.length > 0) {
+    blockedUsers.push(...content.user.blockedCommenters.map(id => id.toString()));
+  }
+  if (req.user && req.user.blockedCommenters && req.user.blockedCommenters.length > 0) {
+    blockedUsers.push(...req.user.blockedCommenters.map(id => id.toString()));
+  }
+
+  const query = {
     parentComment: commentId,
     isDeleted: false
-  })
+  };
+
+  if (blockedUsers.length > 0) {
+    query.user = { $nin: [...new Set(blockedUsers)] };
+  }
+
+  // Get replies
+  const replies = await Comment.find(query)
     .sort({ createdAt: 1 })
     .skip(skip)
     .limit(limit)
     .populate('user', 'username fullName profilePicture isVerified')
     .lean();
 
-  const totalReplies = await Comment.countDocuments({
-    parentComment: commentId,
-    isDeleted: false
-  });
+  const totalReplies = await Comment.countDocuments(query);
 
   // Enrich with follow status
   const enrichedReplies = await populateCommentWithUserDetails(replies, req.user?._id);

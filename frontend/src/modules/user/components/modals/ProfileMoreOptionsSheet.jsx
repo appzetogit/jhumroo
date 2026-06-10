@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { 
   BiBlock, 
   BiFlag, 
@@ -12,6 +12,32 @@ import {
 import { useTheme } from '../../../../context/ThemeContext';
 import { useAuth } from '../../../../context/AuthContext';
 import userService from '../../../../services/userService';
+
+const OptionItem = ({ icon: Icon, label, onClick, color, subLabel, showArrow = false, isDarkMode }) => (
+  <button 
+    type="button"
+    onClick={(e) => {
+      e.stopPropagation();
+      onClick();
+    }}
+    className={`w-full flex items-center p-4 gap-4 active:bg-black/5 transition-all ${
+      isDarkMode ? 'border-b border-white/5 active:bg-white/5' : 'border-b border-black/5 active:bg-black/5'
+    }`}
+  >
+    <div className={`text-2xl flex items-center justify-center ${
+      color === 'danger' ? 'text-red-500' : isDarkMode ? 'text-white/90' : 'text-black/80'
+    }`}>
+      <Icon />
+    </div>
+    <div className="flex flex-col items-start flex-1">
+      <span className={`text-[15px] font-semibold ${
+        color === 'danger' ? 'text-red-500' : isDarkMode ? 'text-white/90' : 'text-black/90'
+      }`}>{label}</span>
+      {subLabel && <span className={`text-[12px] opacity-40 font-medium ${isDarkMode ? 'text-white/60' : 'text-black/60'}`}>{subLabel}</span>}
+    </div>
+    {showArrow && <BiChevronRight size={20} className="opacity-30" />}
+  </button>
+);
 
 const ProfileMoreOptionsSheet = ({ 
   isOpen, 
@@ -27,7 +53,7 @@ const ProfileMoreOptionsSheet = ({
   const { user: currentUser } = useAuth();
   const [view, setView] = useState('menu'); // 'menu' or 'about'
   const [isClosing, setIsClosing] = useState(false);
-  const [startY, setStartY] = useState(null);
+  const startYRef = useRef(null);
   const [currentY, setCurrentY] = useState(0);
 
   if (!isOpen && !isClosing) return null;
@@ -44,12 +70,12 @@ const ProfileMoreOptionsSheet = ({
   };
 
   const handleTouchStart = (e) => {
-    setStartY(e.touches[0].clientY);
+    startYRef.current = e.touches[0].clientY;
   };
 
   const handleTouchMove = (e) => {
-    if (startY === null) return;
-    const deltaY = e.touches[0].clientY - startY;
+    if (startYRef.current === null) return;
+    const deltaY = e.touches[0].clientY - startYRef.current;
     if (deltaY > 0) {
       setCurrentY(deltaY);
     }
@@ -61,33 +87,8 @@ const ProfileMoreOptionsSheet = ({
     } else {
       setCurrentY(0);
     }
-    setStartY(null);
+    startYRef.current = null;
   };
-
-  const OptionItem = ({ icon: Icon, label, onClick, color, subLabel, showArrow = false }) => (
-    <button 
-      onClick={(e) => {
-        e.stopPropagation();
-        onClick();
-      }}
-      className={`w-full flex items-center p-4 gap-4 active:bg-black/5 transition-all ${
-        isDarkMode ? 'border-b border-white/5 active:bg-white/5' : 'border-b border-black/5 active:bg-black/5'
-      }`}
-    >
-      <div className={`text-2xl flex items-center justify-center ${
-        color === 'danger' ? 'text-red-500' : isDarkMode ? 'text-white/90' : 'text-black/80'
-      }`}>
-        <Icon />
-      </div>
-      <div className="flex flex-col items-start flex-1">
-        <span className={`text-[15px] font-semibold ${
-          color === 'danger' ? 'text-red-500' : isDarkMode ? 'text-white/90' : 'text-black/90'
-        }`}>{label}</span>
-        {subLabel && <span className={`text-[12px] opacity-40 font-medium ${isDarkMode ? 'text-white/60' : 'text-black/60'}`}>{subLabel}</span>}
-      </div>
-      {showArrow && <BiChevronRight size={20} className="opacity-30" />}
-    </button>
-  );
 
   const formatDate = (dateString) => {
     if (!dateString) return 'Unknown';
@@ -130,28 +131,33 @@ const ProfileMoreOptionsSheet = ({
                 icon={BiBlock} 
                 label={isBlocked ? "Unblock" : "Block"} 
                 color="danger"
+                isDarkMode={isDarkMode}
                 onClick={onBlockToggle}
               />
               <OptionItem 
                 icon={BiFlag} 
                 label="Report" 
                 color="danger"
+                isDarkMode={isDarkMode}
                 onClick={onReportClick}
               />
               <OptionItem 
                 icon={BiInfoCircle} 
                 label="About this account" 
+                isDarkMode={isDarkMode}
                 onClick={() => setView('about')}
                 showArrow={true}
               />
               <OptionItem 
                 icon={BiShareAlt} 
                 label="Share this profile" 
+                isDarkMode={isDarkMode}
                 onClick={onShareClick}
               />
               <OptionItem 
                 icon={BiMessageDetail} 
                 label="Send message" 
+                isDarkMode={isDarkMode}
                 onClick={onMessageClick}
               />
             </div>
@@ -160,6 +166,7 @@ const ProfileMoreOptionsSheet = ({
           <div className="flex flex-col">
             <div className="flex items-center px-4 py-2">
               <button 
+                type="button"
                 onClick={() => setView('menu')}
                 className="p-2 -ml-2 active:opacity-60"
               >

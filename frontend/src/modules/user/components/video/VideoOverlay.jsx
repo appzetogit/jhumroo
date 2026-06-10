@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { BiPlus } from 'react-icons/bi';
 import { IoIosMusicalNote } from 'react-icons/io';
 import { useNavigate } from 'react-router-dom';
+import duetIcon from '../../../../assets/duet_icon.png';
 import CommentsSheet from '../modals/CommentsSheet';
 import ShareSheet from '../modals/ShareSheet';
 import MoreOptionsSheet from '../modals/MoreOptionsSheet';
@@ -180,6 +181,11 @@ const VideoOverlay = ({ reelId, username, caption, musicName, isLiked, likes, co
               {isAd && (
                 <span className="bg-white/20 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider backdrop-blur-sm">
                   Sponsored
+                </span>
+              )}
+              {videoData.isRemix && videoData.originalReel && (
+                <span className="bg-[#FE2C55] text-white px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 pointer-events-auto">
+                  <img src={duetIcon} alt="Duet" className="w-3.5 h-3.5 object-contain brightness-0 invert" /> Duet
                 </span>
               )}
             </div>
@@ -361,6 +367,7 @@ const VideoOverlay = ({ reelId, username, caption, musicName, isLiked, likes, co
          onClose={() => setIsCommentsOpen(false)} 
          commentCount={comments}
          reelId={reelId}
+         reelOwnerId={videoData.user?._id || videoData.user}
          onCommentAdded={(newCount) => {
            if (typeof onUpdate === 'function') {
              onUpdate({ stats: { commentsCount: newCount } });

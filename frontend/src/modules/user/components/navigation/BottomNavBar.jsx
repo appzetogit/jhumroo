@@ -75,12 +75,12 @@ const BottomNavBar = ({ isDarkTheme = true }) => {
   const { config } = useAppContent();
   const { user } = useAuth();
   const socket = useSocket();
-  const location = useLocation();
+  const { pathname } = useLocation();
   const [activeIndex, setActiveIndex] = useState(0);
   const [unreadCount, setUnreadCount] = useState(0);
   const [isModalOpen, setIsModalOpen] = useState(false);
   
-  const isHomePage = location.pathname === '/';
+  const isHomePage = pathname === '/';
   const [isReelOverlayOpen, setIsReelOverlayOpen] = useState(false);
 
   useEffect(() => {
@@ -176,17 +176,17 @@ const BottomNavBar = ({ isDarkTheme = true }) => {
   useEffect(() => {
     const index = navItems.findIndex(item => {
       if (item.path === '/profile') {
-        const isSelfProfile = location.pathname === '/profile' || (user?.username && location.pathname === `/user/${user.username}`);
+        const isSelfProfile = pathname === '/profile' || (user?.username && pathname === `/user/${user.username}`);
         return isSelfProfile;
       }
-      if (item.path === '/') return location.pathname === '/';
-      return location.pathname.startsWith(item.path);
+      if (item.path === '/') return pathname === '/';
+      return pathname.startsWith(item.path);
     });
 
     if (index !== -1) {
       setActiveIndex(index);
     }
-  }, [location.pathname, navItems]);
+  }, [pathname, navItems]);
 
   const containerClasses = `absolute left-0 w-full z-[1000] flex justify-around items-stretch transition-all duration-300 ${(isHomePage || isReelOverlayOpen)
       ? 'bg-black text-white/90 border-t border-white/10 shadow-[0_-5px_15px_rgba(0,0,0,0.45)]'

@@ -23,6 +23,8 @@ const VideoCard = ({ videoData, isActive }) => {
   });
   const [showMuteOverlay, setShowMuteOverlay] = useState(false);
   const [localVideoData, setLocalVideoData] = useState(videoData);
+  const duetVideoRef = useRef(null);
+  const isDuet = localVideoData.isRemix && localVideoData.originalReel;
 
   // Determine if this ad contains an image instead of a video
   const isImageAd = localVideoData.isAd && (
@@ -202,6 +204,52 @@ const VideoCard = ({ videoData, isActive }) => {
     };
   }, [isActive, isImageAd, localVideoData.music, localVideoData.hlsUrl, localVideoData.video?.url, localVideoData.url, playing, isMuted]);
 
+  // Synchronize duet original video with main video
+  useEffect(() => {
+    if (!isDuet) return;
+    const mainVideo = videoRef.current;
+    const duetVideo = duetVideoRef.current;
+    if (!mainVideo || !duetVideo) return;
+
+    const handlePlay = () => {
+      duetVideo.play().catch(err => console.warn("Failed to play duet video:", err));
+    };
+
+    const handlePause = () => {
+      duetVideo.pause();
+    };
+
+    const handleTimeUpdate = () => {
+      const diff = Math.abs(duetVideo.currentTime - mainVideo.currentTime);
+      if (diff > 0.15) {
+        duetVideo.currentTime = mainVideo.currentTime;
+      }
+    };
+
+    const handleSeeking = () => {
+      duetVideo.currentTime = mainVideo.currentTime;
+    };
+
+    mainVideo.addEventListener('play', handlePlay);
+    mainVideo.addEventListener('pause', handlePause);
+    mainVideo.addEventListener('timeupdate', handleTimeUpdate);
+    mainVideo.addEventListener('seeking', handleSeeking);
+
+    // Initial sync
+    if (!mainVideo.paused && isActive) {
+      handlePlay();
+    } else {
+      handlePause();
+    }
+
+    return () => {
+      mainVideo.removeEventListener('play', handlePlay);
+      mainVideo.removeEventListener('pause', handlePause);
+      mainVideo.removeEventListener('timeupdate', handleTimeUpdate);
+      mainVideo.removeEventListener('seeking', handleSeeking);
+    };
+  }, [isActive, isDuet, localVideoData.video?.url, localVideoData.originalReel?.video?.url, playing]);
+
   const handlePauseAndRecord = () => {
     const video = videoRef.current;
     if (video) {
@@ -315,6 +363,48 @@ const VideoCard = ({ videoData, isActive }) => {
           style={{ objectFit: 'cover' }}
           onClick={(e) => { if (e.detail === 2) handleDoubleClick(); }}
         />
+      ) : isDuet ? (
+        <div className="absolute top-1/2 -translate-y-1/2 w-full aspect-[9/8] flex flex-row bg-black overflow-hidden z-0">
+          {/* Left: Original Reel Video */}
+          <div className="w-1/2 h-full relative border-r border-white/10 flex items-center justify-center bg-black">
+            <video
+              ref={duetVideoRef}
+              className="w-full h-full object-cover"
+              style={{ objectFit: 'cover' }}
+              src={localVideoData.originalReel.video?.url}
+              loop
+              playsInline
+              muted={isMuted}
+              onClick={(e) => {
+                if (e.detail === 2) handleDoubleClick();
+                else handleScreenTap();
+              }}
+            />
+            {/* Original Creator Name tag overlay */}
+            <div className="absolute bottom-4 left-4 bg-black/60 backdrop-blur-md px-3 py-1 rounded-full text-xs font-bold text-white border border-white/10 flex items-center gap-1 z-10 pointer-events-none">
+              <span className="w-1.5 h-1.5 bg-[#fe2c55] rounded-full"></span>
+              @{localVideoData.originalReel.user?.username || 'creator'}
+            </div>
+          </div>
+          
+          {/* Right: Recorded Duet Video */}
+          <div className="w-1/2 h-full relative flex items-center justify-center bg-black">
+            <video
+              ref={videoRef}
+              className="w-full h-full object-cover bg-black"
+              style={{ willChange: 'transform', objectFit: 'cover' }}
+              loop
+              playsInline
+              preload="auto"
+              muted={isMuted}
+              poster={localVideoData.video?.thumbnail || localVideoData.poster}
+              onClick={(e) => {
+                if (e.detail === 2) handleDoubleClick();
+                else handleScreenTap();
+              }}
+            />
+          </div>
+        </div>
       ) : (
         <video
           ref={videoRef}

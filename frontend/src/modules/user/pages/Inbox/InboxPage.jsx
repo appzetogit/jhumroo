@@ -109,11 +109,6 @@ const ConversationItem = ({ conv, currentUser, navigate, onAction }) => {
             <p className={`text-[15px] truncate ${isUnread ? 'font-black text-black' : 'font-bold text-gray-800'}`}>
               {conv.participant?.fullName || conv.participant?.username || 'User'}
             </p>
-            {conv.participant?.isVerified && (
-              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="#20D5EC" viewBox="0 0 24 24">
-                <path d="M23.33 11.51l-2.07-2.39.29-3.15-3.1-.71-1.62-2.73-2.83 1.22-2.83-1.22-1.62 2.73-3.1.71.29 3.15-2.07 2.39 2.07 2.39-.29 3.15 3.1.71 1.62 2.73 2.83-1.22 2.83 1.22 1.62-2.73 3.1-.71-.29-3.15 2.07-2.39zM10.23 16.5l-3.37-3.37 1.41-1.41 1.96 1.96 4.67-4.67 1.41 1.41-6.08 6.08z"/>
-              </svg>
-            )}
             {conv.isMuted && (
               <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="#9ca3af" viewBox="0 0 24 24">
                 <path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM19 12c0 2.77-1.39 5.22-3.5 6.69l1.45 1.45C19.78 18.25 21.5 15.33 21.5 12s-1.72-6.25-4.55-8.14l-1.45 1.45C17.61 6.78 19 9.23 19 12zM3 9v6h4l5 5V4L7 9H3z"/>

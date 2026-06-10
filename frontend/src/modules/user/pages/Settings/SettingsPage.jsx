@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { BiChevronLeft, BiChevronRight, BiUser, BiLockAlt, BiShieldAlt, BiBell, BiMoon, BiGlobe, BiQuestionMark, BiLogOut, BiFile, BiTrash } from 'react-icons/bi';
+import { BiChevronLeft, BiChevronRight, BiUser, BiLockAlt, BiShieldAlt, BiBell, BiMoon, BiGlobe, BiQuestionMark, BiLogOut, BiFile, BiTrash, BiSupport, BiHelpCircle } from 'react-icons/bi';
 import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../../../../context/ThemeContext';
 import { useAuth } from '../../../../context/AuthContext';
@@ -23,6 +23,8 @@ const SettingsPage = ({ onLogout }) => {
       moon: BiMoon,
       globe: BiGlobe,
       help: BiQuestionMark,
+      helpCircle: BiHelpCircle,
+      support: BiSupport,
       logout: BiLogOut,
       file: BiFile,
       trash: BiTrash,
@@ -41,7 +43,14 @@ const SettingsPage = ({ onLogout }) => {
       return {
         ...section,
         items: items.map((item) => {
-          const Icon = item.icon ? iconMap[item.icon] : null;
+          let iconKey = item.icon;
+          if (item.label === 'Support' && iconKey === 'help') {
+            iconKey = 'support';
+          }
+          if (item.label === 'Help Center' && iconKey === 'help') {
+            iconKey = 'helpCircle';
+          }
+          const Icon = iconKey ? iconMap[iconKey] : null;
           return {
             ...item,
             label: item.isToggle ? (isDarkMode ? 'Dark mode' : 'Light mode') : item.label,

@@ -16,11 +16,11 @@ const getActiveTheme = (pathname, preferredTheme) =>
   FORCED_DARK_ROUTES.has(pathname) ? 'dark' : preferredTheme;
 
 export const ThemeProvider = ({ children }) => {
-  const location = useLocation();
+  const { pathname } = useLocation();
   const [preferredTheme, setPreferredThemeState] = useState(() => getStoredTheme());
   const theme = useMemo(
-    () => getActiveTheme(location.pathname, preferredTheme),
-    [location.pathname, preferredTheme],
+    () => getActiveTheme(pathname, preferredTheme),
+    [pathname, preferredTheme],
   );
 
   useEffect(() => {

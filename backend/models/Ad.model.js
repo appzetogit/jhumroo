@@ -78,6 +78,38 @@ const adSchema = new mongoose.Schema(
       default: 'pending',
       index: true
     },
+    paymentStatus: {
+      type: String,
+      enum: ['pending', 'paid', 'failed'],
+      default: 'pending',
+      index: true
+    },
+    razorpayOrderId: {
+      type: String,
+      trim: true
+    },
+    razorpayPaymentId: {
+      type: String,
+      trim: true
+    },
+    razorpaySignature: {
+      type: String,
+      trim: true
+    },
+    paymentAmount: {
+      type: Number,
+      default: 0
+    },
+    startDate: {
+      type: Date
+    },
+    endDate: {
+      type: Date
+    },
+    durationDays: {
+      type: Number,
+      default: 0
+    },
     stats: {
       viewsCount: {
         type: Number,

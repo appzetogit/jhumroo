@@ -264,6 +264,30 @@ const AdRow = ({ ad, onToggle, onDelete, onEdit, onViewComments, onApprove, onRe
             <BiCalendar />
             <span>{new Date(ad.createdAt).toLocaleDateString()}</span>
           </div>
+
+          {/* Duration: start → end */}
+          {ad.startDate && ad.endDate && (() => {
+            const fmt = (d) => {
+              const dt = new Date(d);
+              return `${String(dt.getDate()).padStart(2,'0')}/${String(dt.getMonth()+1).padStart(2,'0')}/${dt.getFullYear()}`;
+            };
+            const now = new Date(); now.setHours(0,0,0,0);
+            const end = new Date(ad.endDate); end.setHours(0,0,0,0);
+            const isExpired = end < now;
+            const days = ad.durationDays || Math.round((new Date(ad.endDate) - new Date(ad.startDate)) / (1000*60*60*24));
+            return (
+              <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-bold ${
+                isExpired
+                  ? 'bg-red-500/10 text-red-500'
+                  : 'bg-[#FE2C55]/10 text-[#FE2C55]'
+              }`}>
+                <BiCalendar size={12} />
+                <span>{fmt(ad.startDate)} → {fmt(ad.endDate)}</span>
+                <span className="opacity-70">({days}d{isExpired ? ' · Expired' : ''})</span>
+              </div>
+            );
+          })()}
+
           <div className="flex items-center gap-1.5" title={statesArray.join(', ') || 'All States'}>
             <BiTargetLock />
             <span>
@@ -335,13 +359,7 @@ const AdRow = ({ ad, onToggle, onDelete, onEdit, onViewComments, onApprove, onRe
             <span className="hidden lg:inline">Reject</span>
           </button>
         )}
-        <button 
-          onClick={onEdit}
-          className="p-2.5 rounded-xl bg-blue-500/10 text-blue-500 hover:bg-blue-500/20 transition-all"
-          title="Edit Ad"
-        >
-          <BiEditAlt size={20} />
-        </button>
+
         <button 
           onClick={onToggle}
           className={`p-2.5 rounded-xl transition-all ${

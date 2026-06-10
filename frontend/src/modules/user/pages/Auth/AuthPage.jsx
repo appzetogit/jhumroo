@@ -148,21 +148,21 @@ const YEARS = Array.from({ length: 60 }, (_, i) => 2025 - i);
 
 const AuthPage = ({ onComplete, initialMode = 'signup' }) => {
   const navigate = useNavigate();
-  const location = useLocation();
+  const { pathname } = useLocation();
   const { config } = useAppContent();
   const months = config?.auth?.months || DEFAULT_MONTHS;
 
   // Set mode based on current URL path
-  const [mode, setMode] = useState(location.pathname === '/login' ? 'login' : initialMode);
+  const [mode, setMode] = useState(pathname === '/login' ? 'login' : initialMode);
 
   // Steps: 1=Welcome, 2=Methods, 3=Birthday, 4=PhoneInput, 5=OTP
   const [step, setStep] = useState(
-    location.pathname === '/signup' ? 3 : (location.pathname === '/login' ? 4 : 1)
+    pathname === '/signup' ? 3 : (pathname === '/login' ? 4 : 1)
   );
 
   // Sync mode and step with URL changes
   useEffect(() => {
-    const p = location.pathname;
+    const p = pathname;
     const currentMode = p === '/login' ? 'login' : 'signup';
     setMode(currentMode);
 
@@ -177,7 +177,7 @@ const AuthPage = ({ onComplete, initialMode = 'signup' }) => {
       // For any other subroutes during auth, keep as welcome or default to methods
       setStep(1);
     }
-  }, [location.pathname]);
+  }, [pathname]);
 
   const [monthIdx, setMonthIdx] = useState(7);
   const [dayIdx, setDayIdx] = useState(22);

@@ -56,6 +56,26 @@ const adService = {
 
   reviewAdAdmin: async (adId, status) => {
     return await api.patch(`/ads/${adId}/review`, { status });
+  },
+
+  getPricing: async () => {
+    return await api.get('/ads/pricing');
+  },
+
+  verifyPayment: async (paymentData) => {
+    return await api.post('/ads/verify-payment', paymentData);
+  },
+
+  getPricingAdmin: async () => {
+    return await api.get('/ads/admin/pricing');
+  },
+
+  updatePricingAdmin: async (pricingData) => {
+    return await api.put('/ads/admin/pricing', pricingData);
+  },
+
+  getPaymentRecordsAdmin: async () => {
+    return await api.get('/ads/admin/payment-records');
   }
 };
 

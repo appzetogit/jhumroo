@@ -79,8 +79,8 @@ const DEFAULT_SETTINGS_SECTIONS = [
       { icon: 'bell', label: 'Push notifications', route: '/settings/push-notifications' },
       { icon: 'globe', label: 'Ads Manager', route: '/settings/ads-manager' },
       { icon: 'moon', label: 'Dark mode', isToggle: true },
-      { icon: 'help', label: 'Help Center', route: '/settings/help-center' },
-      { icon: 'help', label: 'Support', route: '/settings/support' },
+      { icon: 'helpCircle', label: 'Help Center', route: '/settings/help-center' },
+      { icon: 'support', label: 'Support', route: '/settings/support' },
       { icon: 'file', label: 'Terms & Condition', route: '/settings/terms-and-condition' },
       { icon: 'shield', label: 'Privacy Policy', route: '/settings/privacy-policy' },
     ],
@@ -131,6 +131,7 @@ const DEFAULT_PRIVACY_SECTIONS = [
     items: [
       { icon: 'downloads', label: 'Downloads', value: 'downloads', route: '/settings/privacy/downloads' },
       { icon: 'blocked', label: 'Blocked accounts', route: '/settings/privacy/blocked-accounts' },
+      { icon: 'blocked', label: 'Comment blocked', route: '/settings/privacy/comment-blocks' },
       { icon: 'lock', label: 'Private account', isToggle: true },
     ],
   },

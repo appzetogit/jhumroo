@@ -15,7 +15,7 @@ import { useInitializeLenis } from '../hooks/useLenis';
  */
 export const LenisProvider = ({ children, config = {} }) => {
   const lenis = useInitializeLenis(config);
-  const location = useLocation();
+  const { pathname } = useLocation();
 
   // "Scroll to top on route change (SPA navigation)" requirement.
   // Performs an instantaneous reset to scroll position 0,0 on every route change,
@@ -24,7 +24,7 @@ export const LenisProvider = ({ children, config = {} }) => {
     if (lenis) {
       lenis.scrollTo(0, { immediate: true });
     }
-  }, [location.pathname, lenis]);
+  }, [pathname, lenis]);
 
   return (
     <LenisContext.Provider value={lenis}>

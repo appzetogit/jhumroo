@@ -3,28 +3,50 @@ import { BiX, BiChevronDown, BiCheck } from 'react-icons/bi';
 import { useTheme } from '../../../../context/ThemeContext';
 import reelService from '../../../../services/reelService';
 
+const Toggle = ({ label, value, onChange, isDarkMode }) => (
+  <div className="flex items-center justify-between py-4">
+    <span className="text-[15px] font-semibold">{label}</span>
+    <button 
+      type="button"
+      onClick={() => onChange(!value)}
+      className={`w-12 h-6 rounded-full relative transition-colors duration-200 ${
+        value ? 'bg-tiktok-red' : isDarkMode ? 'bg-white/10' : 'bg-black/10'
+      }`}
+    >
+      <div className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-all duration-200 ${
+        value ? 'left-7' : 'left-1'
+      }`} />
+    </button>
+  </div>
+);
+
 const EditReelSheet = ({ isOpen, onClose, reelData, onUpdate }) => {
   const { isDarkMode } = useTheme();
   const [caption, setCaption] = useState('');
   const [allowComments, setAllowComments] = useState(true);
   const [allowDownload, setAllowDownload] = useState(true);
+  const [allowDuet, setAllowDuet] = useState(true);
   const [audience, setAudience] = useState('everyone');
   const [loading, setLoading] = useState(false);
   const [thumbnailFile, setThumbnailFile] = useState(null);
   const [thumbnailPreview, setThumbnailPreview] = useState(null);
+  const prevReelIdRef = React.useRef(null);
   const fileInputRef = React.useRef(null);
 
-  // Sync state when reelData is available or changes
-  React.useEffect(() => {
+  // Sync state when reelData is available or changes (render-phase update check)
+  const currentReelId = reelData?._id || reelData?.id || null;
+  if (currentReelId !== prevReelIdRef.current && isOpen) {
+    prevReelIdRef.current = currentReelId;
     if (reelData) {
       setCaption(reelData.caption || '');
       setAllowComments(reelData.allowComments !== false);
       setAllowDownload(reelData.allowDownload !== false);
+      setAllowDuet(reelData.allowDuet !== false);
       setAudience(reelData.audience || 'everyone');
       setThumbnailPreview(reelData.video?.thumbnail || reelData.poster);
       setThumbnailFile(null);
     }
-  }, [reelData, isOpen]);
+  }
 
   const handleThumbnailSelect = (e) => {
     const file = e.target.files[0];
@@ -47,6 +69,7 @@ const EditReelSheet = ({ isOpen, onClose, reelData, onUpdate }) => {
         formData.append('caption', caption);
         formData.append('allowComments', allowComments);
         formData.append('allowDownload', allowDownload);
+        formData.append('allowDuet', allowDuet);
         formData.append('audience', audience);
         formData.append('thumbnail', thumbnailFile);
         
@@ -56,6 +79,7 @@ const EditReelSheet = ({ isOpen, onClose, reelData, onUpdate }) => {
           caption,
           allowComments,
           allowDownload,
+          allowDuet,
           audience
         });
       }
@@ -71,22 +95,6 @@ const EditReelSheet = ({ isOpen, onClose, reelData, onUpdate }) => {
     }
   };
 
-  const Toggle = ({ label, value, onChange }) => (
-    <div className="flex items-center justify-between py-4">
-      <span className="text-[15px] font-semibold">{label}</span>
-      <button 
-        onClick={() => onChange(!value)}
-        className={`w-12 h-6 rounded-full relative transition-colors duration-200 ${
-          value ? 'bg-tiktok-red' : isDarkMode ? 'bg-white/10' : 'bg-black/10'
-        }`}
-      >
-        <div className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-all duration-200 ${
-          value ? 'left-7' : 'left-1'
-        }`} />
-      </button>
-    </div>
-  );
-
   return (
     <div 
       className={`fixed inset-0 z-[6000] flex flex-col justify-end ${isDarkMode ? 'bg-black/60' : 'bg-black/40'}`}
@@ -100,11 +108,12 @@ const EditReelSheet = ({ isOpen, onClose, reelData, onUpdate }) => {
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between p-4 border-b border-white/5">
-          <button onClick={onClose} className="p-2 -ml-2">
+          <button type="button" onClick={onClose} className="p-2 -ml-2">
             <BiX size={28} />
           </button>
           <h2 className="text-[17px] font-bold">Edit Reel</h2>
           <button 
+            type="button"
             disabled={loading}
             onClick={handleSave}
             className={`font-bold text-[15px] ${loading ? 'opacity-30' : 'text-tiktok-red'}`}
@@ -132,6 +141,7 @@ const EditReelSheet = ({ isOpen, onClose, reelData, onUpdate }) => {
                 onChange={handleThumbnailSelect} 
               />
               <button 
+                type="button"
                 onClick={() => fileInputRef.current?.click()}
                 className="text-[14px] font-bold text-tiktok-red mb-1 text-left"
               >
@@ -168,6 +178,7 @@ const EditReelSheet = ({ isOpen, onClose, reelData, onUpdate }) => {
             <div className="flex flex-col gap-1">
               {['everyone', 'followers', 'following'].map((opt) => (
                 <button
+                  type="button"
                   key={opt}
                   onClick={() => setAudience(opt)}
                   className={`flex items-center justify-between p-4 rounded-xl active:scale-95 transition-all ${
@@ -186,8 +197,9 @@ const EditReelSheet = ({ isOpen, onClose, reelData, onUpdate }) => {
           {/* Toggles */}
           <div className="flex flex-col">
             <label className={`text-[12px] font-bold uppercase tracking-wider mb-2 block ${isDarkMode ? 'text-white/30' : 'text-black/30'}`}>Permissions</label>
-            <Toggle label="Allow comments" value={allowComments} onChange={setAllowComments} />
-            <Toggle label="Allow downloads" value={allowDownload} onChange={setAllowDownload} />
+            <Toggle label="Allow comments" value={allowComments} onChange={setAllowComments} isDarkMode={isDarkMode} />
+            <Toggle label="Allow downloads" value={allowDownload} onChange={setAllowDownload} isDarkMode={isDarkMode} />
+            <Toggle label="Allow Duet" value={allowDuet} onChange={setAllowDuet} isDarkMode={isDarkMode} />
           </div>
         </div>
       </div>

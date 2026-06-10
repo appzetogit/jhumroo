@@ -1,7 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { BiChevronLeft, BiCloudUpload, BiX, BiMap, BiLink, BiMusic } from 'react-icons/bi';
+import AdCalendarPicker from '../../../../components/AdCalendarPicker';
 import { useTheme } from '../../../../context/ThemeContext';
+import { useAuth } from '../../../../context/AuthContext';
 import adService from '../../../../services/adService';
 
 import { INDIAN_STATES, STATE_DISTRICTS } from '../../../../utils/indiaLocations';
@@ -29,8 +31,10 @@ const COUNTRY_STATES = {
 const CreateAdPage = () => {
   const navigate = useNavigate();
   const { isDarkMode } = useTheme();
+  const { user: reqUser } = useAuth();
   const fileInputRef = useRef(null);
   
+  const [pricing, setPricing] = useState({ shopPricePerDay: 0, chatPricePerDay: 0 });
   const [loading, setLoading] = useState(false);
   const [media, setMedia] = useState(null);
   const [mediaPreview, setMediaPreview] = useState('');
@@ -46,9 +50,46 @@ const CreateAdPage = () => {
   const [targetStates, setTargetStates] = useState([]);
   const [targetDistricts, setTargetDistricts] = useState([]);
   const [isMapLoaded, setIsMapLoaded] = useState(false);
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+
+  // Today's date string for min validation
+  const todayStr = new Date().toISOString().split('T')[0];
+
+  // Compute duration and total price
+  const pricePerDay = adType === 'chat' ? pricing.chatPricePerDay : pricing.shopPricePerDay;
+  const durationDays = (() => {
+    if (!startDate || !endDate) return 0;
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    const diff = Math.round((end - start) / (1000 * 60 * 60 * 24));
+    return diff > 0 ? diff : 0;
+  })();
+  const totalAmount = Math.round(pricePerDay * durationDays);
+
+  // Helpers used by quick-select buttons
+  const applyStartDate = (ymd) => setStartDate(ymd);
+  const applyEndDate = (ymd) => setEndDate(ymd);
 
   // Google Maps API Key from env
   const GOOGLE_MAP_API_KEY = import.meta.env.VITE_GOOGLE_MAP_API_KEY;
+
+  useEffect(() => {
+    const fetchPricing = async () => {
+      try {
+        const res = await adService.getPricing();
+        if (res.success && res.pricing) {
+          setPricing({
+            shopPricePerDay: res.pricing.shopPricePerDay ?? res.pricing.shopPrice ?? 0,
+            chatPricePerDay: res.pricing.chatPricePerDay ?? res.pricing.chatPrice ?? 0
+          });
+        }
+      } catch (err) {
+        console.error('Failed to fetch pricing:', err);
+      }
+    };
+    fetchPricing();
+  }, []);
 
   useEffect(() => {
     const scriptId = 'google-maps-script';
@@ -118,11 +159,26 @@ const CreateAdPage = () => {
     }
   };
 
+  const loadRazorpayScript = () => {
+    return new Promise((resolve) => {
+      const script = document.createElement('script');
+      script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+      script.async = true;
+      script.onload = () => resolve(true);
+      script.onerror = () => resolve(false);
+      document.body.appendChild(script);
+    });
+  };
+
   const handleSubmit = async () => {
     // Basic validation
     if (!media) return alert('Please upload a video or photo for your advertisement');
     if (!caption.trim()) return alert('Please enter a caption for your ad');
     
+    // Date range validation
+    if (!startDate || !endDate) return alert('Please select a start date and end date for your advertisement.');
+    if (durationDays < 1) return alert('End date must be after start date.');
+
     // Ad type specific validation
     if (adType === 'shop') {
       if (!link.trim()) return alert('Please enter the Shop Link (URL)');
@@ -152,11 +208,74 @@ const CreateAdPage = () => {
       formData.append('targetCountry', targetCountry);
       formData.append('targetState', JSON.stringify(targetStates));
       formData.append('targetDistricts', JSON.stringify(targetDistricts));
+      formData.append('startDate', startDate);
+      formData.append('endDate', endDate);
 
       const res = await adService.createAd(formData);
       if (res.success) {
-        alert('Advertisement created successfully!');
-        navigate('/settings/ads-manager');
+        if (res.order) {
+          const isScriptLoaded = await loadRazorpayScript();
+          if (!isScriptLoaded) {
+            alert('Failed to load Razorpay SDK. Please check your internet connection.');
+            setLoading(false);
+            return;
+          }
+
+          const options = {
+            key: res.razorpayKeyId,
+            amount: res.order.amount,
+            currency: res.order.currency,
+            name: 'Jhumroo Ads',
+            description: `Create Advertisement (${adType === 'shop' ? 'Shop Link' : 'Chat WhatsApp'})`,
+            order_id: res.order.id,
+            handler: async function (response) {
+              setLoading(true);
+              try {
+                const verifyRes = await adService.verifyPayment({
+                  adId: res.ad._id,
+                  razorpay_order_id: response.razorpay_order_id,
+                  razorpay_payment_id: response.razorpay_payment_id,
+                  razorpay_signature: response.razorpay_signature
+                });
+                if (verifyRes.success) {
+                  alert('Payment successful! Your advertisement has been submitted for admin approval.');
+                  navigate('/settings/ads-manager');
+                } else {
+                  alert(verifyRes.message || 'Payment verification failed.');
+                }
+              } catch (verifyErr) {
+                console.error('Payment verification error:', verifyErr);
+                alert('Failed to verify payment with server. Please contact support.');
+              } finally {
+                setLoading(false);
+              }
+            },
+            prefill: {
+              name: reqUser?.fullName || '',
+              email: reqUser?.email || '',
+              contact: reqUser?.phoneNumber || ''
+            },
+            theme: {
+              color: '#FE2C55',
+            },
+            modal: {
+              ondismiss: async function () {
+                try {
+                  await adService.deleteAd(res.ad._id);
+                } catch (err) {
+                  console.error('Failed to clean up unpaid ad:', err);
+                }
+                alert('Payment cancelled.');
+              }
+            }
+          };
+
+          const paymentObject = new window.Razorpay(options);
+          paymentObject.open();
+        } else {
+          alert('Advertisement created successfully!');
+          navigate('/settings/ads-manager');
+        }
       }
     } catch (error) {
       console.error('Failed to create ad:', error);
@@ -171,20 +290,28 @@ const CreateAdPage = () => {
   return (
     <div className="page-container theme-surface-page flex flex-col min-h-screen">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 pt-6 pb-4 shrink-0 relative border-b theme-panel-divider">
-        <button 
-          onClick={() => navigate(-1)}
-          className="theme-icon-button w-10 h-10 rounded-full flex items-center justify-center z-10"
-        >
-          <BiChevronLeft size={24} className="theme-text-primary" />
-        </button>
-        <h2 className="theme-text-primary text-[17px] font-bold absolute left-0 right-0 text-center">Create Advertisement</h2>
+      <div className="flex items-center justify-between px-4 pt-6 pb-4 shrink-0 border-b theme-panel-divider">
+        <div className="flex items-center gap-2">
+          <button 
+            onClick={() => navigate(-1)}
+            className="theme-icon-button w-10 h-10 rounded-full flex items-center justify-center"
+          >
+            <BiChevronLeft size={24} className="theme-text-primary" />
+          </button>
+          <h2 className="theme-text-primary text-[17px] font-bold">Create Advertisement</h2>
+        </div>
         <button 
           onClick={handleSubmit}
           disabled={loading || !media}
-          className={`z-10 text-[15px] font-bold ${loading || !media ? 'text-gray-400' : 'text-[#FE2C55]'}`}
+          className={`text-[15px] font-bold ${loading || !media ? 'text-gray-400' : 'text-[#FE2C55]'}`}
         >
-          {loading ? 'Creating...' : 'Create'}
+          {loading ? 'Processing...' : (
+            pricePerDay > 0 && durationDays > 0
+              ? `Pay ₹${totalAmount}`
+              : pricePerDay > 0
+              ? `₹${pricePerDay}/day`
+              : 'Create'
+          )}
         </button>
       </div>
 
@@ -238,6 +365,52 @@ const CreateAdPage = () => {
               >
                 Chat (WhatsApp)
               </button>
+            </div>
+
+            {/* Date Range Picker */}
+            <div className="theme-panel-card p-4 rounded-[20px]">
+              <div className="flex items-center gap-3 mb-4">
+                <span className="text-[20px]">📅</span>
+                <div>
+                  <h3 className="theme-text-primary text-[15px] font-bold">Ad Duration <span className="text-red-500">*</span></h3>
+                  <p className="theme-text-muted text-[12px]">Choose the dates your ad will be live.</p>
+                </div>
+              </div>
+              {/* Calendar Picker */}
+              <AdCalendarPicker
+                startDate={startDate}
+                endDate={endDate}
+                onStartChange={(ymd) => {
+                  setStartDate(ymd);
+                  if (endDate && ymd >= endDate) setEndDate('');
+                }}
+                onEndChange={(ymd) => setEndDate(ymd)}
+                isDarkMode={isDarkMode}
+              />
+
+              {/* Live Cost Calculator */}
+              {durationDays > 0 ? (
+                <div className="mt-4 rounded-[16px] overflow-hidden" style={{ background: 'linear-gradient(135deg, rgba(254,44,85,0.08) 0%, rgba(254,44,85,0.03) 100%)', border: '1px solid rgba(254,44,85,0.2)' }}>
+                  <div className="px-4 py-4 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[#FE2C55] text-[18px]">🧮</span>
+                      <div>
+                        <p className="theme-text-primary text-[13px] font-bold">{durationDays} day{durationDays !== 1 ? 's' : ''} × ₹{pricePerDay}/day</p>
+                        <p className="theme-text-muted text-[11px]">Total campaign cost</p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-[#FE2C55] text-[22px] font-black">₹{totalAmount}</p>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                pricePerDay > 0 && (
+                  <div className="mt-3 px-3 py-2 rounded-xl bg-black/5 flex items-center gap-2">
+                    <span className="theme-text-muted text-[12px]">Rate: <strong className="text-[#FE2C55]">₹{pricePerDay}/day</strong> · Pick dates above to see total</span>
+                  </div>
+                )
+              )}
             </div>
 
             <div className="theme-panel-card p-4 rounded-[20px]">

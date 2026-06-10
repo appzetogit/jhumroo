@@ -21,6 +21,34 @@ const OtpScreen = ({ phoneNumber, generatedOtp, onVerifySuccess, onBack, onRegen
     }
   }, [timer]);
 
+  const handleVerify = (code) => {
+    console.log('🔍 Verifying OTP:', code);
+    
+    if (timer === 0) {
+      setError('OTP Expired. Please resend.');
+      setOtp('');
+      inputRefs.current[0]?.focus();
+      return;
+    }
+
+    // Call backend API to verify OTP
+    setLoading(true);
+    verifyOTP(phoneNumber, code)
+      .then((response) => {
+        console.log('✨ OTP Verified! Auth successful:', response);
+        inputRefs.current.forEach(ref => ref?.blur());
+        setLoading(false);
+        onVerifySuccess(response.user);
+      })
+      .catch((err) => {
+        // console.error('❌ OTP verification failed:', err);
+        setError(err?.message || 'Incorrect code. Please try again.');
+        setOtp('');
+        setLoading(false);
+        inputRefs.current[0]?.focus();
+      });
+  };
+
   // Handle OTP digit entry
   const handleChange = (index, value) => {
     if (!/^\d*$/.test(value)) return;
@@ -34,6 +62,10 @@ const OtpScreen = ({ phoneNumber, generatedOtp, onVerifySuccess, onBack, onRegen
     
     if (value && index < OTP_LENGTH - 1) {
       inputRefs.current[index + 1]?.focus();
+    }
+
+    if (joined.length === OTP_LENGTH) {
+      handleVerify(joined);
     }
   };
 
@@ -74,36 +106,6 @@ const OtpScreen = ({ phoneNumber, generatedOtp, onVerifySuccess, onBack, onRegen
       }
     };
   }, []);
-
-  useEffect(() => {
-    if (otp.length === OTP_LENGTH) {
-      console.log('🔍 Verifying OTP:', otp);
-      
-      if (timer === 0) {
-        setError('OTP Expired. Please resend.');
-        setOtp('');
-        inputRefs.current[0]?.focus();
-        return;
-      }
-
-      // Call backend API to verify OTP
-      setLoading(true);
-      verifyOTP(phoneNumber, otp)
-        .then((response) => {
-          console.log('✨ OTP Verified! Auth successful:', response);
-          inputRefs.current.forEach(ref => ref?.blur());
-          setLoading(false);
-          onVerifySuccess(response.user);
-        })
-        .catch((err) => {
-          // console.error('❌ OTP verification failed:', err);
-          setError(err?.message || 'Incorrect code. Please try again.');
-          setOtp('');
-          setLoading(false);
-          inputRefs.current[0]?.focus();
-        });
-    }
-  }, [otp, timer, phoneNumber, verifyOTP, onVerifySuccess]);
 
   const formatTime = (seconds) => {
     const m = Math.floor(seconds / 60);

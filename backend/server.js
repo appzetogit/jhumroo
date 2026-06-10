@@ -25,6 +25,7 @@ import supportRoutes from './modules/support/support.routes.js';
 import staticPageRoutes from './modules/staticPage/staticPage.routes.js';
 import adRoutes from './modules/ad/routes/ad.routes.js';
 import recRoutes from './modules/recommendation/routes/rec.routes.js';
+import { expireAds } from './cron/ad_expiry.js';
 
 // Import Admin Routes
 import adminAuthRoutes from './modules/admin/routes/auth.routes.js';
@@ -50,6 +51,11 @@ connectDB();
 
 // Initialize Socket.io
 initSocket(server);
+
+// Schedule cron: expire ads every hour
+expireAds(); // run immediately on startup
+setInterval(expireAds, 60 * 60 * 1000); // then every 1 hour
+console.log('⏰ Ad expiry cron scheduled (every 1 hour)');
 
 // Middleware
 app.use(helmet()); // Security headers

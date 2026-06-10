@@ -102,7 +102,9 @@ export const completeUpload = asyncHandler(async (req, res) => {
     location, 
     music,
     edits,
-    thumbnailUrl  // Optional: client-generated cover thumbnail
+    thumbnailUrl,  // Optional: client-generated cover thumbnail
+    isRemix,
+    originalReel
   } = req.body;
 
   // Get raw video URL
@@ -133,6 +135,8 @@ export const completeUpload = asyncHandler(async (req, res) => {
     captionLanguage: captionLanguage || 'English',
     isAgeRestricted: isAgeRestricted === 'true' || isAgeRestricted === true,
     location: parseLocation(location),
+    isRemix: isRemix === 'true' || isRemix === true,
+    originalReel: originalReel || undefined,
     music: music ? {
       name: music.title || music.name || 'Original Sound',
       artist: music.artist || 'Original Artist',
@@ -208,7 +212,9 @@ export const createReel = asyncHandler(async (req, res) => {
     location, 
     music,
     edits, 
-    audience 
+    audience,
+    isRemix,
+    originalReel
   } = req.body;
 
   // Upload video to AWS S3
@@ -253,7 +259,9 @@ export const createReel = asyncHandler(async (req, res) => {
     isAgeRestricted: isAgeRestricted === 'true' || isAgeRestricted === true,
     location: parseLocation(location),
     edits: edits ? (typeof edits === 'string' ? JSON.parse(edits) : edits) : undefined,
-    audience: audience || 'everyone'
+    audience: audience || 'everyone',
+    isRemix: isRemix === 'true' || isRemix === true,
+    originalReel: originalReel || undefined
   });
 
   // Update user reel count
@@ -287,7 +295,10 @@ export const createReel = asyncHandler(async (req, res) => {
        console.log(`[ReelController] Gracefully fell back to completed status for reel ${reel._id} in createReel`);
     });
 
-  await reel.populate('user', 'username fullName profilePicture isVerified downloadPrivacy');
+  await reel.populate([
+    { path: 'user', select: 'username fullName profilePicture isVerified downloadPrivacy isPrivate' },
+    { path: 'originalReel', populate: { path: 'user', select: 'username fullName profilePicture isVerified' } }
+  ]);
 
   res.status(201).json({
     success: true,
@@ -429,8 +440,9 @@ export const getFeedReels = asyncHandler(async (req, res) => {
 
   // Populate user data
   const reels = await Reel.populate(pageReels, [
-    { path: 'user', select: 'username fullName profilePicture isVerified downloadPrivacy' },
-    { path: 'music.audioId' }
+    { path: 'user', select: 'username fullName profilePicture isVerified downloadPrivacy isPrivate' },
+    { path: 'music.audioId' },
+    { path: 'originalReel', populate: { path: 'user', select: 'username fullName profilePicture isVerified' } }
   ]);
 
   // Inject Ads and Like/Save status
@@ -531,8 +543,9 @@ export const getFollowingReels = asyncHandler(async (req, res) => {
   const reels = await Reel.find(query)
     .sort({ _id: -1 })
     .limit(limit)
-    .populate('user', 'username fullName profilePicture isVerified downloadPrivacy')
+    .populate('user', 'username fullName profilePicture isVerified downloadPrivacy isPrivate')
     .populate('music.audioId')
+    .populate({ path: 'originalReel', populate: { path: 'user', select: 'username fullName profilePicture isVerified' } })
     .lean();
 
   const reelIds = reels.map(r => r._id);
@@ -690,8 +703,9 @@ export const getTrendingReels = asyncHandler(async (req, res) => {
 
   const results = await Reel.aggregate(pipeline);
   const reels = await Reel.populate(results, [
-    { path: 'user', select: 'username fullName profilePicture isVerified' },
-    { path: 'music.audioId' }
+    { path: 'user', select: 'username fullName profilePicture isVerified isPrivate' },
+    { path: 'music.audioId' },
+    { path: 'originalReel', populate: { path: 'user', select: 'username fullName profilePicture isVerified' } }
   ]);
 
   // Add liked/saved status
@@ -780,8 +794,9 @@ export const submitReelAnalytics = asyncHandler(async (req, res) => {
  */
 export const getReel = asyncHandler(async (req, res) => {
   const reel = await Reel.findById(req.params.id)
-    .populate('user', 'username fullName profilePicture isVerified downloadPrivacy')
+    .populate('user', 'username fullName profilePicture isVerified downloadPrivacy isPrivate')
     .populate('music.audioId')
+    .populate({ path: 'originalReel', populate: { path: 'user', select: 'username fullName profilePicture isVerified' } })
     .lean();
 
   if (!reel) {

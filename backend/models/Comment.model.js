@@ -102,8 +102,10 @@ commentSchema.methods.extractMentions = async function () {
   }
 };
 
-// Pre-save middleware to extract mentions
+// Pre-save middleware to extract mentions and set status flags
 commentSchema.pre('save', async function (next) {
+  this._wasNew = this.isNew;
+  this._wasDeleted = this.isModified('isDeleted') && this.isDeleted === true;
   if (this.isModified('text')) {
     await this.extractMentions();
   }
@@ -116,27 +118,71 @@ commentSchema.index({ parentComment: 1, createdAt: -1 });
 
 // Update reel/ad comment count & replies count
 commentSchema.post('save', async function (doc) {
-  if (!doc.parentComment) {
-    if (doc.reel) {
-      const Reel = mongoose.model('Reel');
-      await Reel.findByIdAndUpdate(doc.reel, {
-        $inc: { 'stats.commentsCount': 1 }
-      });
-    } else if (doc.ad) {
-      const Ad = mongoose.model('Ad');
-      await Ad.findByIdAndUpdate(doc.ad, {
-        $inc: { 'stats.commentsCount': 1 }
+  if (doc._wasNew && !doc.isDeleted) {
+    if (!doc.parentComment) {
+      if (doc.reel) {
+        const Reel = mongoose.model('Reel');
+        await Reel.findByIdAndUpdate(doc.reel, {
+          $inc: { 'stats.commentsCount': 1 }
+        });
+      } else if (doc.ad) {
+        const Ad = mongoose.model('Ad');
+        await Ad.findByIdAndUpdate(doc.ad, {
+          $inc: { 'stats.commentsCount': 1 }
+        });
+      }
+    } else {
+      // Update parent comment reply count
+      await mongoose.model('Comment').findByIdAndUpdate(doc.parentComment, {
+        $inc: { repliesCount: 1 }
       });
     }
-  } else {
-    // Update parent comment reply count
-    await mongoose.model('Comment').findByIdAndUpdate(doc.parentComment, {
-      $inc: { repliesCount: 1 }
-    });
+  } else if (doc._wasDeleted) {
+    if (!doc.parentComment) {
+      if (doc.reel) {
+        const Reel = mongoose.model('Reel');
+        await Reel.findByIdAndUpdate(doc.reel, {
+          $inc: { 'stats.commentsCount': -1 }
+        });
+      } else if (doc.ad) {
+        const Ad = mongoose.model('Ad');
+        await Ad.findByIdAndUpdate(doc.ad, {
+          $inc: { 'stats.commentsCount': -1 }
+        });
+      }
+    } else {
+      // Update parent comment reply count
+      await mongoose.model('Comment').findByIdAndUpdate(doc.parentComment, {
+        $inc: { repliesCount: -1 }
+      });
+    }
   }
 });
 
-// Update counts on delete
+// Update counts on hard delete (document-level)
+commentSchema.post('deleteOne', { document: true, query: false }, async function (doc) {
+  if (doc) {
+    if (!doc.parentComment) {
+      if (doc.reel) {
+        const Reel = mongoose.model('Reel');
+        await Reel.findByIdAndUpdate(doc.reel, {
+          $inc: { 'stats.commentsCount': -1 }
+        });
+      } else if (doc.ad) {
+        const Ad = mongoose.model('Ad');
+        await Ad.findByIdAndUpdate(doc.ad, {
+          $inc: { 'stats.commentsCount': -1 }
+        });
+      }
+    } else {
+      await mongoose.model('Comment').findByIdAndUpdate(doc.parentComment, {
+        $inc: { repliesCount: -1 }
+      });
+    }
+  }
+});
+
+// Update counts on delete via findOneAndUpdate
 commentSchema.post('findOneAndUpdate', async function (doc) {
   if (doc && doc.isDeleted) {
     if (!doc.parentComment) {

@@ -190,6 +190,10 @@ const userSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User'
     }],
+    blockedCommenters: [{
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
+    }],
     liveLocation: {
       type: {
         type: String,
