@@ -7,6 +7,7 @@ import Follow from '../../../models/Follow.model.js';
 import Like from '../../../models/Like.model.js';
 import { asyncHandler } from '../../../middleware/errorHandler.js';
 import { createNotification } from '../../../utils/notificationService.js';
+import { getIO } from '../../../config/socket.js';
 
 /**
  * Helper function to populate comment with user details and follow status
@@ -240,6 +241,26 @@ export const createComment = asyncHandler(async (req, res) => {
 
   // Add follow status for Instagram-like experience
   const enrichedComments = await populateCommentWithUserDetails([comment], req.user._id);
+
+  // Broadcast real-time stats update if not an Ad
+  if (!isAd) {
+    try {
+      const io = getIO();
+      const updatedReel = await Reel.findById(reelId).select('stats');
+      if (updatedReel) {
+        io.emit('reel_stats_updated', {
+          reelId,
+          stats: {
+            likesCount: updatedReel.stats.likesCount,
+            commentsCount: updatedReel.stats.commentsCount,
+            sharesCount: updatedReel.stats.sharesCount
+          }
+        });
+      }
+    } catch (err) {
+      console.error('[createComment] Failed to broadcast real-time comment stats update:', err);
+    }
+  }
 
   res.status(201).json({
     success: true,
@@ -554,6 +575,26 @@ export const deleteComment = asyncHandler(async (req, res) => {
   comment.isDeleted = true;
   comment.text = '[Comment deleted]';
   await comment.save();
+
+  // Broadcast real-time stats update if it was on a Reel
+  if (comment.reel) {
+    try {
+      const io = getIO();
+      const updatedReel = await Reel.findById(comment.reel).select('stats');
+      if (updatedReel) {
+        io.emit('reel_stats_updated', {
+          reelId: comment.reel.toString(),
+          stats: {
+            likesCount: updatedReel.stats.likesCount,
+            commentsCount: updatedReel.stats.commentsCount,
+            sharesCount: updatedReel.stats.sharesCount
+          }
+        });
+      }
+    } catch (err) {
+      console.error('[deleteComment] Failed to broadcast real-time comment stats update:', err);
+    }
+  }
 
   res.status(200).json({
     success: true,

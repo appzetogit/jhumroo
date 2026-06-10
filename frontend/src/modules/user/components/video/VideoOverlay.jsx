@@ -100,6 +100,11 @@ const VideoOverlay = ({ reelId, username, caption, musicName, isLiked, likes, co
       if (platform === 'whatsapp') {
         window.open(`https://wa.me/?text=${encodeURIComponent(shareText + ' ' + shareUrl)}`, '_blank');
         shared = true;
+      } else if (platform === 'instagram') {
+        await navigator.clipboard.writeText(shareUrl);
+        alert('Link copied! Open Instagram to share.');
+        window.open('https://instagram.com', '_blank');
+        shared = true;
       } else if (platform === 'messenger') {
         window.open(`fb-messenger://share/?link=${encodeURIComponent(shareUrl)}`, '_blank');
         shared = true;
@@ -304,7 +309,7 @@ const VideoOverlay = ({ reelId, username, caption, musicName, isLiked, likes, co
              
 
              {/* Share */}
-             <div className="flex flex-col items-center text-white tap-effect" onClick={(e) => { e.stopPropagation(); handleShare('general'); }} style={{ pointerEvents: 'auto' }}>
+             <div className="flex flex-col items-center text-white tap-effect" onClick={(e) => { e.stopPropagation(); setIsShareOpen(true); }} style={{ pointerEvents: 'auto' }}>
                 <svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="white" stroke="white" strokeWidth="0" strokeLinecap="round" strokeLinejoin="round">
                     <path d="m22 2-7 20-4-9-9-4Z"></path>
                     <path d="M22 2 11 13"></path>
@@ -392,7 +397,7 @@ const VideoOverlay = ({ reelId, username, caption, musicName, isLiked, likes, co
          onSaveClick={onSaveClick}
          onShareClick={() => {
            setIsMoreOpen(false);
-           handleShare('general');
+           setIsShareOpen(true);
          }}
          onReportClick={() => {
            setIsMoreOpen(false);

@@ -4,6 +4,7 @@ import VideoOverlay from './VideoOverlay';
 import AddToFavoritesModal from '../modals/AddToFavoritesModal';
 import reelService from '../../../../services/reelService';
 import adService from '../../../../services/adService';
+import { useSocket } from '../../../../context/SocketContext';
 
 const VideoCard = ({ videoData, isActive, preload = 'none' }) => {
   const videoRef = useRef(null);
@@ -52,6 +53,24 @@ const VideoCard = ({ videoData, isActive, preload = 'none' }) => {
     setIsSaved(!!localVideoData.isSaved);
     setLikesCount(Number(localVideoData.stats?.likesCount ?? localVideoData.likes ?? 0));
   }, [localVideoData]);
+
+  const socket = useSocket();
+
+  useEffect(() => {
+    if (!socket || !reelId) return;
+
+    const handleStatsUpdate = (data) => {
+      if (data.reelId === reelId && data.stats) {
+        handleUpdate({ stats: data.stats });
+      }
+    };
+
+    socket.on('reel_stats_updated', handleStatsUpdate);
+
+    return () => {
+      socket.off('reel_stats_updated', handleStatsUpdate);
+    };
+  }, [socket, reelId]);
 
   // Track view for image ads (no video playback)
   useEffect(() => {

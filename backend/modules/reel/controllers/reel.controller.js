@@ -15,6 +15,7 @@ import { deleteFile } from '../../../config/cloudinary.js';
 import RecommendationEngine from '../../../utils/recommendationEngine.js';
 import WatchAnalytics from '../../../models/WatchAnalytics.model.js';
 import { isUserAllowedToViewReels } from '../../../utils/geoHelper.js';
+import { getIO } from '../../../config/socket.js';
 import fs from 'fs';
 import axios from 'axios';
 
@@ -602,13 +603,30 @@ export const shareReel = asyncHandler(async (req, res) => {
   const { id: reelId } = req.params;
 
   // Increment share count
-  await Reel.findByIdAndUpdate(reelId, {
-    $inc: { 'stats.sharesCount': 1 }
-  });
+  const updatedReel = await Reel.findByIdAndUpdate(
+    reelId,
+    { $inc: { 'stats.sharesCount': 1 } },
+    { new: true }
+  );
 
   // Update user interest profile if logged in
   if (req.user) {
     RecommendationEngine.updateUserInterests(req.user._id, reelId, 'share');
+  }
+
+  // Broadcast real-time share stats update
+  try {
+    const io = getIO();
+    io.emit('reel_stats_updated', {
+      reelId,
+      stats: {
+        sharesCount: updatedReel.stats.sharesCount,
+        likesCount: updatedReel.stats.likesCount,
+        commentsCount: updatedReel.stats.commentsCount
+      }
+    });
+  } catch (err) {
+    console.error('[shareReel] Failed to broadcast real-time stats update:', err);
   }
 
   res.status(200).json({ success: true });
@@ -966,6 +984,23 @@ export const toggleLike = asyncHandler(async (req, res) => {
       }
     }
 
+    // Broadcast real-time stats update if not an Ad
+    if (!isAd && updatedContent) {
+      try {
+        const io = getIO();
+        io.emit('reel_stats_updated', {
+          reelId: contentId,
+          stats: {
+            likesCount: updatedContent.stats.likesCount,
+            commentsCount: updatedContent.stats.commentsCount,
+            sharesCount: updatedContent.stats.sharesCount
+          }
+        });
+      } catch (err) {
+        console.error('[toggleLike] Failed to broadcast real-time stats update:', err);
+      }
+    }
+
     return res.status(200).json({
       success: true,
       isLiked: false,
@@ -1017,6 +1052,23 @@ export const toggleLike = asyncHandler(async (req, res) => {
             message: `${req.user.username} liked your reel`
           }).catch(err => console.error('[toggleLike] Notification failed:', err));
         }
+      }
+    }
+
+    // Broadcast real-time stats update if not an Ad
+    if (!isAd && updatedContent) {
+      try {
+        const io = getIO();
+        io.emit('reel_stats_updated', {
+          reelId: contentId,
+          stats: {
+            likesCount: updatedContent.stats.likesCount,
+            commentsCount: updatedContent.stats.commentsCount,
+            sharesCount: updatedContent.stats.sharesCount
+          }
+        });
+      } catch (err) {
+        console.error('[toggleLike] Failed to broadcast real-time stats update:', err);
       }
     }
 
