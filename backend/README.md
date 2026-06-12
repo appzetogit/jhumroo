@@ -65,7 +65,6 @@ backend/
 ├── .env                   # Environment variables
 ├── .gitignore
 ├── package.json
-├── COMMENTS_API.md       # Comments API documentation
 └── server.js             # Entry point
 ```
 
