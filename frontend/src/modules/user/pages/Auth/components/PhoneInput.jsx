@@ -6,7 +6,9 @@ import { useAuth } from '../../../../../context/AuthContext';
 const PhoneInput = ({ onNext, onBack, mode = 'signup', isThemed = false }) => {
   const navigate = useNavigate();
   const { sendOTP } = useAuth();
-  const [phoneNumber, setPhoneNumber] = useState('');
+  const [phoneNumber, setPhoneNumber] = useState(() => {
+    return sessionStorage.getItem('temp_phone_number') || '';
+  });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -73,7 +75,11 @@ const PhoneInput = ({ onNext, onBack, mode = 'signup', isThemed = false }) => {
               placeholder="Enter Your Phone Number"
               autoFocus
               value={phoneNumber}
-              onChange={(e) => setPhoneNumber(e.target.value.replace(/\D/g, '').slice(0, 10))}
+              onChange={(e) => {
+                const val = e.target.value.replace(/\D/g, '').slice(0, 10);
+                setPhoneNumber(val);
+                sessionStorage.setItem('temp_phone_number', val);
+              }}
               className={`flex-1 pl-4 text-[17px] font-bold outline-none bg-transparent ${isThemed ? 'text-white placeholder:text-white/45' : 'text-black placeholder:text-gray-600'}`}
              />
          </div>

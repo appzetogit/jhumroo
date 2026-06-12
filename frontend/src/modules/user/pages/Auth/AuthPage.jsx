@@ -212,6 +212,9 @@ const AuthPage = ({ onComplete, initialMode = 'signup' }) => {
     if (document.activeElement instanceof HTMLElement) {
       document.activeElement.blur();
     }
+    
+    // Clear temp phone number from sessionStorage
+    sessionStorage.removeItem('temp_phone_number');
 
     const isNewUser = userData?.username?.startsWith('user_') || !userData?.isVerified;
     const needsOnboarding = !userData?.isOnboarded;
