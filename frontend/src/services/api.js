@@ -97,8 +97,10 @@ api.interceptors.response.use(
         isRefreshing = true;
 
         const refreshUrl = isAdminRequest ? `${API_BASE_URL}/admin/auth/refresh` : `${API_BASE_URL}/auth/refresh-token`;
-        const refreshToken = isAdminRequest ? localStorage.getItem('jhumroo_admin_refresh_token') : null;
-        const refreshData = isAdminRequest ? { refreshToken } : {};
+        const refreshToken = isAdminRequest 
+          ? localStorage.getItem('jhumroo_admin_refresh_token') 
+          : localStorage.getItem('jhumroo_refresh_token');
+        const refreshData = { refreshToken };
 
         return new Promise(function(resolve, reject) {
           axios.post(refreshUrl, refreshData, { withCredentials: true })
@@ -108,6 +110,12 @@ api.interceptors.response.use(
                 const tokenKey = isAdminRequest ? 'jhumroo_admin_token' : 'jhumroo_token';
                 
                 localStorage.setItem(tokenKey, newToken);
+                
+                if (data.refreshToken) {
+                  const refreshKey = isAdminRequest ? 'jhumroo_admin_refresh_token' : 'jhumroo_refresh_token';
+                  localStorage.setItem(refreshKey, data.refreshToken);
+                }
+                
                 api.defaults.headers.common['Authorization'] = 'Bearer ' + newToken;
                 originalRequest.headers['Authorization'] = 'Bearer ' + newToken;
                 processQueue(null, newToken);
@@ -126,6 +134,7 @@ api.interceptors.response.use(
               } else {
                 localStorage.removeItem('jhumroo_token');
                 localStorage.removeItem('jhumroo_user');
+                localStorage.removeItem('jhumroo_refresh_token');
                 const isBrowserOnAdminRoute = typeof window !== 'undefined' && window.location.pathname.startsWith('/admin');
                 if (!isBrowserOnAdminRoute && !window.location.pathname.includes('/auth')) {
                   window.location.href = '/auth';

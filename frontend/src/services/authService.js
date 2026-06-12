@@ -44,6 +44,9 @@ const authService = {
       if (response.success && response.token) {
         localStorage.setItem('jhumroo_token', response.token);
         localStorage.setItem('jhumroo_user', JSON.stringify(response.user));
+        if (response.refreshToken) {
+          localStorage.setItem('jhumroo_refresh_token', response.refreshToken);
+        }
       }
       
       return response;
@@ -116,12 +119,14 @@ const authService = {
       // Clear stored data
       localStorage.removeItem('jhumroo_token');
       localStorage.removeItem('jhumroo_user');
+      localStorage.removeItem('jhumroo_refresh_token');
       
       return response;
     } catch (error) {
       // Clear stored data even if API call fails
       localStorage.removeItem('jhumroo_token');
       localStorage.removeItem('jhumroo_user');
+      localStorage.removeItem('jhumroo_refresh_token');
       throw error;
     }
   },
@@ -153,6 +158,9 @@ const authService = {
       if (response.success && response.token) {
         localStorage.setItem('jhumroo_token', response.token);
         localStorage.setItem('jhumroo_user', JSON.stringify(response.user));
+        if (response.refreshToken) {
+          localStorage.setItem('jhumroo_refresh_token', response.refreshToken);
+        }
       }
       return response;
     } catch (error) {

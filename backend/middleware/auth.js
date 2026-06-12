@@ -146,6 +146,7 @@ export const sendTokenResponse = async (user, statusCode, res, message = 'Succes
       success: true,
       message,
       token,
+      refreshToken,
       user
     });
 };

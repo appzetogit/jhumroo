@@ -132,7 +132,7 @@ export const verifyOTP = asyncHandler(async (req, res) => {
  * @access  Public
  */
 export const refreshToken = asyncHandler(async (req, res) => {
-  const token = req.cookies.refreshToken;
+  const token = req.cookies.refreshToken || req.body.refreshToken || req.headers['x-refresh-token'];
 
   if (!token) {
     return res.status(401).json({
