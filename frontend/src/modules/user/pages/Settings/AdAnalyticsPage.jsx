@@ -63,7 +63,7 @@ const AdAnalyticsPage = () => {
 
   if (loading) {
     return (
-      <div className="page-container theme-surface-page flex items-center justify-center min-h-screen">
+      <div className="page-container pb-0 theme-surface-page flex items-center justify-center min-h-screen">
         <div className="w-8 h-8 border-4 border-[#FE2C55] border-t-transparent rounded-full animate-spin"></div>
       </div>
     );
@@ -71,7 +71,7 @@ const AdAnalyticsPage = () => {
 
   if (!ad) {
     return (
-      <div className="page-container theme-surface-page flex flex-col items-center justify-center min-h-screen p-6 text-center">
+      <div className="page-container pb-0 theme-surface-page flex flex-col items-center justify-center min-h-screen p-6 text-center">
         <h2 className="theme-text-primary text-xl font-bold mb-2">Ad Not Found</h2>
         <button onClick={() => navigate(-1)} className="theme-text-muted">Go Back</button>
       </div>
@@ -97,7 +97,7 @@ const AdAnalyticsPage = () => {
   const hasDistricts = ad.targetDistricts && ad.targetDistricts.length > 0;
 
   return (
-    <div className={`page-container flex flex-col min-h-screen ${isDarkMode ? 'bg-[#0e0e0e]' : 'bg-[#F4F4F4]'}`}>
+    <div className={`page-container pb-0 flex flex-col min-h-screen ${isDarkMode ? 'bg-[#0e0e0e]' : 'bg-[#F4F4F4]'}`}>
       {/* Header */}
       <div className={`flex items-center justify-between px-4 pt-6 pb-4 shrink-0 relative z-10 border-b ${isDarkMode ? 'bg-[#181818] border-white/10' : 'bg-white border-gray-100'}`}>
         <button onClick={() => navigate(-1)} className="w-10 h-10 rounded-full flex items-center justify-center z-20">

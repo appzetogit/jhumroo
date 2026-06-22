@@ -51,7 +51,7 @@ const AdsManagerPage = () => {
   };
 
   return (
-    <div className="page-container theme-surface-page flex flex-col min-h-screen">
+    <div className="page-container pb-0 theme-surface-page flex flex-col min-h-screen">
       {/* Header */}
       <div className="flex items-center justify-between px-4 pt-6 pb-4 shrink-0 relative">
         <button

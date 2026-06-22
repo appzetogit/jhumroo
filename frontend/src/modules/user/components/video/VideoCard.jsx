@@ -1,7 +1,6 @@
 import React, { useRef, useState, useEffect } from 'react';
 import Hls from 'hls.js';
 import VideoOverlay from './VideoOverlay';
-import AddToFavoritesModal from '../modals/AddToFavoritesModal';
 import reelService from '../../../../services/reelService';
 import adService from '../../../../services/adService';
 import { useSocket } from '../../../../context/SocketContext';
@@ -16,8 +15,7 @@ const VideoCard = ({ videoData, isActive, preload = 'none' }) => {
   
   const [playing, setPlaying] = useState(false);
   const [showHeart, setShowHeart] = useState(false);
-  const [showFavoritesModal, setShowFavoritesModal] = useState(false);
-  const [showSavedToast, setShowSavedToast] = useState(false);
+  
   const [isMuted, setIsMuted] = useState(() => {
     const saved = localStorage.getItem('isReelsMuted');
     return saved === null ? true : saved === 'true';
@@ -42,6 +40,19 @@ const VideoCard = ({ videoData, isActive, preload = 'none' }) => {
       viewTrackedRef.current = false;
     }
   }, [videoData]);
+
+  // Sync isMuted state globally among all mounted VideoCards
+  useEffect(() => {
+    const handleMuteSync = (e) => {
+      if (e.detail && typeof e.detail.isMuted === 'boolean') {
+        setIsMuted(e.detail.isMuted);
+      }
+    };
+    window.addEventListener('reelsMuteToggle', handleMuteSync);
+    return () => {
+      window.removeEventListener('reelsMuteToggle', handleMuteSync);
+    };
+  }, []);
 
   const reelId = String(localVideoData._id || localVideoData.id || '');
   const [isLiked, setIsLiked] = useState(() => !!localVideoData.isLiked);
@@ -298,10 +309,20 @@ const VideoCard = ({ videoData, isActive, preload = 'none' }) => {
     if (playing) {
       handlePauseAndRecord();
     } else {
-      videoRef.current?.play().then(() => {
-        setPlaying(true);
-        watchStartTimeRef.current = Date.now();
-      });
+      const playPromise = videoRef.current?.play();
+      if (playPromise !== undefined) {
+        playPromise
+          .then(() => {
+            setPlaying(true);
+            watchStartTimeRef.current = Date.now();
+          })
+          .catch((err) => {
+            if (err.name !== 'AbortError') {
+              console.warn("Video playback failed:", err);
+            }
+            setPlaying(false);
+          });
+      }
     }
   };
 
@@ -318,39 +339,92 @@ const VideoCard = ({ videoData, isActive, preload = 'none' }) => {
     const nextCount = nextLiked ? likesCount + 1 : Math.max(0, likesCount - 1);
     setIsLiked(nextLiked);
     setLikesCount(nextCount);
+
+    // Mutate original props and local states to persist across unmount/remount
+    videoData.isLiked = nextLiked;
+    localVideoData.isLiked = nextLiked;
+    if (videoData.stats) {
+      videoData.stats.likesCount = nextCount;
+    } else {
+      videoData.likes = nextCount;
+    }
+    if (localVideoData.stats) {
+      localVideoData.stats.likesCount = nextCount;
+    } else {
+      localVideoData.likes = nextCount;
+    }
+
     try {
       const response = await reelService.toggleLike(reelId);
       if (response?.success) {
         setLikesCount(response.likesCount);
         setIsLiked(response.isLiked);
+        videoData.isLiked = response.isLiked;
+        localVideoData.isLiked = response.isLiked;
+        if (videoData.stats) {
+          videoData.stats.likesCount = response.likesCount;
+        } else {
+          videoData.likes = response.likesCount;
+        }
+        if (localVideoData.stats) {
+          localVideoData.stats.likesCount = response.likesCount;
+        } else {
+          localVideoData.likes = response.likesCount;
+        }
       }
     } catch (err) {
       setIsLiked(wasLiked);
       setLikesCount(likesCount);
+      videoData.isLiked = wasLiked;
+      localVideoData.isLiked = wasLiked;
+      if (videoData.stats) {
+        videoData.stats.likesCount = likesCount;
+      } else {
+        videoData.likes = likesCount;
+      }
+      if (localVideoData.stats) {
+        localVideoData.stats.likesCount = likesCount;
+      } else {
+        localVideoData.likes = likesCount;
+      }
     }
   };
 
   const handleSaveClick = async () => {
+    const wasSaved = isSaved;
     if (isSaved) {
       setIsSaved(false);
-      try { await reelService.toggleSave(reelId); } catch { setIsSaved(true); }
+      videoData.isSaved = false;
+      localVideoData.isSaved = false;
+      try {
+        await reelService.toggleSave(reelId);
+      } catch {
+        setIsSaved(wasSaved);
+        videoData.isSaved = wasSaved;
+        localVideoData.isSaved = wasSaved;
+      }
       return;
     }
-    const hasSeen = localStorage.getItem('hasSeenFavoritesPopup');
-    if (!hasSeen) { setShowFavoritesModal(true); return; }
     setIsSaved(true);
-    setShowSavedToast(true);
-    setTimeout(() => setShowSavedToast(false), 2500);
+    videoData.isSaved = true;
+    localVideoData.isSaved = true;
     try {
       await reelService.toggleSave(reelId);
     } catch (err) {
-      setIsSaved(false);
-      setShowSavedToast(false);
+      setIsSaved(wasSaved);
+      videoData.isSaved = wasSaved;
+      localVideoData.isSaved = wasSaved;
     }
   };
 
   const handleUpdate = (updatedData) => {
     if (!updatedData) return;
+    // Mutate parent object reference to persist across unmount/remount
+    if (updatedData.stats) {
+      videoData.stats = { ...(videoData.stats || {}), ...updatedData.stats };
+    }
+    Object.assign(videoData, updatedData);
+
     setLocalVideoData(prev => {
       const mergedStats = updatedData.stats
         ? { ...(prev?.stats || {}), ...updatedData.stats }
@@ -364,6 +438,7 @@ const VideoCard = ({ videoData, isActive, preload = 'none' }) => {
     const nextMuted = !isMuted;
     setIsMuted(nextMuted);
     localStorage.setItem('isReelsMuted', String(nextMuted));
+    window.dispatchEvent(new CustomEvent('reelsMuteToggle', { detail: { isMuted: nextMuted } }));
     setShowMuteOverlay(true);
     setTimeout(() => setShowMuteOverlay(false), 800);
   };
@@ -473,36 +548,18 @@ const VideoCard = ({ videoData, isActive, preload = 'none' }) => {
       )}
 
       {!playing && isActive && !showMuteOverlay && !isImageAd && (
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[35] bg-black/30 rounded-full p-4 flex items-center justify-center pointer-events-none transition-opacity duration-200">
-          <svg width="60" height="60" viewBox="0 0 24 24" fill="rgba(255,255,255,0.7)"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[35] bg-black/30 rounded-full p-3 flex items-center justify-center pointer-events-none transition-opacity duration-200">
+          <svg width="36" height="36" viewBox="0 0 24 24" fill="rgba(255,255,255,0.7)"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
         </div>
       )}
 
       {showHeart && (
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[100] animate-heart-beat pointer-events-none drop-shadow-[0_0_15px_rgba(254,44,85,0.5)]">
-          <svg width="120" height="120" viewBox="0 0 24 24" fill="#FE2C55"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
+          <svg width="80" height="80" viewBox="0 0 24 24" fill="#FE2C55"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
         </div>
       )}
 
-      <AddToFavoritesModal
-        isOpen={showFavoritesModal}
-        onCancel={() => setShowFavoritesModal(false)}
-        onConfirm={() => {
-          localStorage.setItem('hasSeenFavoritesPopup', 'true');
-          setShowFavoritesModal(false);
-          handleSaveClick();
-        }}
-      />
 
-      {showSavedToast && (
-        <div className="absolute bottom-[calc(var(--bottom-nav-height)+32px)] left-0 right-0 mx-4 z-50 flex items-center justify-between bg-black/85 backdrop-blur-sm rounded-lg px-4 py-3 animate-scale-in">
-          <div className="flex items-center gap-2">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-            <span className="text-white text-[14px] font-semibold">Added to Favorites</span>
-          </div>
-          <button className="text-white text-[13px] font-bold opacity-80">Manage &gt;</button>
-        </div>
-      )}
     </div>
   );
 };

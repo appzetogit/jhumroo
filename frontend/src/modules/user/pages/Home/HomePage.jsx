@@ -192,7 +192,7 @@ const HomePage = () => {
       onTouchStart={onboardingStep === 2 ? handleFinishOnboarding : undefined}
     >
       {/* Top Navigation */}
-      <div className="absolute top-[var(--safe-area-top)] left-0 w-full flex justify-between items-center px-4 py-6 z-[50] pointer-events-none">
+      <div className="absolute top-[var(--safe-area-top)] left-0 w-full flex justify-between items-center px-4 py-3 z-[50] pointer-events-none">
         <div className="w-8" />
         <div className="flex gap-6 pointer-events-auto">
           {reelId ? (

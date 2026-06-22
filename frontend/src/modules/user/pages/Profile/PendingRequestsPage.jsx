@@ -8,9 +8,9 @@ const RequestCard = ({ user, onAccept, onReject }) => {
   const handleOpenProfile = () => navigate(`/user/${user.username}`);
 
   return (
-    <div className="flex items-center px-4 py-3 gap-3 border-b border-gray-100 bg-white">
+    <div className="flex items-center px-4 py-3 gap-3 border-b border-white/5 bg-[#161616]">
       <div
-        className="w-14 h-14 rounded-full overflow-hidden shrink-0 cursor-pointer border border-gray-100"
+        className="w-14 h-14 rounded-full overflow-hidden shrink-0 cursor-pointer border border-white/5"
         onClick={handleOpenProfile}
       >
         <img 
@@ -20,19 +20,19 @@ const RequestCard = ({ user, onAccept, onReject }) => {
         />
       </div>
       <div className="flex-1 min-w-0 pr-2 cursor-pointer" onClick={handleOpenProfile}>
-        <p className="text-gray-900 font-bold text-[14px] truncate">{user.username}</p>
-        <p className="text-gray-400 text-[12px] truncate">{user.fullName || 'Requested to follow you'}</p>
+        <p className="text-white font-bold text-[14px] truncate">@{user.username}</p>
+        <p className="text-white/40 text-[12px] truncate">{user.fullName || 'Requested to follow you'}</p>
       </div>
       <div className="flex items-center gap-2">
         <button
           onClick={() => onAccept(user._id)}
-          className="px-4 py-[7px] min-w-[85px] rounded-[8px] bg-[#4258ff] text-white text-[14px] font-bold active:scale-95 transition-all"
+          className="px-4 py-[7px] min-w-[85px] rounded-[8px] bg-[#0095F6] text-white text-[14px] font-bold active:scale-95 transition-all"
         >
           Confirm
         </button>
         <button
           onClick={() => onReject(user._id)}
-          className="px-4 py-[7px] min-w-[85px] rounded-[8px] bg-[#f0f2f5] text-gray-900 text-[14px] font-bold active:scale-95 transition-all"
+          className="px-4 py-[7px] min-w-[85px] rounded-[8px] bg-white/10 text-white border border-white/10 text-[14px] font-bold active:scale-95 transition-all"
         >
           Delete
         </button>
@@ -86,13 +86,13 @@ const PendingRequestsPage = () => {
   };
 
   return (
-    <div className="page-container bg-white flex flex-col min-h-screen text-black">
+    <div className="page-container theme-surface-page pb-0 bg-[#161616] flex flex-col min-h-screen text-white">
       {/* Header */}
-      <div className="flex items-center px-4 py-4 shrink-0 bg-white sticky top-0 z-10">
-        <button onClick={() => navigate(-1)} className="text-black active:opacity-60 mr-8">
+      <div className="flex items-center px-4 py-4 shrink-0 bg-[#161616] sticky top-0 z-10 border-b border-white/5">
+        <button onClick={() => navigate(-1)} className="text-white active:opacity-60 mr-8">
           <BiArrowBack size={26} />
         </button>
-        <h2 className="text-[20px] font-bold text-black">Follow requests</h2>
+        <h2 className="text-[20px] font-bold text-white">Follow requests</h2>
       </div>
 
       <div className="flex-1 overflow-y-auto pb-10">
@@ -102,7 +102,7 @@ const PendingRequestsPage = () => {
           </div>
         ) : requests.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-24 px-10 text-center">
-            <p className="text-gray-400 text-[14px]">No pending follow requests.</p>
+            <p className="text-white/40 text-[14px]">No pending follow requests.</p>
           </div>
         ) : (
           <div className="flex flex-col">

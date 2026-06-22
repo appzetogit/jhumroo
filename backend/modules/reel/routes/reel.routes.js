@@ -18,7 +18,8 @@ import {
   shareReel,
   recordWatchTime,
   submitReelAnalytics,
-  downloadReel
+  downloadReel,
+  getReelLikers
 } from '../controllers/reel.controller.js';
 import { protect, optionalAuth } from '../../../middleware/auth.js';
 import { uploadVideo, handleMulterError, uploadThumbnail } from '../../../middleware/upload.js';
@@ -33,6 +34,7 @@ router.get('/trending', optionalAuth, getTrendingReels);
 router.get('/search', optionalAuth, searchReels);
 router.get('/:id', optionalAuth, getReel);
 router.get('/:id/download', optionalAuth, downloadReel);
+router.get('/:id/likers', optionalAuth, getReelLikers);
 router.post('/:id/view', optionalAuth, addView);
 router.post('/:id/share', optionalAuth, shareReel);
 router.post('/:id/watch-time', optionalAuth, recordWatchTime);

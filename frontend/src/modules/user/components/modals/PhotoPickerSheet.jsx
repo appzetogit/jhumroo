@@ -1,21 +1,6 @@
 import React, { useRef } from 'react';
 import { BiCamera, BiImageAlt, BiTrash, BiX } from 'react-icons/bi';
 import { useTheme } from '../../../../context/ThemeContext';
-
-/**
- * PhotoPickerSheet
- * Bottom sheet with Camera & Gallery options for profile photo upload.
- *
- * KEY FIX: Hidden <input> elements are always mounted (never inside isOpen guard)
- * so their refs remain valid even after the sheet animates closed.
- *
- * Props:
- *  isOpen           – boolean
- *  onClose          – () => void
- *  onFileSelected   – (File) => void   called with the chosen File
- *  hasExistingPhoto – boolean          shows "Remove photo" when true
- *  onRemovePhoto    – () => void
- */
 const PhotoPickerSheet = ({
   isOpen,
   onClose,
@@ -25,7 +10,7 @@ const PhotoPickerSheet = ({
 }) => {
   const { isDarkMode } = useTheme();
   const galleryRef = useRef(null);
-  const cameraRef  = useRef(null);
+  const cameraRef = useRef(null);
 
   /* ── File handlers ─────────────────────────────── */
   const handleGalleryChange = (e) => {
@@ -50,7 +35,6 @@ const PhotoPickerSheet = ({
     {
       id: 'camera',
       label: 'Camera',
-      sublabel: 'Selfie ya photo click karo',
       icon: <BiCamera size={24} />,
       color: '#20D5EC',
       bgColor: isDarkMode ? 'rgba(32,213,236,0.12)' : 'rgba(32,213,236,0.1)',
@@ -59,7 +43,6 @@ const PhotoPickerSheet = ({
     {
       id: 'gallery',
       label: 'Gallery',
-      sublabel: 'Phone ki photos mein se select karo',
       icon: <BiImageAlt size={24} />,
       color: '#FE2C55',
       bgColor: isDarkMode ? 'rgba(254,44,85,0.12)' : 'rgba(254,44,85,0.1)',
@@ -94,36 +77,32 @@ const PhotoPickerSheet = ({
           onClick={onClose}
         >
           <div
-            className={`w-full rounded-t-[24px] pb-[calc(var(--safe-area-bottom,0px)+24px)] animate-slide-up ${
-              isDarkMode ? 'bg-[#161823]' : 'bg-white'
-            }`}
+            className={`w-full rounded-t-[24px] pb-[calc(var(--safe-area-bottom,0px)+24px)] animate-slide-up ${isDarkMode ? 'bg-[#161823]' : 'bg-white'
+              }`}
             onClick={(e) => e.stopPropagation()}
           >
             {/* Drag handle */}
             <div className="flex flex-col items-center pt-3 pb-2">
               <div
-                className={`w-10 h-1 rounded-full ${
-                  isDarkMode ? 'bg-white/20' : 'bg-black/10'
-                }`}
+                className={`w-10 h-1 rounded-full ${isDarkMode ? 'bg-white/20' : 'bg-black/10'
+                  }`}
               />
             </div>
 
             {/* Header */}
             <div className="flex items-center justify-between px-5 py-3">
               <h2
-                className={`text-[17px] font-bold ${
-                  isDarkMode ? 'text-white' : 'text-black'
-                }`}
+                className={`text-[17px] font-bold ${isDarkMode ? 'text-white' : 'text-black'
+                  }`}
               >
                 Profile Upload
               </h2>
               <button
                 onClick={onClose}
-                className={`w-8 h-8 rounded-full flex items-center justify-center active:scale-90 transition-transform ${
-                  isDarkMode
-                    ? 'bg-white/10 text-white'
-                    : 'bg-black/5 text-black'
-                }`}
+                className={`w-8 h-8 rounded-full flex items-center justify-center active:scale-90 transition-transform ${isDarkMode
+                  ? 'bg-white/10 text-white'
+                  : 'bg-black/5 text-black'
+                  }`}
               >
                 <BiX size={20} />
               </button>
@@ -135,11 +114,10 @@ const PhotoPickerSheet = ({
                 <button
                   key={opt.id}
                   onClick={opt.action}
-                  className={`flex items-center gap-4 w-full p-4 rounded-[18px] active:scale-[0.97] transition-all text-left ${
-                    isDarkMode
-                      ? 'bg-white/[0.04] hover:bg-white/[0.07]'
-                      : 'bg-black/[0.03] hover:bg-black/[0.05]'
-                  }`}
+                  className={`flex items-center gap-4 w-full p-4 rounded-[18px] active:scale-[0.97] transition-all text-left ${isDarkMode
+                    ? 'bg-white/[0.04] hover:bg-white/[0.07]'
+                    : 'bg-black/[0.03] hover:bg-black/[0.05]'
+                    }`}
                 >
                   <div
                     className="w-12 h-12 rounded-full flex items-center justify-center shrink-0"
@@ -149,16 +127,14 @@ const PhotoPickerSheet = ({
                   </div>
                   <div>
                     <p
-                      className={`text-[15px] font-semibold ${
-                        isDarkMode ? 'text-white' : 'text-black'
-                      }`}
+                      className={`text-[15px] font-semibold ${isDarkMode ? 'text-white' : 'text-black'
+                        }`}
                     >
                       {opt.label}
                     </p>
                     <p
-                      className={`text-[12px] mt-0.5 ${
-                        isDarkMode ? 'text-white/40' : 'text-black/40'
-                      }`}
+                      className={`text-[12px] mt-0.5 ${isDarkMode ? 'text-white/40' : 'text-black/40'
+                        }`}
                     >
                       {opt.sublabel}
                     </p>
@@ -173,11 +149,10 @@ const PhotoPickerSheet = ({
                     onRemovePhoto();
                     onClose();
                   }}
-                  className={`flex items-center gap-4 w-full p-4 rounded-[18px] active:scale-[0.97] transition-all text-left ${
-                    isDarkMode
-                      ? 'bg-white/[0.04] hover:bg-white/[0.07]'
-                      : 'bg-black/[0.03] hover:bg-black/[0.05]'
-                  }`}
+                  className={`flex items-center gap-4 w-full p-4 rounded-[18px] active:scale-[0.97] transition-all text-left ${isDarkMode
+                    ? 'bg-white/[0.04] hover:bg-white/[0.07]'
+                    : 'bg-black/[0.03] hover:bg-black/[0.05]'
+                    }`}
                 >
                   <div
                     className="w-12 h-12 rounded-full flex items-center justify-center shrink-0"
@@ -192,14 +167,13 @@ const PhotoPickerSheet = ({
                   </div>
                   <div>
                     <p className="text-[15px] font-semibold text-[#FF3B30]">
-                      Photo hatao
+                      Remove Photo
                     </p>
                     <p
-                      className={`text-[12px] mt-0.5 ${
-                        isDarkMode ? 'text-white/40' : 'text-black/40'
-                      }`}
+                      className={`text-[12px] mt-0.5 ${isDarkMode ? 'text-white/40' : 'text-black/40'
+                        }`}
                     >
-                      Profile picture remove karo
+                      Remove Profile Picture
                     </p>
                   </div>
                 </button>

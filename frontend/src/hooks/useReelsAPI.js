@@ -19,6 +19,15 @@ export const useReelsAPI = () => {
     hasMoreRef.current = hasMore;
   }, [hasMore]);
 
+  useEffect(() => {
+    const handleReelReported = (e) => {
+      const { reelId } = e.detail;
+      setReels(prev => prev.filter(r => r.id !== reelId));
+    };
+    window.addEventListener('reel-reported', handleReelReported);
+    return () => window.removeEventListener('reel-reported', handleReelReported);
+  }, []);
+
   const fetchFeed = useCallback(async (feedType = 'foryou', isInitial = false, limit = 10) => {
     if (!hasMoreRef.current && !isInitial) return;
     

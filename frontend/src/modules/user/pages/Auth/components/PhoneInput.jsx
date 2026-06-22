@@ -14,7 +14,11 @@ const PhoneInput = ({ onNext, onBack, mode = 'signup', isThemed = false }) => {
 
   const handleSendCode = async () => {
     if (!phoneNumber || phoneNumber.length < 10) {
-      setError('Please enter a valid phone number');
+      setError('Please enter a valid 10-digit mobile number');
+      return;
+    }
+    if (!/^[6-9]\d{9}$/.test(phoneNumber)) {
+      setError('Please enter a valid Indian mobile number (starts with 6–9)');
       return;
     }
     setError('');

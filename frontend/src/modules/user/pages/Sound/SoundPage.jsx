@@ -14,10 +14,7 @@ const SoundPage = () => {
   const decodedMusic = decodeURIComponent(musicName || '');
 
   const [isPlaying, setIsPlaying] = useState(false);
-  const [isSoundSaved, setIsSoundSaved] = useState(() => {
-    const soundFavorites = JSON.parse(localStorage.getItem('soundFavorites') || '[]');
-    return soundFavorites.includes(decodedMusic);
-  });
+  const [isSoundSaved, setIsSoundSaved] = useState(false);
   const [displayVideos, setDisplayVideos] = useState([]);
   const [soundData, setSoundData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -49,23 +46,34 @@ const SoundPage = () => {
       audioRef.current.pause();
       setIsPlaying(false);
     } else {
-      audioRef.current.play();
+      const playPromise = audioRef.current.play();
+      if (playPromise !== undefined) {
+        playPromise.catch((err) => {
+          if (err.name !== 'AbortError') {
+            console.warn("Audio playback failed:", err);
+          }
+          setIsPlaying(false);
+        });
+      }
       setIsPlaying(true);
     }
   };
 
-  const handleToggleFavorite = () => {
-    const soundFavorites = JSON.parse(localStorage.getItem('soundFavorites') || '[]');
-    let newFavorites;
-    
-    if (isSoundSaved) {
-      newFavorites = soundFavorites.filter(name => name !== decodedMusic);
-    } else {
-      newFavorites = [...soundFavorites, decodedMusic];
+  const handleToggleFavorite = async () => {
+    if (!soundData?._id && !soundData?.id) return;
+    // Optimistic update
+    setIsSoundSaved(prev => !prev);
+    try {
+      const response = await audioService.toggleSaveAudio(soundData._id || soundData.id);
+      // Use server truth
+      if (typeof response?.isSaved === 'boolean') {
+        setIsSoundSaved(response.isSaved);
+      }
+    } catch (err) {
+      console.error('Failed to toggle save audio:', err);
+      // Revert on error
+      setIsSoundSaved(prev => !prev);
     }
-    
-    localStorage.setItem('soundFavorites', JSON.stringify(newFavorites));
-    setIsSoundSaved(!isSoundSaved);
   };
 
   const handleUseSound = () => {
@@ -91,6 +99,15 @@ const SoundPage = () => {
     };
   }, []);
 
+  React.useEffect(() => {
+    const handleReelReported = (e) => {
+      const { reelId } = e.detail;
+      setDisplayVideos(prev => prev.filter(r => (r._id || r.id) !== reelId));
+    };
+    window.addEventListener('reel-reported', handleReelReported);
+    return () => window.removeEventListener('reel-reported', handleReelReported);
+  }, []);
+
 
 
   // Fetch sound and videos from API
@@ -98,11 +115,33 @@ const SoundPage = () => {
     const fetchData = async () => {
       setLoading(true);
       try {
-        // 1. Fetch sound details
-        const audios = await audioService.getAllAudios({ q: decodedMusic });
+        // Migrate legacy favorites from localStorage if any exist
+        try {
+          const legacyFavorites = JSON.parse(localStorage.getItem('soundFavorites') || '[]');
+          if (Array.isArray(legacyFavorites) && legacyFavorites.length > 0) {
+            for (const title of legacyFavorites) {
+              const audios = await audioService.getAllAudios({ q: title }).catch(() => []);
+              const match = audios.find(a => a.title.toLowerCase() === title.toLowerCase());
+              if (match && !match.isSaved) {
+                await audioService.toggleSaveAudio(match._id || match.id).catch(() => {});
+              }
+            }
+            localStorage.removeItem('soundFavorites');
+          }
+        } catch (migrationError) {
+          console.error('Failed to migrate legacy favorites:', migrationError);
+        }
+
+        // 1. Fetch sound details (getAllAudios returns isSaved per user via optionalAuth)
+        const audios = await audioService.getAllAudios({ q: decodedMusic }).catch(() => []);
+        const audioList = Array.isArray(audios) ? audios : [];
         // Find exact match or first result
-        const sound = audios.find(a => a.title.toLowerCase() === decodedMusic.toLowerCase()) || audios[0];
+        const sound = audioList.find(a => a.title.toLowerCase() === decodedMusic.toLowerCase()) || audioList[0];
         setSoundData(sound);
+        // Seed saved state from API (isSaved is populated by backend for authenticated users)
+        if (sound && typeof sound.isSaved === 'boolean') {
+          setIsSoundSaved(sound.isSaved);
+        }
 
         // 2. Fetch videos using this sound
         const searchResponse = await reelService.searchReels(decodedMusic);
@@ -121,7 +160,7 @@ const SoundPage = () => {
   }, [decodedMusic]);
 
   return (
-    <div className={`page-container flex flex-col overflow-hidden ${isDarkMode ? 'bg-black text-white' : 'bg-[#f8fafc] text-black'}`}>
+    <div className={`page-container pb-0 flex flex-col overflow-hidden ${isDarkMode ? 'bg-black text-white' : 'bg-[#f8fafc] text-black'}`}>
       {/* Header */}
       <div className={`flex items-center justify-between px-4 pt-4 pb-3 border-b shrink-0 ${isDarkMode ? 'border-white/10' : 'border-black/10'}`}>
         <button
@@ -248,7 +287,7 @@ const SoundPage = () => {
       </div>
 
       {/* "Use this sound" fixed CTA */}
-      <div className="absolute bottom-[calc(var(--bottom-nav-height)+12px)] left-0 right-0 flex justify-center pointer-events-none z-10">
+      <div className="absolute bottom-[12px] left-0 right-0 flex justify-center pointer-events-none z-10">
         <button
           onClick={handleUseSound}
           className="pointer-events-auto flex items-center gap-2 bg-[#FE2C55] text-white px-8 py-3 rounded-full text-[15px] font-bold shadow-[0_4px_15px_rgba(254,44,85,0.4)] active:scale-95 transition-transform"

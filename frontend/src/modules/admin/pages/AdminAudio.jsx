@@ -133,7 +133,15 @@ const AdminAudio = () => {
       setPlayingId(null);
     } else {
       audioPlayer.src = audio.url;
-      audioPlayer.play();
+      const playPromise = audioPlayer.play();
+      if (playPromise !== undefined) {
+        playPromise.catch((err) => {
+          if (err.name !== 'AbortError') {
+            console.warn("Admin audio playback failed:", err);
+          }
+          setPlayingId(null);
+        });
+      }
       setPlayingId(audio._id);
     }
   };

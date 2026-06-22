@@ -50,7 +50,20 @@ export const createAd = asyncHandler(async (req, res) => {
   }
 
   const { caption, link, targetCountry, targetState, targetDistricts, adType, whatsappNumber, welcomeMessage, musicName, isPlatformAd, startDate, endDate } = req.body;
+
+  // Validate WhatsApp number format if objective is Chat (WhatsApp)
+  if (adType === 'chat') {
+    if (!whatsappNumber) {
+      return res.status(400).json({ success: false, message: 'Please enter the WhatsApp number' });
+    }
+    const whatsappRegex = /^\d{10}$/;
+    if (!whatsappRegex.test(whatsappNumber.toString().trim())) {
+      return res.status(400).json({ success: false, message: 'WhatsApp number must be exactly 10 digits and contain only numbers.' });
+    }
+  }
+
   const parsedDistricts = targetDistricts ? (typeof targetDistricts === 'string' ? JSON.parse(targetDistricts) : targetDistricts) : [];
+
   const parsedStates = targetState ? (typeof targetState === 'string' ? (targetState.startsWith('[') ? JSON.parse(targetState) : [targetState].filter(Boolean)) : targetState) : [];
 
   // Validate date range for user ads
@@ -463,9 +476,23 @@ export const updateAd = asyncHandler(async (req, res) => {
   const mediaFile = req.files?.['media']?.[0];
   const musicFile = req.files?.['musicFile']?.[0];
 
+  // Validate WhatsApp number if objective is Chat (WhatsApp)
+  const resolvedAdType = adType !== undefined ? adType : ad.adType;
+  if (resolvedAdType === 'chat') {
+    const resolvedWhatsapp = whatsappNumber !== undefined ? whatsappNumber : ad.whatsappNumber;
+    if (!resolvedWhatsapp) {
+      return res.status(400).json({ success: false, message: 'Please enter the WhatsApp number' });
+    }
+    const whatsappRegex = /^\d{10}$/;
+    if (!whatsappRegex.test(resolvedWhatsapp.toString().trim())) {
+      return res.status(400).json({ success: false, message: 'WhatsApp number must be exactly 10 digits and contain only numbers.' });
+    }
+  }
+
   // Update basic fields
   if (caption !== undefined) ad.caption = caption;
   if (link !== undefined) ad.link = link;
+
   if (adType !== undefined) ad.adType = adType;
   if (whatsappNumber !== undefined) ad.whatsappNumber = whatsappNumber;
   if (welcomeMessage !== undefined) ad.welcomeMessage = welcomeMessage;

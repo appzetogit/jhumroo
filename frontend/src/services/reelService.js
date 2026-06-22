@@ -140,6 +140,24 @@ const reelService = {
   },
 
   /**
+   * Get users who liked a reel
+   * @param {string} reelId - Reel ID
+   * @param {number} page - Page number
+   * @param {number} limit - Items per page
+   * @returns {Promise} Response with users list
+   */
+  getReelLikers: async (reelId, page = 1, limit = 20) => {
+    try {
+      const response = await api.get(`/reels/${reelId}/likers`, {
+        params: { page, limit },
+      });
+      return response;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  /**
    * Save/Unsave reel
    * @param {string} reelId - Reel ID
    * @returns {Promise} Response

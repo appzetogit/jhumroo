@@ -151,9 +151,48 @@ export const getUserProfile = asyncHandler(async (req, res) => {
  * @access  Private
  */
 export const updateProfile = asyncHandler(async (req, res) => {
-  const { username, fullName, bio, email, isPrivate, socialLinks, interests, commentPrivacy, mentionPrivacy, messagePrivacy, downloadPrivacy } = req.body;
+  const { username, fullName, bio, email, isPrivate, socialLinks, interests, commentPrivacy, mentionPrivacy, messagePrivacy, downloadPrivacy, notificationSettings } = req.body;
 
   const user = req.user;
+
+  // Validate Full Name format
+  if (fullName !== undefined) {
+    const cleanFullName = fullName.trim();
+    const nameRegex = /^[a-zA-Z.\-']{2,}(?:\s+[a-zA-Z.\-']+)*$/;
+    if (!cleanFullName || !nameRegex.test(cleanFullName)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please provide a valid full name (letters and spaces only, min 2 characters)'
+      });
+    }
+  }
+
+  // Validate Email format
+  if (email !== undefined && email !== '') {
+    const cleanEmail = email.trim();
+    if (cleanEmail) {
+      const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.(com|co|in|net|org|edu|gov|mil|info|biz)$/i;
+      if (!emailRegex.test(cleanEmail)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Please provide a valid email address (e.g. name@domain.com)'
+        });
+      }
+      const domain = cleanEmail.split('@')[1].toLowerCase();
+      const typos = {
+        'gamil.com': 'gmail.com',
+        'gamil.co': 'gmail.com',
+        'yaho.com': 'yahoo.com',
+        'hotmal.com': 'hotmail.com'
+      };
+      if (typos[domain]) {
+        return res.status(400).json({
+          success: false,
+          message: `Did you mean ${typos[domain]}?`
+        });
+      }
+    }
+  }
 
   // Check if username is being changed and if it's available
   if (username && username !== user.username) {
@@ -172,9 +211,9 @@ export const updateProfile = asyncHandler(async (req, res) => {
   }
 
   // Update fields
-  if (fullName !== undefined) user.fullName = fullName;
+  if (fullName !== undefined) user.fullName = fullName.trim();
   if (bio !== undefined) user.bio = bio;
-  if (email !== undefined) user.email = email;
+  if (email !== undefined) user.email = email ? email.trim() : '';
   if (isPrivate !== undefined) user.isPrivate = isPrivate;
   if (socialLinks) user.socialLinks = socialLinks;
   if (interests !== undefined) user.interests = interests;
@@ -182,6 +221,12 @@ export const updateProfile = asyncHandler(async (req, res) => {
   if (mentionPrivacy !== undefined) user.mentionPrivacy = mentionPrivacy;
   if (messagePrivacy !== undefined) user.messagePrivacy = messagePrivacy;
   if (downloadPrivacy !== undefined) user.downloadPrivacy = downloadPrivacy;
+  if (notificationSettings !== undefined) {
+    user.notificationSettings = {
+      ...user.notificationSettings,
+      ...notificationSettings
+    };
+  }
 
   await user.save();
 
@@ -306,17 +351,46 @@ export const getUserReels = asyncHandler(async (req, res) => {
     query.audience = { $in: allowedAudiences };
   }
 
+  if (req.user) {
+    const reportedReels = await Report.find({
+      reportedBy: req.user._id,
+      reportType: 'Reel'
+    }).select('reportedItem');
+    const reportedReelIds = reportedReels.map(r => r.reportedItem);
+    if (reportedReelIds.length > 0) {
+      query._id = { $nin: reportedReelIds };
+    }
+  }
+
   const reels = await Reel.find(query)
     .sort({ createdAt: -1 })
     .skip(skip)
     .limit(limit)
-    .populate('user', 'username fullName profilePicture isVerified downloadPrivacy');
+    .populate('user', 'username fullName profilePicture isVerified downloadPrivacy')
+    .populate('music.audioId')
+    .populate({ path: 'originalReel', populate: { path: 'user', select: 'username fullName profilePicture isVerified' } });
 
   const total = await Reel.countDocuments(query);
 
+  let reelsObj = reels.map(r => r.toObject ? r.toObject({ virtuals: true }) : { ...r });
+
+  if (req.user && reelsObj.length > 0) {
+    const reelIds = reelsObj.map(r => r._id);
+    const [likes, saves] = await Promise.all([
+      Like.find({ user: req.user._id, reel: { $in: reelIds } }),
+      SavedReel.find({ user: req.user._id, reel: { $in: reelIds } })
+    ]);
+    const likedSet = new Set(likes.map(l => l.reel.toString()));
+    const savedSet = new Set(saves.map(s => s.reel.toString()));
+    reelsObj.forEach(r => {
+      r.isLiked = likedSet.has(r._id.toString());
+      r.isSaved = savedSet.has(r._id.toString());
+    });
+  }
+
   res.status(200).json({
     success: true,
-    reels,
+    reels: reelsObj,
     pagination: {
       page,
       limit,
@@ -342,13 +416,45 @@ export const getLikedReels = asyncHandler(async (req, res) => {
     .limit(limit)
     .populate({
       path: 'reel',
-      populate: {
-        path: 'user',
-        select: 'username fullName profilePicture isVerified downloadPrivacy'
-      }
+      populate: [
+        {
+          path: 'user',
+          select: 'username fullName profilePicture isVerified downloadPrivacy'
+        },
+        {
+          path: 'music.audioId'
+        },
+        {
+          path: 'originalReel',
+          populate: {
+            path: 'user',
+            select: 'username fullName profilePicture isVerified'
+          }
+        }
+      ]
     });
 
-  const reels = likes.map(like => like.reel).filter(reel => reel && reel.isActive && reel.status === 'completed');
+  const reels = likes
+    .map(like => {
+      const reel = like.reel;
+      if (!reel) return null;
+      // Convert Mongoose document to plain object so custom flags are included in JSON
+      const reelObj = reel.toObject ? reel.toObject({ virtuals: true }) : { ...reel };
+      // Mark isLiked = true since all reels from this endpoint are liked by the user
+      reelObj.isLiked = true;
+      return reelObj;
+    })
+    .filter(reel => reel && reel.isActive && reel.status === 'completed');
+
+  if (req.user && reels.length > 0) {
+    const reelIds = reels.map(r => r._id);
+    const saves = await SavedReel.find({ user: req.user._id, reel: { $in: reelIds } });
+    const savedSet = new Set(saves.map(s => s.reel.toString()));
+    reels.forEach(r => {
+      r.isSaved = savedSet.has(r._id.toString());
+    });
+  }
+
   const total = await Like.countDocuments({ user: req.user._id });
 
   res.status(200).json({
@@ -374,9 +480,18 @@ export const getSavedReels = asyncHandler(async (req, res) => {
   const skip = (page - 1) * limit;
   const collection = req.query.collection;
 
+  const reportedReels = await Report.find({
+    reportedBy: req.user._id,
+    reportType: 'Reel'
+  }).select('reportedItem');
+  const reportedReelIds = reportedReels.map(r => r.reportedItem);
+
   const query = { user: req.user._id };
   if (collection) {
     query.collection = collection;
+  }
+  if (reportedReelIds.length > 0) {
+    query.reel = { $nin: reportedReelIds };
   }
 
   const savedReels = await SavedReel.find(query)
@@ -385,13 +500,45 @@ export const getSavedReels = asyncHandler(async (req, res) => {
     .limit(limit)
     .populate({
       path: 'reel',
-      populate: {
-        path: 'user',
-        select: 'username fullName profilePicture isVerified downloadPrivacy'
-      }
+      populate: [
+        {
+          path: 'user',
+          select: 'username fullName profilePicture isVerified downloadPrivacy'
+        },
+        {
+          path: 'music.audioId'
+        },
+        {
+          path: 'originalReel',
+          populate: {
+            path: 'user',
+            select: 'username fullName profilePicture isVerified'
+          }
+        }
+      ]
     });
 
-  const reels = savedReels.map(saved => saved.reel).filter(reel => reel && reel.isActive && reel.status === 'completed');
+  const reels = savedReels
+    .map(saved => {
+      const reel = saved.reel;
+      if (!reel) return null;
+      // Convert Mongoose document to plain object so custom flags are included in JSON
+      const reelObj = reel.toObject ? reel.toObject({ virtuals: true }) : { ...reel };
+      // Mark isSaved = true since all reels from this endpoint are saved by the user
+      reelObj.isSaved = true;
+      return reelObj;
+    })
+    .filter(reel => reel && reel.isActive && reel.status === 'completed');
+
+  if (req.user && reels.length > 0) {
+    const reelIds = reels.map(r => r._id);
+    const likes = await Like.find({ user: req.user._id, reel: { $in: reelIds } });
+    const likedSet = new Set(likes.map(l => l.reel.toString()));
+    reels.forEach(r => {
+      r.isLiked = likedSet.has(r._id.toString());
+    });
+  }
+
   const total = await SavedReel.countDocuments(query);
 
   res.status(200).json({
@@ -431,10 +578,6 @@ export const searchUsers = asyncHandler(async (req, res) => {
     ],
     isActive: true
   };
-
-  if (req.user) {
-    queryObj._id = { $ne: req.user._id };
-  }
 
   const users = await User.find(queryObj)
     .select('username fullName profilePicture isVerified stats')
@@ -862,5 +1005,21 @@ export const getBlockedCommenters = asyncHandler(async (req, res) => {
     users: user.blockedCommenters || []
   });
 });
+
+/**
+ * @desc    Get all blocked users
+ * @route   GET /api/users/me/blocked
+ * @access  Private
+ */
+export const getBlockedUsers = asyncHandler(async (req, res) => {
+  const user = await User.findById(req.user._id)
+    .populate('blockedUsers', 'username fullName profilePicture');
+
+  res.status(200).json({
+    success: true,
+    users: user.blockedUsers || []
+  });
+});
+
 
 

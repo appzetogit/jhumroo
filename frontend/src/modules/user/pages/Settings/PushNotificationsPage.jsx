@@ -1,12 +1,72 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { BiChevronLeft } from 'react-icons/bi';
-import { useAppContent } from '../../../../hooks/useAppContent';
+import { useAuth } from '../../../../context/AuthContext';
+import { useToast } from '../../../../context/ToastContext';
+import userService from '../../../../services/userService';
 
 const PushNotificationsPage = () => {
     const navigate = useNavigate();
-    const { config } = useAppContent();
-    const sections = config?.settings?.pushNotifications || [];
+    const { user: currentUser, updateUser } = useAuth();
+    const { showToast } = useToast();
+    const [updatingKey, setUpdatingKey] = useState(null);
+
+    // Default settings if not defined on user
+    const settings = currentUser?.notificationSettings || {
+        likes: true,
+        comments: true,
+        newFollowers: true,
+        mentionsAndTags: true
+    };
+
+    const toggleMapping = {
+        'Likes': 'likes',
+        'Comments': 'comments',
+        'New followers': 'newFollowers',
+        'Mentions & tags': 'mentionsAndTags'
+    };
+
+    const handleToggle = async (label) => {
+        const key = toggleMapping[label];
+        if (!key || updatingKey) return;
+
+        const currentValue = settings[key] !== false; // defaults to true
+        const newValue = !currentValue;
+
+        setUpdatingKey(key);
+        try {
+            const updatedSettings = {
+                ...settings,
+                [key]: newValue
+            };
+
+            const response = await userService.updateProfile({
+                notificationSettings: updatedSettings
+            });
+
+            if (response.success) {
+                updateUser(response.user);
+                showToast(`${label} push notifications ${newValue ? 'enabled' : 'disabled'}!`, 'success');
+            }
+        } catch (error) {
+            console.error('Failed to update push settings:', error);
+            showToast(error?.message || 'Failed to update settings', 'error');
+        } finally {
+            setUpdatingKey(null);
+        }
+    };
+
+    const sections = [
+        {
+            title: 'Interactions',
+            items: [
+                { label: 'Likes' },
+                { label: 'Comments' },
+                { label: 'New followers' },
+                { label: 'Mentions & tags' }
+            ]
+        }
+    ];
 
     return (
         <div className="page-container pb-0 theme-surface-page flex flex-col min-h-screen">
@@ -29,15 +89,23 @@ const PushNotificationsPage = () => {
                         <div className="theme-panel-card rounded-[18px] overflow-hidden shadow-sm">
                             {section.items.map((item, itemIdx) => {
                                 const isLast = itemIdx === section.items.length - 1;
+                                const key = toggleMapping[item.label];
+                                const isActive = settings[key] !== false; // defaults to true
+                                const isSaving = updatingKey === key;
+
                                 return (
                                     <div 
                                         key={itemIdx} 
                                         className={`theme-panel-row flex justify-between items-center p-4 ${!isLast ? 'border-b theme-panel-divider' : ''}`}
                                     >
                                         <span className="theme-text-primary text-[15px] font-medium tracking-wide">{item.label}</span>
-                                        <div className={`w-[46px] h-6 rounded-full flex items-center shrink-0 transition-colors duration-300 ${item.default ? 'bg-[#FE2C55]' : 'bg-transparent border border-white/20'}`}>
-                                            <div className={`w-[18px] h-[18px] rounded-full bg-white shadow-sm transform transition-transform duration-300 ${item.default ? 'translate-x-[24px]' : 'translate-x-[2px]'}`}></div>
-                                        </div>
+                                        <button 
+                                            onClick={() => handleToggle(item.label)}
+                                            disabled={isSaving}
+                                            className={`w-[46px] h-6 rounded-full flex items-center shrink-0 transition-all duration-300 ${isSaving ? 'opacity-50' : 'active:scale-95'} ${isActive ? 'bg-[#FE2C55]' : 'bg-transparent border border-white/20'}`}
+                                        >
+                                            <div className={`w-[18px] h-[18px] rounded-full bg-white shadow-sm transform transition-transform duration-300 ${isActive ? 'translate-x-[24px]' : 'translate-x-[2px]'}`}></div>
+                                        </button>
                                     </div>
                                 );
                             })}
@@ -46,7 +114,7 @@ const PushNotificationsPage = () => {
                 ))}
             </div>
         </div>
-  );
+    );
 };
 
 export default PushNotificationsPage;

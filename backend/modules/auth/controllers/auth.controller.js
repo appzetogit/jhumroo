@@ -173,6 +173,45 @@ export const refreshToken = asyncHandler(async (req, res) => {
 export const completeProfile = asyncHandler(async (req, res) => {
   const { username, fullName, email, country, state, dateOfBirth } = req.body;
 
+  // Validate Full Name format
+  if (fullName !== undefined) {
+    const cleanFullName = fullName.trim();
+    const nameRegex = /^[a-zA-Z.\-']{2,}(?:\s+[a-zA-Z.\-']+)*$/;
+    if (!cleanFullName || !nameRegex.test(cleanFullName)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please provide a valid full name (letters and spaces only, min 2 characters)'
+      });
+    }
+  }
+
+  // Validate Email format
+  if (email !== undefined && email !== '') {
+    const cleanEmail = email.trim();
+    if (cleanEmail) {
+      const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.(com|co|in|net|org|edu|gov|mil|info|biz)$/i;
+      if (!emailRegex.test(cleanEmail)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Please provide a valid email address (e.g. name@domain.com)'
+        });
+      }
+      const domain = cleanEmail.split('@')[1].toLowerCase();
+      const typos = {
+        'gamil.com': 'gmail.com',
+        'gamil.co': 'gmail.com',
+        'yaho.com': 'yahoo.com',
+        'hotmal.com': 'hotmail.com'
+      };
+      if (typos[domain]) {
+        return res.status(400).json({
+          success: false,
+          message: `Did you mean ${typos[domain]}?`
+        });
+      }
+    }
+  }
+
   // Check if username is already taken
   if (username) {
     const existingUser = await User.findOne({ 
@@ -190,14 +229,11 @@ export const completeProfile = asyncHandler(async (req, res) => {
   }
 
   // Update user profile fields
-  if (fullName) req.user.fullName = fullName;
-  if (email) req.user.email = email;
+  if (fullName !== undefined) req.user.fullName = fullName.trim();
+  if (email !== undefined) req.user.email = email ? email.trim() : '';
   if (country) req.user.country = country;
   if (state) req.user.state = state;
   if (dateOfBirth) req.user.dateOfBirth = dateOfBirth;
-  
-  // Set isVerified if profile completed
-  req.user.isVerified = true;
 
   await req.user.save();
 

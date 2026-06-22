@@ -114,6 +114,31 @@ export const uploadImages = multer({
   fileFilter: imageFilter
 }).array('images', 10);
 
+// File filter for problem report attachments (images and videos)
+const problemAttachmentFilter = (req, file, cb) => {
+  const isVideo = file.mimetype.startsWith('video/');
+  const isImage = file.mimetype.startsWith('image/');
+  
+  const allowedExtensions = /mp4|mov|avi|mkv|webm|jpeg|jpg|png|gif|webp/;
+  const extname = allowedExtensions.test(path.extname(file.originalname).toLowerCase());
+
+  if ((isVideo || isImage) && extname) {
+    return cb(null, true);
+  } else {
+    cb(new Error('Only video and image files are allowed'));
+  }
+};
+
+// Problem report attachment upload middleware
+export const uploadProblemAttachment = multer({
+  storage: storage,
+  limits: {
+    fileSize: 50 * 1024 * 1024 // 50MB limit
+  },
+  fileFilter: problemAttachmentFilter
+}).single('file');
+
+
 // Ad media upload (videos and images)
 const adFilter = (req, file, cb) => {
   const isVideo = file.mimetype.startsWith('video/');

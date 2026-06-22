@@ -28,6 +28,7 @@ const CommentsSheet = ({ isOpen, onClose, commentCount = 0, reelId, reelOwnerId,
   const [commentsList, setCommentsList] = useState([]);
   const [commentsDisabled, setCommentsDisabled] = useState(false);
   const [commentsBlocked, setCommentsBlocked] = useState(false);
+  const [commentsMutualOnly, setCommentsMutualOnly] = useState(false);
   const [selectedComment, setSelectedComment] = useState(null);
   const [isMenuUpdating, setIsMenuUpdating] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -35,6 +36,12 @@ const CommentsSheet = ({ isOpen, onClose, commentCount = 0, reelId, reelOwnerId,
   const [mentionSuggestions, setMentionSuggestions] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [mentionSearchLoading, setMentionSearchLoading] = useState(false);
+  const [commentError, setCommentError] = useState('');
+  const [totalCommentsCount, setTotalCommentsCount] = useState(commentCount);
+
+  React.useEffect(() => {
+    setTotalCommentsCount(commentCount);
+  }, [commentCount]);
 
   const isOwnReel = currentUser && reelOwnerId && (String(currentUser._id || currentUser.id) === String(reelOwnerId));
 
@@ -80,8 +87,11 @@ const CommentsSheet = ({ isOpen, onClose, commentCount = 0, reelId, reelOwnerId,
         setCommentsList(response.comments);
         setCommentsDisabled(!!response.commentsDisabled);
         setCommentsBlocked(!!response.commentsBlocked);
+        setCommentsMutualOnly(!!response.commentsMutualOnly);
+        const trueTotal = response.pagination?.totalComments ?? response.comments.length;
+        setTotalCommentsCount(trueTotal);
         if (typeof onCommentAdded === 'function') {
-          onCommentAdded(response.comments.length);
+          onCommentAdded(trueTotal);
         }
       }
     } catch (err) {
@@ -200,16 +210,20 @@ const CommentsSheet = ({ isOpen, onClose, commentCount = 0, reelId, reelOwnerId,
           fetchComments();
         } else {
           setCommentsList(prev => [commentData, ...prev]);
+          setTotalCommentsCount(prev => prev + 1);
           if (typeof onCommentAdded === 'function') {
-            onCommentAdded(commentsList.length + 1);
+            onCommentAdded(totalCommentsCount + 1);
           }
         }
         
         setNewComment('');
         setReplyTo(null);
+        setCommentError('');
       }
     } catch (err) {
       console.error("Error posting comment:", err);
+      const msg = err?.response?.data?.message || err?.message || 'Failed to post comment';
+      setCommentError(msg);
     }
   };
 
@@ -390,7 +404,7 @@ const CommentsSheet = ({ isOpen, onClose, commentCount = 0, reelId, reelOwnerId,
       >
         <div className={`relative p-4 border-b flex flex-col items-center ${isDarkMode ? 'border-white/5' : 'border-black/[0.08]'}`}>
            <div className={`w-10 h-1 rounded-full mb-3 shrink-0 ${isDarkMode ? 'bg-white/20' : 'bg-black/15'}`}></div>
-           <h3 className={`text-sm font-bold ${isDarkMode ? 'text-white' : 'text-black'}`}>{commentsList.length} comments</h3>
+           <h3 className={`text-sm font-bold ${isDarkMode ? 'text-white' : 'text-black'}`}>{totalCommentsCount} comments</h3>
            <button
              className={`absolute right-4 top-4 hover:opacity-70 transition-opacity ${isDarkMode ? 'text-white' : 'text-black/70'}`}
              onClick={onClose}
@@ -518,6 +532,16 @@ const CommentsSheet = ({ isOpen, onClose, commentCount = 0, reelId, reelOwnerId,
           }`}>
              <p className={`text-sm opacity-60 font-semibold text-[#FE2C55]`}>Comments are limited by the creator of this post.</p>
           </div>
+        ) : commentsMutualOnly ? (
+          <div className={`p-5 border-t text-center pb-[max(1.5rem,var(--safe-area-bottom))] ${
+            isDarkMode ? 'border-white/5 bg-[#161823]' : 'border-black/[0.08] bg-white'
+          }`}>
+            <div className="flex flex-col items-center gap-2">
+              <span className="text-2xl">🔒</span>
+              <p className="text-[13px] font-bold text-[#FE2C55]">Only mutual followers can comment</p>
+              <p className={`text-[11px] leading-relaxed ${isDarkMode ? 'text-white/40' : 'text-black/40'}`}>Follow each other to unlock commenting on this post.</p>
+            </div>
+          </div>
         ) : (
           <div
             className={`p-4 border-t pb-[max(1rem,var(--safe-area-bottom))] ${
@@ -553,6 +577,13 @@ const CommentsSheet = ({ isOpen, onClose, commentCount = 0, reelId, reelOwnerId,
               </div>
             )}
  
+            {/* Comment Error Message */}
+            {commentError && (
+              <div className="mb-2 px-1 flex items-center gap-2 animate-fade-in">
+                <p className="text-[12px] font-semibold text-[#FE2C55]">{commentError}</p>
+              </div>
+            )}
+
               <div className="mb-3 -mx-1 flex items-center gap-2 overflow-x-auto no-scrollbar">
                   {quickEmojis.map((emoji) => (
                     <button
@@ -582,7 +613,7 @@ const CommentsSheet = ({ isOpen, onClose, commentCount = 0, reelId, reelOwnerId,
                         type="text" 
                         placeholder={replyTo ? `Reply to @${replyTo.username}...` : "Add comment..."}
                         value={newComment}
-                        onChange={(e) => setNewComment(e.target.value)}
+                        onChange={(e) => { setNewComment(e.target.value); setCommentError(''); }}
                         onKeyDown={handleKeyDown}
                         className={`w-full border rounded-full py-2.5 px-4 pr-10 text-sm outline-none transition-all ${
                           isDarkMode

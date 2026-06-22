@@ -125,7 +125,7 @@ const AllActivityPage = () => {
   };
 
   return (
-    <div className="page-container theme-surface-page flex flex-col">
+    <div className="page-container pb-0 theme-surface-page flex flex-col">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-4 border-b border-white/10 shrink-0">
         <button onClick={() => navigate(-1)} className="text-white active:opacity-60 w-8">

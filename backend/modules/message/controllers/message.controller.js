@@ -22,7 +22,8 @@ export const getConversations = asyncHandler(async (req, res) => {
   const conversations = await Conversation.find({
     participants: userId,
     isActive: true,
-    deletedBy: { $ne: userId }
+    deletedBy: { $ne: userId },
+    'lastMessage.sender': { $exists: true }
   })
     .populate('participants', 'username fullName profilePicture isVerified')
     .populate('lastMessage.sender', 'username')
@@ -56,7 +57,8 @@ export const getConversations = asyncHandler(async (req, res) => {
   const total = await Conversation.countDocuments({
     participants: userId,
     isActive: true,
-    deletedBy: { $ne: userId }
+    deletedBy: { $ne: userId },
+    'lastMessage.sender': { $exists: true }
   });
 
   res.status(200).json({

@@ -103,10 +103,7 @@ const HelpCenterPage = () => {
             <div className="scrollable flex-1 px-4 pb-24 pt-6">
                 {activeTab === 'help' ? (
                     <>
-                        <div className="bg-[#242424] rounded-[18px] p-4 flex items-center gap-2 mb-8 border border-white/5 focus-within:border-white/20 transition-all">
-                            <BiSearch size={20} className="text-white/30" />
-                            <input type="text" placeholder="Search" className="bg-transparent text-white text-[15px] outline-none font-medium w-full placeholder:text-white/20" />
-                        </div>
+                        
 
                         {sections.map((section, idx) => (
                             <div key={idx} className="mb-8">

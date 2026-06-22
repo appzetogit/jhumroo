@@ -14,17 +14,17 @@ const formatBubbleTimestamp = (isoString) => {
 
 const THEMES = {
   default: {
-    name: 'Default Light',
-    bgClass: 'bg-white',
-    textClass: 'text-black',
-    headerBg: 'bg-white border-gray-100',
-    headerText: 'text-black',
+    name: 'Default',
+    bgClass: 'theme-surface-page',
+    textClass: 'text-white',
+    headerBg: 'bg-[#161616] border-b border-white/5',
+    headerText: 'text-white',
     bubbleMe: 'bg-[#FE2C55] text-white',
-    bubbleOther: 'bg-gray-100 text-black',
-    bubbleTimestamp: 'text-gray-400',
-    scrollbarClass: '',
-    inputAreaBg: 'bg-white border-gray-100',
-    inputBg: 'bg-gray-100 text-black',
+    bubbleOther: 'bg-[#242424] text-white border border-white/5',
+    bubbleTimestamp: 'text-white/40',
+    scrollbarClass: 'dark-scrollbar',
+    inputAreaBg: 'bg-[#161616] border-t border-white/5',
+    inputBg: 'bg-[#242424] text-white border border-white/5',
   },
   midnight: {
     name: 'Midnight Neon',
@@ -314,7 +314,7 @@ const MessageBubble = ({ message, isMe, isLastInGroup, targetUser, username, onR
           )}
           {message.replyTo && (
             <div className={`text-[12px] px-3 py-1.5 rounded-[12px] opacity-60 border-l-2 max-w-fit ${
-              theme === THEMES.midnight ? 'bg-white/5 border-violet-500 text-white/90' : 'bg-gray-50 border-gray-300'
+              theme === THEMES.midnight ? 'bg-white/5 border-violet-500 text-white/90' : 'bg-[#242424] border-white/10 text-white'
             } ${isMe ? 'self-end border-[#FE2C55]' : 'self-start'}`}>
                <p className="font-bold text-[10px] truncate">
                   {message.replyTo.sender?.username || 'user'}
@@ -383,14 +383,14 @@ const PinnedMessageBar = ({ message, onUnpin, onClick, theme = THEMES.default })
       className={`px-4 py-2.5 backdrop-blur-md border-b flex items-center gap-3 cursor-pointer transition-all animate-slide-down sticky top-0 z-[40] ${
         theme === THEMES.midnight 
           ? 'bg-black/40 border-white/5 hover:bg-black/60 active:bg-black/75 text-white' 
-          : 'bg-gray-50/80 border-gray-100 hover:bg-gray-100 active:bg-gray-200 text-black'
+          : 'bg-[#242424]/85 border-white/5 hover:bg-[#242424] active:bg-[#161616] text-white'
       }`}
       onClick={() => onClick(message)}
     >
       <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 shadow-sm ${
-        theme === THEMES.midnight ? 'bg-white/10' : 'bg-gray-200'
+        theme === THEMES.midnight ? 'bg-white/10' : 'bg-white/10'
       }`}>
-        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill={theme === THEMES.midnight ? '#bbb' : '#666'} viewBox="0 0 24 24">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill={theme === THEMES.midnight ? '#bbb' : '#aaa'} viewBox="0 0 24 24">
           <path d="M16 12V4h1V2H7v2h1v8l-2 3v2h5v7l1 1 1-1v-7h5v-2l-2-3z"/>
         </svg>
       </div>
@@ -399,13 +399,13 @@ const PinnedMessageBar = ({ message, onUnpin, onClick, theme = THEMES.default })
           {message.content?.text || message.text}
         </p>
         <p className={`text-[9px] font-bold uppercase tracking-wider mt-0.5 ${
-          theme === THEMES.midnight ? 'text-violet-400' : 'text-gray-400'
+          theme === THEMES.midnight ? 'text-violet-400' : 'text-white/40'
         }`}>Pinned Message</p>
       </div>
       <button 
         onClick={(e) => { e.stopPropagation(); onUnpin(message); }}
         className={`p-1.5 transition-colors ${
-          theme === THEMES.midnight ? 'text-white/40 hover:text-red-400' : 'text-gray-300 hover:text-[#FE2C55]'
+          theme === THEMES.midnight ? 'text-white/40 hover:text-red-400' : 'text-white/40 hover:text-[#FE2C55]'
         }`}
       >
         <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg>
@@ -735,7 +735,7 @@ const ChatPage = () => {
   };
 
   return (
-    <div className={`page-container flex flex-col overflow-hidden h-screen relative transition-colors duration-300 ${theme.bgClass} ${theme.textClass}`}>
+    <div className={`page-container pb-0 flex flex-col overflow-hidden h-screen relative transition-colors duration-300 ${theme.bgClass} ${theme.textClass}`}>
       {/* Context Menu Overlay */}
       {menuConfig && (
         <div 
@@ -744,35 +744,35 @@ const ChatPage = () => {
           onContextMenu={(e) => { e.preventDefault(); setMenuConfig(null); }}
         >
           <div 
-            className="absolute bg-white rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] border border-gray-100 py-2 min-w-[160px] animate-scale-in"
+            className="absolute bg-[#242424] rounded-2xl shadow-[0_8px_30px_rgba(0,0,0,0.4)] border border-white/5 py-2 min-w-[160px] animate-scale-in text-white"
             style={{ 
               top: Math.min(menuConfig.y, window.innerHeight - 200), 
               left: Math.min(menuConfig.x, window.innerWidth - 180) 
             }}
           >
             <button 
-              className="w-full px-4 py-3 text-left text-[14px] font-semibold active:bg-gray-50 flex items-center gap-3 border-b border-gray-50"
+              className="w-full px-4 py-3 text-left text-[14px] font-semibold active:bg-white/10 flex items-center gap-3 border-b border-white/5"
               onClick={() => { setReplyingTo(menuConfig.message); setMenuConfig(null); }}
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="M9 14l-4-4 4-4"/><path d="M5 10h11a4 4 0 1 1 0 8h-1"/></svg>
               Reply
             </button>
             <button 
-              className="w-full px-4 py-3 text-left text-[14px] font-semibold active:bg-gray-50 flex items-center gap-3 border-b border-gray-50"
+              className="w-full px-4 py-3 text-left text-[14px] font-semibold active:bg-white/10 flex items-center gap-3 border-b border-white/5"
               onClick={() => handleCopy(menuConfig.message)}
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
               Copy
             </button>
             <button 
-              className="w-full px-4 py-3 text-left text-[14px] font-semibold active:bg-gray-50 flex items-center gap-3 border-b border-gray-50"
+              className="w-full px-4 py-3 text-left text-[14px] font-semibold active:bg-white/10 flex items-center gap-3 border-b border-white/5"
               onClick={() => handlePin(menuConfig.message)}
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="M16 12V4h1V2H7v2h1v8l-2 3v2h5v7l1 1 1-1v-7h5v-2l-2-3z"/></svg>
               {menuConfig.message.isPinned ? 'Unpin' : 'Pin'}
             </button>
             <button 
-              className="w-full px-4 py-3 text-left text-[14px] font-semibold text-[#FE2C55] active:bg-red-50 flex items-center gap-3"
+              className="w-full px-4 py-3 text-left text-[14px] font-semibold text-[#FE2C55] active:bg-[#FE2C55]/10 flex items-center gap-3"
               onClick={() => handleDelete(menuConfig.message)}
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M10 11v6M14 11v6"/></svg>
@@ -833,10 +833,10 @@ const ChatPage = () => {
               <>
                 <div className="fixed inset-0 z-[80]" onClick={() => setShowHeaderMenu(false)} />
                 <div 
-                  className={`absolute right-0 mt-2 z-[90] rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.15)] border py-1.5 min-w-[190px] animate-scale-in transition-all ${
+                  className={`absolute right-0 mt-2 z-[90] rounded-2xl shadow-[0_8px_30px_rgba(0,0,0,0.4)] border py-1.5 min-w-[190px] animate-scale-in transition-all ${
                     theme === THEMES.midnight 
                       ? 'bg-[#0E1017]/95 border-white/5 backdrop-blur-md text-white' 
-                      : 'bg-white border-gray-100 text-black'
+                      : 'bg-[#242424]/95 border-white/5 backdrop-blur-md text-white'
                   }`}
                 >
                   {!isBlockedByThem && (
@@ -844,7 +844,7 @@ const ChatPage = () => {
                       className={`w-full px-4 py-3 text-left text-[14px] font-semibold active:bg-opacity-50 flex items-center gap-3 border-b ${
                         theme === THEMES.midnight 
                           ? 'active:bg-white/5 border-white/5 hover:bg-white/5' 
-                          : 'active:bg-gray-50 border-gray-50 hover:bg-gray-50'
+                          : 'active:bg-white/5 border-white/5 hover:bg-white/5'
                       }`}
                       onClick={() => {
                         navigate(`/user/${username}`);
@@ -1197,26 +1197,26 @@ const ChatPage = () => {
       {/* Block Confirmation Dialog */}
       {showBlockConfirmation && (
         <div className="fixed inset-0 z-[200] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in" onClick={() => setShowBlockConfirmation(false)}>
-          <div className="bg-white rounded-3xl p-6 max-w-[320px] w-full text-center shadow-2xl border border-gray-100 animate-scale-in" onClick={(e) => e.stopPropagation()}>
-            <div className="w-16 h-16 rounded-full bg-red-50 flex items-center justify-center mx-auto mb-4 text-[#FE2C55]">
+          <div className="bg-[#242424] rounded-3xl p-6 max-w-[320px] w-full text-center shadow-2xl border border-white/5 animate-scale-in" onClick={(e) => e.stopPropagation()}>
+            <div className="w-16 h-16 rounded-full bg-[#FE2C55]/10 flex items-center justify-center mx-auto mb-4 text-[#FE2C55]">
               <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
                 <circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/>
               </svg>
             </div>
-            <h3 className="text-[18px] font-bold text-black mb-2">Block {targetUser?.fullName || username}?</h3>
-            <p className="text-[13px] text-gray-500 leading-relaxed mb-6">
+            <h3 className="text-[18px] font-bold text-white mb-2">Block {targetUser?.fullName || username}?</h3>
+            <p className="text-[13px] text-white/40 leading-relaxed mb-6">
               They will no longer be able to message you, view your profile, or watch your reels. You can unblock them at any time from Settings.
             </p>
             <div className="flex gap-3">
               <button 
                 onClick={() => setShowBlockConfirmation(false)}
-                className="flex-1 py-3 bg-gray-100 hover:bg-gray-200 text-black text-[14px] font-bold rounded-xl active:scale-95 transition-all"
+                className="flex-1 py-3 bg-white/10 hover:bg-white/15 text-white text-[14px] font-bold rounded-xl active:scale-95 transition-all"
               >
                 Cancel
               </button>
               <button 
                 onClick={handleBlockToggle}
-                className="flex-1 py-3 bg-[#FE2C55] hover:bg-[#E02447] text-white text-[14px] font-bold rounded-xl shadow-lg shadow-red-200 active:scale-95 transition-all"
+                className="flex-1 py-3 bg-[#FE2C55] hover:bg-[#E02447] text-white text-[14px] font-bold rounded-xl shadow-none active:scale-95 transition-all"
               >
                 Block
               </button>
@@ -1228,10 +1228,10 @@ const ChatPage = () => {
       {/* Theme Picker Dialog */}
       {showThemePicker && (
         <div className="fixed inset-0 z-[200] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in" onClick={() => setShowThemePicker(false)}>
-          <div className="bg-white rounded-3xl p-6 max-w-[340px] w-full shadow-2xl border border-gray-100 animate-scale-in" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-[#242424] rounded-3xl p-6 max-w-[340px] w-full shadow-2xl border border-white/5 animate-scale-in" onClick={(e) => e.stopPropagation()}>
             <div className="flex justify-between items-center mb-5">
-              <h3 className="text-[18px] font-bold text-black">Chat Theme</h3>
-              <button onClick={() => setShowThemePicker(false)} className="p-1 text-gray-400 hover:text-black">
+              <h3 className="text-[18px] font-bold text-white">Chat Theme</h3>
+              <button onClick={() => setShowThemePicker(false)} className="p-1 text-white/40 hover:text-white">
                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg>
               </button>
             </div>
@@ -1251,18 +1251,18 @@ const ChatPage = () => {
                     }}
                     className={`p-3 rounded-2xl border flex flex-col items-center gap-2.5 transition-all duration-200 active:scale-95 ${
                       isSelected 
-                        ? 'border-black bg-gray-50 shadow-sm scale-100' 
-                        : 'border-gray-100 hover:bg-gray-50/50 hover:border-gray-200'
+                        ? 'border-white bg-white/5 shadow-sm scale-100' 
+                        : 'border-white/5 hover:bg-white/5 hover:border-white/10'
                     }`}
                   >
                     {/* Circle Color Preview */}
-                    <div className={`w-12 h-12 rounded-full shadow-inner flex items-center justify-center ${t.bgClass} border border-gray-100 overflow-hidden relative`}>
+                    <div className={`w-12 h-12 rounded-full shadow-inner flex items-center justify-center ${t.bgClass} border border-white/5 overflow-hidden relative`}>
                       <div className="absolute inset-0 flex items-center justify-center gap-1.5 pointer-events-none">
                         <div className={`w-3.5 h-3.5 rounded-full ${t.bubbleMe}`} />
                         <div className={`w-3.5 h-3.5 rounded-full ${t.bubbleOther}`} />
                       </div>
                     </div>
-                    <span className="text-[12px] font-bold text-gray-800">{t.name}</span>
+                    <span className="text-[12px] font-bold text-white">{t.name}</span>
                   </button>
                 );
               })}

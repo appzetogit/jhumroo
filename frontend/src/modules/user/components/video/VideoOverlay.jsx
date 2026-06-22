@@ -1,23 +1,86 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { BiPlus } from 'react-icons/bi';
 import { IoIosMusicalNote } from 'react-icons/io';
 import { useNavigate } from 'react-router-dom';
-import duetIcon from '../../../../assets/duet_icon.png';
 import CommentsSheet from '../modals/CommentsSheet';
 import ShareSheet from '../modals/ShareSheet';
 import MoreOptionsSheet from '../modals/MoreOptionsSheet';
 import ReportSheet from '../modals/ReportSheet';
 import EditReelSheet from '../modals/EditReelSheet';
 import FullscreenPlayer from '../modals/FullscreenPlayer';
+import LikesSheet from '../modals/LikesSheet';
+import CaptionRenderer from './CaptionRenderer';
 import reelService from '../../../../services/reelService';
 import userService from '../../../../services/userService';
 import messageService from '../../../../services/messageService';
-
 import adService from '../../../../services/adService';
+import followService from '../../../../services/followService';
+import { useAuth } from '../../../../context/AuthContext';
+
+// In-app toast helper — shows a brief floating message
+const showOverlayToast = (message) => {
+  const existing = document.getElementById('overlay-share-toast');
+  if (existing) existing.remove();
+  const el = document.createElement('div');
+  el.id = 'overlay-share-toast';
+  el.textContent = message;
+  el.style.cssText = 'position:fixed;bottom:120px;left:50%;transform:translateX(-50%);background:rgba(30,30,30,0.92);color:#fff;padding:10px 20px;border-radius:20px;font-size:14px;font-weight:600;z-index:99999;pointer-events:none;backdrop-filter:blur(8px);box-shadow:0 4px 20px rgba(0,0,0,0.4);transition:opacity 0.3s';
+  document.body.appendChild(el);
+  setTimeout(() => { el.style.opacity = '0'; setTimeout(() => el.remove(), 300); }, 2500);
+};
 
 const VideoOverlay = ({ reelId, username, caption, musicName, isLiked, likes, comments, shares, isSaved, onSaveClick, onLikeClick, videoData, onUpdate, isMuted, onMuteToggle, isPlaying }) => {
   const isAd = videoData.isAd;
   const isAdminAd = isAd && videoData.onModel === 'Admin';
+
+  const { user: currentUser } = useAuth();
+  const creatorId = videoData.user?._id || videoData.user;
+  const isOwnReel = currentUser && creatorId && (currentUser._id === creatorId || currentUser.username === username);
+
+  const [followingState, setFollowingState] = useState(() => {
+    if (isOwnReel || isAd) return 'none';
+    return videoData.user?.isFollowing ? 'following' : 'not_following';
+  });
+
+  useEffect(() => {
+    if (isOwnReel || isAd) {
+      setFollowingState('none');
+    } else {
+      setFollowingState(videoData.user?.isFollowing ? 'following' : 'not_following');
+    }
+  }, [videoData, isOwnReel, isAd]);
+
+  const handleFollowToggle = async (e) => {
+    e.stopPropagation();
+    if (!currentUser) {
+      alert('Please log in to follow creators.');
+      return;
+    }
+    if (!creatorId) return;
+
+    try {
+      if (followingState === 'following') {
+        const res = await followService.unfollowUser(creatorId);
+        if (res.success) {
+          setFollowingState('not_following');
+          if (videoData.user) {
+            videoData.user.isFollowing = false;
+          }
+        }
+      } else {
+        const res = await followService.followUser(creatorId);
+        if (res.success) {
+          const newStatus = res.status || 'accepted';
+          setFollowingState(newStatus === 'accepted' ? 'following' : 'pending');
+          if (videoData.user) {
+            videoData.user.isFollowing = newStatus === 'accepted';
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Failed to toggle follow:', err);
+    }
+  };
   
   const handleAdClick = async () => {
     let targetUrl = videoData.link;
@@ -51,6 +114,7 @@ const VideoOverlay = ({ reelId, username, caption, musicName, isLiked, likes, co
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
+  const [isLikesOpen, setIsLikesOpen] = useState(false);
   
   const navigate = useNavigate();
 
@@ -101,24 +165,43 @@ const VideoOverlay = ({ reelId, username, caption, musicName, isLiked, likes, co
         window.open(`https://wa.me/?text=${encodeURIComponent(shareText + ' ' + shareUrl)}`, '_blank');
         shared = true;
       } else if (platform === 'instagram') {
-        await navigator.clipboard.writeText(shareUrl);
-        alert('Link copied! Open Instagram to share.');
+        try {
+          await navigator.clipboard.writeText(shareUrl);
+          showOverlayToast('Link copied! Open Instagram to share.');
+        } catch {
+          showOverlayToast('Could not copy link automatically.');
+        }
         window.open('https://instagram.com', '_blank');
         shared = true;
       } else if (platform === 'messenger') {
-        window.open(`fb-messenger://share/?link=${encodeURIComponent(shareUrl)}`, '_blank');
+        // fb-messenger:// deep-link is not reliably supported in browsers.
+        // Fall back to copying the link and showing a toast.
+        try {
+          await navigator.clipboard.writeText(shareUrl);
+          showOverlayToast('Link copied! Open Messenger to share.');
+        } catch {
+          showOverlayToast('Could not copy link automatically.');
+        }
         shared = true;
       } else if (platform === 'copy') {
-        await navigator.clipboard.writeText(shareUrl);
-        alert('Link copied to clipboard!');
+        try {
+          await navigator.clipboard.writeText(shareUrl);
+          showOverlayToast('Link copied to clipboard!');
+        } catch {
+          showOverlayToast('Could not copy link.');
+        }
         shared = true;
       } else if (platform === 'general') {
         if (navigator.share) {
           await navigator.share({ title: 'Jhumroo', text: shareText, url: shareUrl });
           shared = true;
         } else {
-          await navigator.clipboard.writeText(shareUrl);
-          alert('Link copied to clipboard!');
+          try {
+            await navigator.clipboard.writeText(shareUrl);
+            showOverlayToast('Link copied to clipboard!');
+          } catch {
+            showOverlayToast('Could not copy link.');
+          }
           shared = true;
         }
       } else if (platform === 'chat' && targetUserId) {
@@ -140,7 +223,6 @@ const VideoOverlay = ({ reelId, username, caption, musicName, isLiked, likes, co
       }
       if (error.name !== 'AbortError') {
         console.error('Error sharing:', error);
-        throw error;
       }
     }
   };
@@ -183,6 +265,30 @@ const VideoOverlay = ({ reelId, username, caption, musicName, isLiked, likes, co
                   @{username}
                 </h3>
               )}
+              {followingState === 'not_following' && (
+                <button
+                  onClick={handleFollowToggle}
+                  className="px-2.5 py-0.5 rounded bg-[#FE2C55] hover:bg-[#FE2C55]/90 text-white text-[12px] font-bold transition-all cursor-pointer pointer-events-auto active:scale-95 ml-2 shrink-0 flex items-center justify-center h-[22px] border border-transparent"
+                >
+                  Follow
+                </button>
+              )}
+              {followingState === 'following' && (
+                <button
+                  onClick={handleFollowToggle}
+                  className="px-2.5 py-0.5 rounded bg-white/10 hover:bg-white/20 text-white/90 text-[12px] font-semibold transition-all cursor-pointer pointer-events-auto active:scale-95 ml-2 shrink-0 flex items-center justify-center h-[22px] border border-white/10"
+                >
+                  Following
+                </button>
+              )}
+              {followingState === 'pending' && (
+                <button
+                  onClick={handleFollowToggle}
+                  className="px-2.5 py-0.5 rounded bg-white/10 text-white/50 text-[12px] font-semibold transition-all cursor-pointer pointer-events-auto active:scale-95 ml-2 shrink-0 flex items-center justify-center h-[22px] border border-white/5"
+                >
+                  Requested
+                </button>
+              )}
               {isAd && (
                 <span className="bg-white/20 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider backdrop-blur-sm">
                   Sponsored
@@ -190,7 +296,7 @@ const VideoOverlay = ({ reelId, username, caption, musicName, isLiked, likes, co
               )}
               {videoData.isRemix && videoData.originalReel && (
                 <span className="bg-[#FE2C55] text-white px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 pointer-events-auto">
-                  <img src={duetIcon} alt="Duet" className="w-3.5 h-3.5 object-contain brightness-0 invert" /> Duet
+                  Duet
                 </span>
               )}
             </div>
@@ -208,12 +314,12 @@ const VideoOverlay = ({ reelId, username, caption, musicName, isLiked, likes, co
 
             <div className="text-base mb-2 leading-tight">
               {isExpanded ? (
-                <span className="pointer-events-auto">{caption}</span>
+                <CaptionRenderer text={caption} className="pointer-events-auto" />
               ) : (
                 <>
-                  <span>
-                    {caption.length > 90 ? caption.slice(0, 90) : caption}
-                  </span>
+                  <CaptionRenderer
+                    text={caption.length > 90 ? caption.slice(0, 90) : caption}
+                  />
                   {caption.length > 90 && (
                     <span 
                       onClick={(e) => {
@@ -264,32 +370,49 @@ const VideoOverlay = ({ reelId, username, caption, musicName, isLiked, likes, co
                         className="w-full h-full object-cover" 
                      />
                   </div>
-                  <div className="absolute -bottom-2 left-[14px] w-5 h-5 bg-tiktok-red rounded-full border-2 border-tiktok-black flex items-center justify-center cursor-pointer active:scale-90">
-                    <BiPlus size={14} color="white" />
-                  </div>
+                  {followingState === 'not_following' && (
+                    <div 
+                      className="absolute -bottom-2 left-[14px] w-5 h-5 bg-tiktok-red rounded-full border-2 border-tiktok-black flex items-center justify-center cursor-pointer active:scale-90"
+                      onClick={handleFollowToggle}
+                    >
+                      <BiPlus size={14} color="white" />
+                    </div>
+                  )}
                </div>
              )}
 
              {/* Like */}
              <div 
-               className="flex flex-col items-center text-white tap-effect cursor-pointer" 
-               onClick={(e) => {
-                 e.stopPropagation();
-                 onLikeClick(e);
-               }} 
+               className="flex flex-col items-center text-white tap-effect" 
                style={{ pointerEvents: 'auto' }}
              >
-                  <svg 
-                     xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" 
-                     fill={isLiked ? "var(--color-accent-red, #FE2C55)" : "transparent"} 
-                     stroke={isLiked ? "var(--color-accent-red, #FE2C55)" : "white"} 
-                     strokeWidth={isLiked ? "0" : "1.5"} 
-                     strokeLinecap="round" strokeLinejoin="round"
-                     className={`transition-all duration-300 ease-spring ${isLiked ? 'scale-[1.15] drop-shadow-[0_0_8px_rgba(254,44,85,0.6)]' : 'scale-100 hover:scale-[1.05]'}`}
+                  <div
+                    className="cursor-pointer"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onLikeClick(e);
+                    }}
                   >
-                   <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
-                  </svg>
-                  <span className="text-sm font-semibold mt-0.5">{likes}</span>
+                    <svg 
+                       xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" 
+                       fill={isLiked ? "var(--color-accent-red, #FE2C55)" : "transparent"} 
+                       stroke={isLiked ? "var(--color-accent-red, #FE2C55)" : "white"} 
+                       strokeWidth={isLiked ? "0" : "1.5"} 
+                       strokeLinecap="round" strokeLinejoin="round"
+                       className={`transition-all duration-300 ease-spring ${isLiked ? 'scale-[1.15] drop-shadow-[0_0_8px_rgba(254,44,85,0.6)]' : 'scale-100 hover:scale-[1.05]'}`}
+                    >
+                     <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
+                    </svg>
+                  </div>
+                  <span 
+                    className="text-sm font-semibold mt-0.5 cursor-pointer hover:text-gray-300"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setIsLikesOpen(true);
+                    }}
+                  >
+                    {likes}
+                  </span>
              </div>
 
              {/* Comment */}
@@ -301,7 +424,7 @@ const VideoOverlay = ({ reelId, username, caption, musicName, isLiked, likes, co
                }} 
                style={{ pointerEvents: 'auto' }}
              >
-                <svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="white" stroke="white" strokeWidth="0" strokeLinecap="round" strokeLinejoin="round">
+                <svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="white" stroke="white" strokeWidth="0" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path>
                 </svg>
                 <span className="text-sm font-semibold mt-0.5">{comments}</span>
@@ -310,7 +433,7 @@ const VideoOverlay = ({ reelId, username, caption, musicName, isLiked, likes, co
 
              {/* Share */}
              <div className="flex flex-col items-center text-white tap-effect" onClick={(e) => { e.stopPropagation(); setIsShareOpen(true); }} style={{ pointerEvents: 'auto' }}>
-                <svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="white" stroke="white" strokeWidth="0" strokeLinecap="round" strokeLinejoin="round">
+                <svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="white" stroke="white" strokeWidth="0" strokeLinecap="round" strokeLinejoin="round">
                     <path d="m22 2-7 20-4-9-9-4Z"></path>
                     <path d="M22 2 11 13"></path>
                 </svg>
@@ -380,6 +503,13 @@ const VideoOverlay = ({ reelId, username, caption, musicName, isLiked, likes, co
          }}
       />
 
+      {/* Likes Sheet Modal */}
+      <LikesSheet
+         isOpen={isLikesOpen}
+         onClose={() => setIsLikesOpen(false)}
+         reelId={reelId}
+      />
+
       {/* Share Sheet Modal */}
       <ShareSheet 
          isOpen={isShareOpen} 
@@ -437,6 +567,7 @@ const VideoOverlay = ({ reelId, username, caption, musicName, isLiked, likes, co
         onClose={() => setIsFullscreen(false)}
         videoUrl={videoData?.video?.url || videoData?.url}
         posterUrl={videoData?.video?.thumbnail || videoData?.poster}
+        videoData={videoData}
       />
     </>
   );

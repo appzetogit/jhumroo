@@ -1,4 +1,6 @@
 import ProblemReport from '../../models/ProblemReport.model.js';
+import { uploadImage as uploadImageToCloudinary, uploadVideo as uploadVideoToCloudinary } from '../../config/cloudinary.js';
+import fs from 'fs';
 
 /**
  * Submit a new problem report
@@ -29,6 +31,46 @@ export const createProblemReport = async (req, res) => {
     res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
+
+/**
+ * Upload an attachment (screenshot/video) for a problem report
+ */
+export const uploadAttachment = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: 'No file uploaded' });
+    }
+
+    const mime = req.file.mimetype;
+    const isVideo = mime.startsWith('video/');
+    const fileType = isVideo ? 'video' : 'image';
+    const uploadFn = isVideo ? uploadVideoToCloudinary : uploadImageToCloudinary;
+
+    // Upload to Cloudinary under problem-reports folder
+    const result = await uploadFn(req.file.path, 'jhumroo/problem-reports');
+
+    // Delete temp file
+    if (fs.existsSync(req.file.path)) {
+      fs.unlinkSync(req.file.path);
+    }
+
+    res.status(200).json({
+      success: true,
+      attachment: {
+        url: result.url,
+        publicId: result.publicId,
+        fileType
+      }
+    });
+  } catch (error) {
+    console.error('Error uploading attachment:', error);
+    if (req.file && fs.existsSync(req.file.path)) {
+      fs.unlinkSync(req.file.path);
+    }
+    res.status(500).json({ success: false, message: 'Failed to upload attachment' });
+  }
+};
+
 
 /**
  * Get all problem reports (Admin only)

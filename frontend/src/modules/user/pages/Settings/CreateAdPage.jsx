@@ -184,8 +184,13 @@ const CreateAdPage = () => {
       if (!link.trim()) return alert('Please enter the Shop Link (URL)');
     } else if (adType === 'chat') {
       if (!whatsappNumber.trim()) return alert('Please enter the WhatsApp number');
+      const whatsappRegex = /^\d{10}$/;
+      if (!whatsappRegex.test(whatsappNumber.trim())) {
+        return alert('WhatsApp number must be exactly 10 digits and contain only numbers.');
+      }
       if (!welcomeMessage.trim()) return alert('Please enter the pre-filled welcome message');
     }
+
 
     // Geographic targeting validation
     if (!targetCountry) {
@@ -288,7 +293,7 @@ const CreateAdPage = () => {
 
 
   return (
-    <div className="page-container theme-surface-page flex flex-col min-h-screen">
+    <div className="page-container pb-0 theme-surface-page flex flex-col min-h-screen">
       {/* Header */}
       <div className="flex items-center justify-between px-4 pt-6 pb-4 shrink-0 border-b theme-panel-divider">
         <div className="flex items-center gap-2">
@@ -499,8 +504,14 @@ const CreateAdPage = () => {
                     <input 
                       type="tel"
                       value={whatsappNumber}
-                      onChange={(e) => setWhatsappNumber(e.target.value)}
+                      onChange={(e) => {
+                        const val = e.target.value.replace(/\D/g, '');
+                        if (val.length <= 10) {
+                          setWhatsappNumber(val);
+                        }
+                      }}
                       placeholder="Enter Whatsapp Number"
+                      maxLength={10}
                       className="w-full bg-transparent theme-text-primary text-[15px] outline-none"
                     />
                   </div>

@@ -222,23 +222,36 @@ export const deleteAudio = asyncHandler(async (req, res) => {
  * @access  Private
  */
 export const toggleSaveAudio = asyncHandler(async (req, res) => {
+  console.log('--- toggleSaveAudio ---');
+  console.log('User:', req.user?._id);
+  console.log('Audio ID:', req.params.id);
+
   const user = await User.findById(req.user._id);
   const audioId = req.params.id;
 
   const audio = await Audio.findById(audioId);
   if (!audio) {
+    console.log('Audio not found:', audioId);
     return res.status(404).json({ success: false, message: 'Audio not found' });
   }
 
-  const isSaved = user.savedAudios.includes(audioId);
+  if (!user.savedAudios) {
+    user.savedAudios = [];
+  }
+
+  const isSaved = user.savedAudios.some(id => id && id.toString() === audioId);
+  console.log('Current isSaved state:', isSaved);
 
   if (isSaved) {
-    user.savedAudios = user.savedAudios.filter(id => id.toString() !== audioId);
+    user.savedAudios = user.savedAudios.filter(id => id && id.toString() !== audioId);
+    console.log('Removed from savedAudios');
   } else {
     user.savedAudios.push(audioId);
+    console.log('Added to savedAudios');
   }
 
   await user.save();
+  console.log('User saved. New savedAudios:', user.savedAudios);
 
   res.status(200).json({
     success: true,
@@ -253,12 +266,19 @@ export const toggleSaveAudio = asyncHandler(async (req, res) => {
  * @access  Private
  */
 export const getSavedAudios = asyncHandler(async (req, res) => {
+  console.log('--- getSavedAudios ---');
+  console.log('User ID:', req.user?._id);
+
   const user = await User.findById(req.user._id).populate('savedAudios');
+  console.log('Raw savedAudios from DB:', user.savedAudios);
   
+  const activeSavedAudios = (user.savedAudios || []).filter(audio => audio !== null && audio !== undefined);
+  console.log('Active savedAudios count:', activeSavedAudios.length);
+
   res.status(200).json({
     success: true,
-    count: user.savedAudios.length,
-    audios: user.savedAudios.map(audio => ({
+    count: activeSavedAudios.length,
+    audios: activeSavedAudios.map(audio => ({
       ...audio.toObject(),
       isSaved: true
     }))

@@ -132,6 +132,10 @@ const AdminCreateAd = () => {
     if (adType === 'shop' && !link.trim()) return alert('Please enter a shop link');
     if (adType === 'chat') {
       if (!whatsappNumber.trim()) return alert('Please enter WhatsApp number');
+      const whatsappRegex = /^\d{10}$/;
+      if (!whatsappRegex.test(whatsappNumber.trim())) {
+        return alert('WhatsApp number must be exactly 10 digits and contain only numbers.');
+      }
       if (!welcomeMessage.trim()) return alert('Please enter welcome message');
     }
     if (!targetCountry) return alert('Please select a target country');
@@ -318,8 +322,14 @@ const AdminCreateAd = () => {
                       <input 
                         type="tel"
                         value={whatsappNumber}
-                        onChange={(e) => setWhatsappNumber(e.target.value)}
-                        placeholder="+91 98765 43210"
+                        onChange={(e) => {
+                          const val = e.target.value.replace(/\D/g, '');
+                          if (val.length <= 10) {
+                            setWhatsappNumber(val);
+                          }
+                        }}
+                        placeholder="Enter 10-digit number"
+                        maxLength={10}
                         className="w-full bg-[#F5F5F5] dark:bg-[#1A1A1A] px-4 py-2.5 rounded-xl text-[14px] outline-none"
                       />
                     </div>

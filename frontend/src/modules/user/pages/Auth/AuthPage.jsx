@@ -151,14 +151,29 @@ const AuthPage = ({ onComplete, initialMode = 'signup' }) => {
   const { pathname } = useLocation();
   const { config } = useAppContent();
   const months = config?.auth?.months || DEFAULT_MONTHS;
+  const { user: authUser, completeProfile } = useAuth();
 
   // Set mode based on current URL path
   const [mode, setMode] = useState(pathname === '/login' ? 'login' : initialMode);
 
   // Steps: 1=Welcome, 2=Methods, 3=Birthday, 4=PhoneInput, 5=OTP
-  const [step, setStep] = useState(
-    pathname === '/signup' ? 3 : (pathname === '/login' ? 4 : 1)
-  );
+  const [step, setStep] = useState(() => {
+    const isSignupMode = pathname === '/signup';
+    const isProfileCompleted = authUser?.isProfileCompleted !== undefined
+      ? authUser.isProfileCompleted
+      : (authUser?.username && !authUser.username.startsWith('user_') && authUser.fullName);
+
+    // Only force complete profile during signup if profile is incomplete
+    if (isSignupMode && authUser && !isProfileCompleted) {
+      return 6;
+    }
+
+    if (pathname === '/signup') {
+      const savedStep = sessionStorage.getItem('signup_step');
+      return savedStep !== null ? parseInt(savedStep, 10) : 3;
+    }
+    return pathname === '/login' ? 4 : 1;
+  });
 
   // Sync mode and step with URL changes
   useEffect(() => {
@@ -166,28 +181,80 @@ const AuthPage = ({ onComplete, initialMode = 'signup' }) => {
     const currentMode = p === '/login' ? 'login' : 'signup';
     setMode(currentMode);
 
+    const isProfileCompleted = authUser?.isProfileCompleted !== undefined
+      ? authUser.isProfileCompleted
+      : (authUser?.username && !authUser.username.startsWith('user_') && authUser.fullName);
+
+    // Only redirect to complete profile during signup flow
+    if (currentMode === 'signup' && authUser && !isProfileCompleted) {
+      setStep(6);
+      return;
+    }
+
     // Explicitly set step based on route
     if (p === '/signup') {
-      setStep(3);
+      const savedStep = sessionStorage.getItem('signup_step');
+      setStep(savedStep !== null ? parseInt(savedStep, 10) : 3);
     } else if (p === '/login') {
       setStep(4);
     } else if (p === '/' || p === '' || p === '/welcome' || p.includes('index.html')) {
+      // Clear saved signup state when going back to welcome screen
+      sessionStorage.removeItem('signup_step');
+      sessionStorage.removeItem('signup_month_idx');
+      sessionStorage.removeItem('signup_day_idx');
+      sessionStorage.removeItem('signup_year_idx');
+      sessionStorage.removeItem('signup_birthday_selected');
+      sessionStorage.removeItem('temp_phone_number');
       setStep(1); // Force welcome screen on root or /welcome
     } else {
       // For any other subroutes during auth, keep as welcome or default to methods
       setStep(1);
     }
-  }, [pathname]);
+  }, [pathname, authUser]);
 
-  const [monthIdx, setMonthIdx] = useState(7);
-  const [dayIdx, setDayIdx] = useState(22);
-  const [yearIdx, setYearIdx] = useState(39);
+  const [monthIdx, setMonthIdx] = useState(() => {
+    const val = sessionStorage.getItem('signup_month_idx');
+    return val !== null ? parseInt(val, 10) : 7;
+  });
+  const [dayIdx, setDayIdx] = useState(() => {
+    const val = sessionStorage.getItem('signup_day_idx');
+    return val !== null ? parseInt(val, 10) : 22;
+  });
+  const [yearIdx, setYearIdx] = useState(() => {
+    const val = sessionStorage.getItem('signup_year_idx');
+    return val !== null ? parseInt(val, 10) : 39;
+  });
   const [showBirthdayPrompt, setShowBirthdayPrompt] = useState(false);
 
   // Auth state
   const [phoneNumber, setPhoneNumber] = useState('');
   const [generatedOtp, setGeneratedOtp] = useState('');
-  const [birthdaySelected, setBirthdaySelected] = useState(false);
+  const [birthdaySelected, setBirthdaySelected] = useState(() => {
+    return sessionStorage.getItem('signup_birthday_selected') === 'true';
+  });
+
+  // Sync state changes with sessionStorage
+  useEffect(() => {
+    if (mode === 'signup' && step > 2) {
+      sessionStorage.setItem('signup_step', step.toString());
+    }
+  }, [step, mode]);
+
+  useEffect(() => {
+    sessionStorage.setItem('signup_month_idx', monthIdx.toString());
+  }, [monthIdx]);
+
+  useEffect(() => {
+    sessionStorage.setItem('signup_day_idx', dayIdx.toString());
+  }, [dayIdx]);
+
+  useEffect(() => {
+    sessionStorage.setItem('signup_year_idx', yearIdx.toString());
+  }, [yearIdx]);
+
+  useEffect(() => {
+    sessionStorage.setItem('signup_birthday_selected', birthdaySelected.toString());
+  }, [birthdaySelected]);
 
   const selectedDate = new Date(YEARS[yearIdx], months.indexOf(months[monthIdx]), DAYS[dayIdx]).toISOString();
   const displayDate = `${DAYS[dayIdx]} ${months[monthIdx]} ${YEARS[yearIdx]}`;
@@ -216,17 +283,33 @@ const AuthPage = ({ onComplete, initialMode = 'signup' }) => {
     // Clear temp phone number from sessionStorage
     sessionStorage.removeItem('temp_phone_number');
 
-    const isNewUser = userData?.username?.startsWith('user_') || !userData?.isVerified;
+    // Only force profile completion for new users during signup flow
+    // Existing users logging in should always proceed to home
+    const isNewUser = mode === 'signup' && (
+      userData?.isProfileCompleted !== undefined
+        ? !userData.isProfileCompleted
+        : (userData?.username?.startsWith('user_') || !userData?.fullName)
+    );
     const needsOnboarding = !userData?.isOnboarded;
     
     if (isNewUser) {
       setStep(6);
-    } else if (needsOnboarding) {
-      onComplete(true);
     } else {
-      onComplete(false);
+      // Clear signup state if not a new user
+      sessionStorage.removeItem('signup_step');
+      sessionStorage.removeItem('signup_month_idx');
+      sessionStorage.removeItem('signup_day_idx');
+      sessionStorage.removeItem('signup_year_idx');
+      sessionStorage.removeItem('signup_birthday_selected');
+      
+      if (needsOnboarding) {
+        onComplete(true);
+      } else {
+        onComplete(false);
+      }
     }
-  }, [onComplete]);
+  }, [onComplete, mode]);
+
 
   /* ─── Step 6: Complete Profile ─── */
   const [fullName, setFullName] = useState('');
@@ -236,7 +319,8 @@ const AuthPage = ({ onComplete, initialMode = 'signup' }) => {
   const [state, setState] = useState('');
   const [isCompleting, setIsCompleting] = useState(false);
   const [usernameError, setUsernameError] = useState('');
-  const { completeProfile } = useAuth();
+  const [fullNameError, setFullNameError] = useState('');
+  const [emailError, setEmailError] = useState('');
 
   const INDIAN_STATES = [
     'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh', 
@@ -250,17 +334,64 @@ const AuthPage = ({ onComplete, initialMode = 'signup' }) => {
 
   const handleCompleteProfile = async () => {
     setUsernameError('');
-    if (!username || username.length < 3) return;
+    setFullNameError('');
+    setEmailError('');
+
+    let hasError = false;
+
+    // Validate Full Name
+    const cleanFullName = fullName.trim();
+    if (!cleanFullName) {
+      setFullNameError('Full name is required');
+      hasError = true;
+    } else {
+      const nameRegex = /^[a-zA-Z]{2,}(?:\s+[a-zA-Z]+)*$/;
+      if (!nameRegex.test(cleanFullName)) {
+        setFullNameError('Please enter a valid full name (letters and spaces only, min 2 characters)');
+        hasError = true;
+      }
+    }
+
+    // Validate Username
+    if (!username || username.trim().length < 3) {
+      setUsernameError('Username must be at least 3 characters');
+      hasError = true;
+    }
+
+    // Validate Email (optional, but if provided, must be valid)
+    const cleanEmail = email.trim();
+    if (cleanEmail) {
+      const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.(com|co|in|net|org|edu|gov|mil|info|biz)$/i;
+      if (!emailRegex.test(cleanEmail)) {
+        setEmailError('Please enter a valid email address (e.g. name@domain.com)');
+        hasError = true;
+      } else {
+        const domain = cleanEmail.split('@')[1].toLowerCase();
+        if (domain.includes('gamil') || domain.includes('gmaill') || domain.includes('yaho') || domain.includes('hotmal')) {
+          setEmailError('Please enter a valid email domain (e.g. @gmail.com)');
+          hasError = true;
+        }
+      }
+    }
+
+    if (hasError) return;
+
     setIsCompleting(true);
     try {
       await completeProfile({
-        fullName,
+        fullName: cleanFullName,
         username,
-        email,
+        email: cleanEmail,
         country,
         state,
         dateOfBirth: selectedDate
       });
+      // Clear temp storage on profile completion success
+      sessionStorage.removeItem('signup_step');
+      sessionStorage.removeItem('signup_month_idx');
+      sessionStorage.removeItem('signup_day_idx');
+      sessionStorage.removeItem('signup_year_idx');
+      sessionStorage.removeItem('signup_birthday_selected');
       onComplete(true);
     } catch (err) {
       setUsernameError(err?.message || 'Username is not available');
@@ -272,7 +403,8 @@ const AuthPage = ({ onComplete, initialMode = 'signup' }) => {
   if (step === 6) {
     return (
       <BackgroundWrapper blur>
-        <div className="flex-1 flex flex-col justify-end px-4 pb-6 sm:p-6 overflow-y-auto">
+        <div className="flex-1 flex flex-col justify-center items-center px-4 py-6 sm:p-6 overflow-y-auto">
+          <div className="w-full max-w-md animate-scale-in">
           <AuthCard title="Complete your profile" subtitle="Choose how you'll appear on Jhumroo">
             <div className="flex flex-col gap-4 max-h-[60vh] overflow-y-auto no-scrollbar py-2">
               <div className="flex flex-col gap-1.5">
@@ -281,9 +413,18 @@ const AuthPage = ({ onComplete, initialMode = 'signup' }) => {
                   type="text"
                   placeholder="Your Name"
                   value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
-                  className="w-full h-[54px] bg-white/5 border border-white/10 rounded-2xl px-4 text-white outline-none focus:border-[#fe2c55] transition-all"
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (/^[a-zA-Z\s]*$/.test(val)) {
+                      setFullName(val);
+                      setFullNameError('');
+                    }
+                  }}
+                  className={`w-full h-[54px] bg-white/5 border ${fullNameError ? 'border-[#fe2c55]' : 'border-white/10'} rounded-2xl px-4 text-white outline-none focus:border-[#fe2c55] transition-all`}
                 />
+                {fullNameError && (
+                  <p className="text-[#fe2c55] text-xs font-semibold ml-1 mt-1">{fullNameError}</p>
+                )}
               </div>
               <div className="flex flex-col gap-1.5">
                 <label className="text-xs font-bold text-gray-400 ml-1">USERNAME</label>
@@ -307,9 +448,15 @@ const AuthPage = ({ onComplete, initialMode = 'signup' }) => {
                   type="email"
                   placeholder="email@example.com"
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full h-[54px] bg-white/5 border border-white/10 rounded-2xl px-4 text-white outline-none focus:border-[#fe2c55] transition-all"
+                  onChange={(e) => {
+                    setEmail(e.target.value);
+                    setEmailError('');
+                  }}
+                  className={`w-full h-[54px] bg-white/5 border ${emailError ? 'border-[#fe2c55]' : 'border-white/10'} rounded-2xl px-4 text-white outline-none focus:border-[#fe2c55] transition-all`}
                 />
+                {emailError && (
+                  <p className="text-[#fe2c55] text-xs font-semibold ml-1 mt-1">{emailError}</p>
+                )}
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="flex flex-col gap-1.5">
@@ -346,6 +493,7 @@ const AuthPage = ({ onComplete, initialMode = 'signup' }) => {
               </PrimaryButton>
             </div>
           </AuthCard>
+          </div>
         </div>
       </BackgroundWrapper>
     );
@@ -356,7 +504,7 @@ const AuthPage = ({ onComplete, initialMode = 'signup' }) => {
     return (
       <BackgroundWrapper>
         <div
-          className="flex-1 min-h-0 flex flex-col items-start justify-between gap-8 overflow-y-auto px-5 sm:px-8"
+          className="flex-1 min-h-0 flex flex-col items-start overflow-y-auto px-5 sm:px-8"
           style={{
             paddingTop: 'max(1.5rem, calc(env(safe-area-inset-top) + 1rem))',
             paddingBottom: 'max(1.5rem, calc(env(safe-area-inset-bottom) + 1.25rem))',
@@ -364,25 +512,28 @@ const AuthPage = ({ onComplete, initialMode = 'signup' }) => {
         >
           {/* Logo Section */}
           <div
-            className="flex max-w-[19rem] sm:max-w-[22rem] flex-col items-start animate-fade-in"
+            className="flex max-w-[22rem] sm:max-w-[26rem] flex-col items-start animate-fade-in"
             style={{ marginTop: 'clamp(0.5rem, 5vh, 4rem)' }}
           >
-            <p className="text-gray-300 text-lg sm:text-2xl font-semibold tracking-wide mb-2">Welcome to</p>
+            <p className="text-gray-300 text-xl sm:text-2xl font-semibold tracking-wide mb-2">Welcome to</p>
             <h1
               className="text-white tracking-tight text-left"
               style={{
                 fontFamily: "'Playfair Display', serif",
-                fontSize: 'clamp(2.15rem, 11vw, 3.2rem)',
+                fontSize: 'clamp(2.8rem, 14vw, 4.2rem)',
                 fontWeight: 900,
-                lineHeight: 1.1,
+                lineHeight: 1.05,
               }}
             >
               The Jhumroo App
             </h1>
           </div>
 
+          {/* Spacer that pushes buttons to ~65% from top */}
+          <div className="flex-1" style={{ maxHeight: '52vh' }} />
+
           {/* Action Buttons */}
-          <div className="w-full self-stretch max-w-none sm:max-w-[360px] flex flex-col gap-4 animate-slide-up">
+          <div className="w-full self-stretch max-w-none sm:max-w-[360px] flex flex-col gap-4 animate-slide-up pb-2">
             <button
               type="button"
               onClick={() => navigate('/login')}
@@ -489,21 +640,23 @@ const AuthPage = ({ onComplete, initialMode = 'signup' }) => {
             </button>
           </div>
 
-          <div className="flex-1 min-h-0 flex flex-col justify-end overflow-y-auto px-4 pb-4 sm:p-6">
-            <AuthCard title="When's your birthday?" subtitle="Your birthday won't be shown publicly.">
-              <div className="flex items-center gap-3 sm:gap-4 mb-6 sm:mb-8">
-                <div className="flex-1 bg-white/5 border border-white/10 rounded-2xl py-4 px-6">
-                  <p className={`text-[17px] font-bold ${birthdaySelected ? 'text-white' : 'text-gray-500'}`}>
-                    {birthdaySelected ? displayDate : 'Birthday'}
-                  </p>
+          <div className="flex-1 min-h-0 flex flex-col justify-center items-center overflow-y-auto px-4 pb-4 sm:p-6">
+            <div className="w-full max-w-md animate-scale-in">
+              <AuthCard title="When's your birthday?" subtitle="Your birthday won't be shown publicly.">
+                <div className="flex items-center gap-3 sm:gap-4 mb-6 sm:mb-8">
+                  <div className="flex-1 bg-white/5 border border-white/10 rounded-2xl py-4 px-6">
+                    <p className={`text-[17px] font-bold ${birthdaySelected ? 'text-white' : 'text-gray-500'}`}>
+                      {birthdaySelected ? displayDate : 'Birthday'}
+                    </p>
+                  </div>
+                  <div className="w-14 h-14 bg-[#fe2c55]/10 rounded-2xl flex items-center justify-center text-3xl">🎂</div>
                 </div>
-                <div className="w-14 h-14 bg-[#fe2c55]/10 rounded-2xl flex items-center justify-center text-3xl">🎂</div>
-              </div>
 
-              <PrimaryButton onClick={handleNextBirthday} disabled={!birthdaySelected}>
-                Next Step
-              </PrimaryButton>
-            </AuthCard>
+                <PrimaryButton onClick={handleNextBirthday} disabled={!birthdaySelected}>
+                  Next Step
+                </PrimaryButton>
+              </AuthCard>
+            </div>
           </div>
 
           <div
@@ -546,7 +699,6 @@ const AuthPage = ({ onComplete, initialMode = 'signup' }) => {
   }
 
   /* ─── Step 4 & 5: Phone/OTP ─── */
-  // Wrap existing sub-components in the new theme
   if (step === 4 || step === 5) {
     return (
       <BackgroundWrapper blur>
@@ -555,37 +707,56 @@ const AuthPage = ({ onComplete, initialMode = 'signup' }) => {
             className="min-h-[56px] flex items-center px-4 shrink-0"
             style={{ paddingTop: 'max(0px, env(safe-area-inset-top))' }}
           >
-            <button onClick={() => setStep(step === 4 ? (mode === 'signup' ? 3 : 1) : 4)} className="w-10 h-10 flex items-center justify-center bg-white/10 rounded-full text-white">
+            <button 
+              onClick={() => {
+                if (step === 4) {
+                  if (mode === 'signup') {
+                    setStep(3);
+                  } else {
+                    navigate('/');
+                  }
+                } else {
+                  setStep(4);
+                }
+              }} 
+              className="w-10 h-10 flex items-center justify-center bg-white/10 rounded-full text-white"
+            >
               <BiChevronLeft size={28} />
             </button>
           </div>
 
-          <div className="flex-1 min-h-0 flex flex-col justify-between">
-            <div
-              className="flex-1 min-h-0 overflow-y-auto px-4 pb-6 sm:p-6"
-              style={{ paddingBottom: 'max(1.5rem, calc(env(safe-area-inset-bottom) + 1rem))' }}
-            >
-              {step === 4 ? (
-                <PhoneInput
-                  mode={mode}
-                  onNext={(phone, otp) => {
-                    setPhoneNumber(phone);
-                    setGeneratedOtp(otp);
-                    setStep(5);
-                  }}
-                  onBack={() => setStep(mode === 'signup' ? 3 : 1)}
-                  isThemed={true} // Hint for inner components to use dark theme
-                />
-              ) : (
-                <OtpScreen
-                  phoneNumber={phoneNumber}
-                  generatedOtp={generatedOtp}
-                  onVerifySuccess={handleAuthSuccess}
-                  onBack={() => setStep(4)}
-                  onRegenerateOtp={(newOtp) => setGeneratedOtp(newOtp)}
-                  isThemed={true}
-                />
-              )}
+          <div className="flex-1 flex flex-col justify-center items-center px-4 pb-8 pt-2 overflow-y-auto">
+            <div className="w-full max-w-md animate-scale-in">
+              <AuthCard>
+                {step === 4 ? (
+                  <PhoneInput
+                    mode={mode}
+                    onNext={(phone, otp) => {
+                      setPhoneNumber(phone);
+                      setGeneratedOtp(otp);
+                      setStep(5);
+                    }}
+                    onBack={() => {
+                      if (mode === 'signup') {
+                        setStep(3);
+                      } else {
+                        navigate('/');
+                      }
+                    }}
+                    isThemed={true}
+                  />
+                ) : (
+                  <OtpScreen
+                    phoneNumber={phoneNumber}
+                    generatedOtp={generatedOtp}
+                    onVerifySuccess={handleAuthSuccess}
+                    onBack={() => setStep(4)}
+                    onEditPhone={() => setStep(4)}
+                    onRegenerateOtp={(newOtp) => setGeneratedOtp(newOtp)}
+                    isThemed={true}
+                  />
+                )}
+              </AuthCard>
             </div>
           </div>
         </div>

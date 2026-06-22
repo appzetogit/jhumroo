@@ -79,7 +79,28 @@ const BottomNavBar = ({ isDarkTheme = true }) => {
   const [activeIndex, setActiveIndex] = useState(0);
   const [unreadCount, setUnreadCount] = useState(0);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  
+  const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);
+
+  useEffect(() => {
+    const handleResize = () => {
+      const activeEl = document.activeElement;
+      const isInputFocused = activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA');
+      const heightDifference = window.screen.height - window.innerHeight;
+      const isKeyboardActive = isInputFocused && heightDifference > 150;
+      setIsKeyboardOpen(!!isKeyboardActive);
+    };
+
+    window.addEventListener('resize', handleResize);
+    window.addEventListener('focusin', handleResize);
+    window.addEventListener('focusout', handleResize);
+
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      window.removeEventListener('focusin', handleResize);
+      window.removeEventListener('focusout', handleResize);
+    };
+  }, []);
+
   const isHomePage = pathname === '/';
   const [isReelOverlayOpen, setIsReelOverlayOpen] = useState(false);
 
@@ -198,7 +219,7 @@ const BottomNavBar = ({ isDarkTheme = true }) => {
     }`;
   const navCount = navItems.length || 5;
 
-  if (isModalOpen) return null;
+  if (isModalOpen || isKeyboardOpen) return null;
 
   return (
     <nav

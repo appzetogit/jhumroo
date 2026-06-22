@@ -12,6 +12,29 @@ export const createSupportRequest = async (req, res) => {
       return res.status(400).json({ success: false, message: 'All fields are required' });
     }
 
+    // Name check
+    const nameRegex = /^[a-zA-Z]{2,}(?:\s+[a-zA-Z]+)*$/;
+    if (!nameRegex.test(name.trim())) {
+      return res.status(400).json({ success: false, message: 'Please enter a valid name (letters and spaces only, min 2 characters)' });
+    }
+
+    // Email check
+    const cleanEmail = email.trim();
+    const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.(com|co|in|net|org|edu|gov|mil|info|biz)$/i;
+    if (!emailRegex.test(cleanEmail)) {
+      return res.status(400).json({ success: false, message: 'Please enter a valid email address (e.g. name@domain.com)' });
+    }
+    const domain = cleanEmail.split('@')[1].toLowerCase();
+    if (domain.includes('gamil') || domain.includes('gmaill') || domain.includes('yaho') || domain.includes('hotmal')) {
+      return res.status(400).json({ success: false, message: 'Please enter a valid email domain (e.g. @gmail.com)' });
+    }
+
+    // Phone check
+    const phoneRegex = /^[6-9]\d{9}$/;
+    if (!phoneRegex.test(phoneNumber)) {
+      return res.status(400).json({ success: false, message: 'Please enter a valid 10-digit mobile number' });
+    }
+
     const request = await SupportRequest.create({
       userId,
       name,

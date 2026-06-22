@@ -232,6 +232,34 @@ const AdminProblemReports = () => {
               </div>
             </div>
 
+            {selectedReport.attachments && selectedReport.attachments.length > 0 && (
+              <div className="mb-6">
+                <label className="text-xs font-bold text-gray-400 uppercase">Attachments ({selectedReport.attachments.length})</label>
+                <div className="flex flex-wrap gap-4 mt-2">
+                  {selectedReport.attachments.map((att, idx) => (
+                    <div key={att._id || idx} className="relative w-40 h-40 rounded-xl overflow-hidden border border-gray-200 bg-black flex items-center justify-center">
+                      {att.fileType === 'video' ? (
+                        <video 
+                          src={att.url} 
+                          controls 
+                          className="w-full h-full object-contain"
+                        />
+                      ) : (
+                        <a href={att.url} target="_blank" rel="noopener noreferrer" className="w-full h-full">
+                          <img 
+                            src={att.url} 
+                            alt={`attachment-${idx}`} 
+                            className="w-full h-full object-cover cursor-zoom-in"
+                          />
+                        </a>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+
             <div className="flex gap-3">
               <button 
                 className="flex-1 admin-primary-btn"

@@ -372,11 +372,12 @@ export const getFeedReels = asyncHandler(async (req, res) => {
 
   // Build query based on audience privacy
   let baseQuery = { isActive: true, status: 'completed' };
+  let followingIds = [];
   if (!req.user) {
     baseQuery.audience = 'everyone';
   } else {
     const following = await Follow.find({ follower: req.user._id, status: 'accepted' }).select('following');
-    const followingIds = following.map(f => f.following);
+    followingIds = following.map(f => f.following);
     const followers = await Follow.find({ following: req.user._id, status: 'accepted' }).select('follower');
     const followerIds = followers.map(f => f.follower);
 
@@ -390,6 +391,17 @@ export const getFeedReels = asyncHandler(async (req, res) => {
         ]
       }
     ];
+  }
+
+  if (req.user) {
+    const reportedReels = await Report.find({
+      reportedBy: req.user._id,
+      reportType: 'Reel'
+    }).select('reportedItem');
+    const reportedReelIds = reportedReels.map(r => r.reportedItem);
+    if (reportedReelIds.length > 0) {
+      baseQuery._id = { $nin: reportedReelIds };
+    }
   }
 
   // Retrieve candidate pool of the 1000 most recent active reels matching the privacy rules
@@ -485,10 +497,14 @@ export const getFeedReels = asyncHandler(async (req, res) => {
         ...adLikes.map(l => l.ad.toString())
       ]);
       const savedSet = new Set(saves.map(s => s.reel.toString()));
+      const followingSet = new Set(followingIds.map(id => id.toString()));
 
       reels.forEach(r => {
         r.isLiked = likedSet.has(r._id.toString());
         r.isSaved = savedSet.has(r._id.toString());
+        if (r.user && r.user._id) {
+          r.user.isFollowing = followingSet.has(r.user._id.toString());
+        }
       });
     }
   }
@@ -537,7 +553,22 @@ export const getFollowingReels = asyncHandler(async (req, res) => {
     ]
   };
 
-  if (cursor) {
+  const reportedReels = await Report.find({
+    reportedBy: req.user._id,
+    reportType: 'Reel'
+  }).select('reportedItem');
+  const reportedReelIds = reportedReels.map(r => r.reportedItem);
+
+  if (reportedReelIds.length > 0) {
+    if (cursor) {
+      query._id = { 
+        $lt: new mongoose.Types.ObjectId(cursor),
+        $nin: reportedReelIds
+      };
+    } else {
+      query._id = { $nin: reportedReelIds };
+    }
+  } else if (cursor) {
     query._id = { $lt: new mongoose.Types.ObjectId(cursor) };
   }
 
@@ -654,11 +685,24 @@ export const getTrendingReels = asyncHandler(async (req, res) => {
 
   // Optimize: Retrieve a candidate pool of the 300 most recent active public reels
   // This avoids a full collection scan for dynamic engagement calculations.
-  const candidateReels = await Reel.find({ 
+  let candidateQuery = { 
     isActive: true, 
     status: 'completed', 
     audience: 'everyone'
-  })
+  };
+
+  if (req.user) {
+    const reportedReels = await Report.find({
+      reportedBy: req.user._id,
+      reportType: 'Reel'
+    }).select('reportedItem');
+    const reportedReelIds = reportedReels.map(r => r.reportedItem);
+    if (reportedReelIds.length > 0) {
+      candidateQuery._id = { $nin: reportedReelIds };
+    }
+  }
+
+  const candidateReels = await Reel.find(candidateQuery)
     .sort({ createdAt: -1 })
     .limit(300)
     .select('_id')
@@ -824,6 +868,20 @@ export const getReel = asyncHandler(async (req, res) => {
     });
   }
 
+  if (req.user) {
+    const isReported = await Report.exists({
+      reportedBy: req.user._id,
+      reportedItem: req.params.id,
+      reportType: 'Reel'
+    });
+    if (isReported) {
+      return res.status(404).json({
+        success: false,
+        message: 'Reel not found'
+      });
+    }
+  }
+
   // Enforce audience privacy rules
   if (reel.audience && reel.audience !== 'everyone' && (!req.user || req.user._id.toString() !== reel.user._id.toString())) {
     let isFollowing = false;
@@ -853,14 +911,18 @@ export const getReel = asyncHandler(async (req, res) => {
     }
   }
 
-  // Add liked and saved status if user is authenticated
+  // Add liked, saved, and isFollowing status if user is authenticated
   if (req.user) {
-    const [like, save] = await Promise.all([
+    const [like, save, follow] = await Promise.all([
       Like.findOne({ user: req.user._id, reel: req.params.id }),
-      SavedReel.findOne({ user: req.user._id, reel: req.params.id })
+      SavedReel.findOne({ user: req.user._id, reel: req.params.id }),
+      Follow.findOne({ follower: req.user._id, following: reel.user._id, status: 'accepted' })
     ]);
     reel.isLiked = !!like;
     reel.isSaved = !!save;
+    if (reel.user) {
+      reel.user.isFollowing = !!follow;
+    }
   }
 
   res.status(200).json({
@@ -961,25 +1023,32 @@ export const toggleLike = asyncHandler(async (req, res) => {
   
   if (existingLike) {
     // ─── UNLIKE FLOW ───
+    const actualLikesCount = await Like.countDocuments(isAd ? { ad: cId } : { reel: cId });
+
     let updatedContent;
     if (isAd) {
       updatedContent = await Ad.findByIdAndUpdate(
         cId,
-        { $inc: { 'stats.likesCount': -1 } },
+        { 'stats.likesCount': actualLikesCount },
         { new: true }
       );
     } else {
       updatedContent = await Reel.findByIdAndUpdate(
         cId,
-        { $inc: { 'stats.likesCount': -1 } },
+        { 'stats.likesCount': actualLikesCount },
         { new: true }
       );
 
       // Update owner's total likes count for reels
       if (content.user) {
+        const userReels = await Reel.find({ user: content.user });
+        const totalUserLikes = userReels.reduce((sum, r) => {
+          const count = String(r._id) === String(cId) ? actualLikesCount : (r.stats?.likesCount || 0);
+          return sum + count;
+        }, 0);
         await User.updateOne(
           { _id: content.user },
-          { $inc: { 'stats.likesCount': -1 } }
+          { 'stats.likesCount': totalUserLikes }
         ).catch(err => console.error('[toggleLike] User stats update failed:', err));
       }
     }
@@ -1021,25 +1090,32 @@ export const toggleLike = asyncHandler(async (req, res) => {
       throw err;
     }
 
+    const actualLikesCount = await Like.countDocuments(isAd ? { ad: cId } : { reel: cId });
+
     let updatedContent;
     if (isAd) {
       updatedContent = await Ad.findByIdAndUpdate(
         cId,
-        { $inc: { 'stats.likesCount': 1 } },
+        { 'stats.likesCount': actualLikesCount },
         { new: true }
       );
     } else {
       updatedContent = await Reel.findByIdAndUpdate(
         cId,
-        { $inc: { 'stats.likesCount': 1 } },
+        { 'stats.likesCount': actualLikesCount },
         { new: true }
       );
 
       // Update owner's total likes count for reels
       if (content.user) {
+        const userReels = await Reel.find({ user: content.user });
+        const totalUserLikes = userReels.reduce((sum, r) => {
+          const count = String(r._id) === String(cId) ? actualLikesCount : (r.stats?.likesCount || 0);
+          return sum + count;
+        }, 0);
         await User.updateOne(
           { _id: content.user },
-          { $inc: { 'stats.likesCount': 1 } }
+          { 'stats.likesCount': totalUserLikes }
         ).catch(err => console.error('[toggleLike] User stats update failed:', err));
 
         // Create notification for owner (if not liking own reel)
@@ -1248,17 +1324,52 @@ export const searchReels = asyncHandler(async (req, res) => {
     });
   }
 
+  if (req.user) {
+    const reportedReels = await Report.find({
+      reportedBy: req.user._id,
+      reportType: 'Reel'
+    }).select('reportedItem');
+    const reportedReelIds = reportedReels.map(r => r.reportedItem);
+    if (reportedReelIds.length > 0) {
+      query._id = { $nin: reportedReelIds };
+    }
+  }
+
   const reels = await Reel.find(query)
     .sort({ 'stats.viewsCount': -1, createdAt: -1 })
     .skip(skip)
     .limit(limit)
-    .populate('user', 'username fullName profilePicture isVerified downloadPrivacy');
+    .populate('user', 'username fullName profilePicture isVerified downloadPrivacy')
+    .populate('music.audioId')
+    .populate({ path: 'originalReel', populate: { path: 'user', select: 'username fullName profilePicture isVerified' } });
 
   const total = await Reel.countDocuments(query);
 
+  let reelsObj = reels.map(r => r.toObject ? r.toObject({ virtuals: true }) : { ...r });
+
+  if (req.user && reelsObj.length > 0) {
+    const reelIds = reelsObj.map(r => r._id);
+    const creatorIds = reelsObj.filter(r => r.user && r.user._id).map(r => r.user._id);
+    const [likes, saves, following] = await Promise.all([
+      Like.find({ user: req.user._id, reel: { $in: reelIds } }),
+      SavedReel.find({ user: req.user._id, reel: { $in: reelIds } }),
+      Follow.find({ follower: req.user._id, following: { $in: creatorIds }, status: 'accepted' })
+    ]);
+    const likedSet = new Set(likes.map(l => l.reel.toString()));
+    const savedSet = new Set(saves.map(s => s.reel.toString()));
+    const followingSet = new Set(following.map(f => f.following.toString()));
+    reelsObj.forEach(r => {
+      r.isLiked = likedSet.has(r._id.toString());
+      r.isSaved = savedSet.has(r._id.toString());
+      if (r.user && r.user._id) {
+        r.user.isFollowing = followingSet.has(r.user._id.toString());
+      }
+    });
+  }
+
   res.status(200).json({
     success: true,
-    reels,
+    reels: reelsObj,
     pagination: {
       page,
       limit,
@@ -1448,6 +1559,35 @@ export const downloadReel = asyncHandler(async (req, res) => {
     res.redirect(videoUrl);
   }
 });
+
+/**
+ * @desc    Get list of users who liked a reel
+ * @route   GET /api/reels/:id/likers
+ * @access  Public
+ */
+export const getReelLikers = asyncHandler(async (req, res) => {
+  const { page = 1, limit = 20 } = req.query;
+  const skip = (parseInt(page) - 1) * parseInt(limit);
+
+  const likes = await Like.find({ reel: req.params.id })
+    .sort({ createdAt: -1 })
+    .skip(skip)
+    .limit(parseInt(limit))
+    .populate('user', 'username fullName profilePicture isVerified');
+
+  const total = await Like.countDocuments({ reel: req.params.id });
+
+  const likers = likes.map(like => like.user).filter(Boolean);
+
+  res.status(200).json({
+    success: true,
+    total,
+    page: parseInt(page),
+    pages: Math.ceil(total / parseInt(limit)),
+    users: likers
+  });
+});
+
 
 
 

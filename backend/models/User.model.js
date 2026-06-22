@@ -186,6 +186,24 @@ const userSchema = new mongoose.Schema(
       enum: ['On', 'Off'],
       default: 'On'
     },
+    notificationSettings: {
+      likes: {
+        type: Boolean,
+        default: true
+      },
+      comments: {
+        type: Boolean,
+        default: true
+      },
+      newFollowers: {
+        type: Boolean,
+        default: true
+      },
+      mentionsAndTags: {
+        type: Boolean,
+        default: true
+      }
+    },
     blockedUsers: [{
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User'
@@ -222,6 +240,12 @@ userSchema.index({ liveLocation: '2dsphere' });
 userSchema.virtual('fullPhoneNumber').get(function () {
   return `${this.countryCode}${this.phoneNumber}`;
 });
+
+// Virtual for profile completeness check
+userSchema.virtual('isProfileCompleted').get(function () {
+  return !!(this.username && !this.username.startsWith('user_') && this.fullName);
+});
+
 
 // Method to generate OTP
 userSchema.methods.generateOTP = function () {

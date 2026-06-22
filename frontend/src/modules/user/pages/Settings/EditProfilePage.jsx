@@ -2,12 +2,14 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { BiChevronLeft, BiCamera } from 'react-icons/bi';
 import { useAuth } from '../../../../context/AuthContext';
+import { useToast } from '../../../../context/ToastContext';
 import userService from '../../../../services/userService';
 import PhotoPickerSheet from '../../components/modals/PhotoPickerSheet';
 
 const EditProfilePage = () => {
     const navigate = useNavigate();
     const { user: currentUser, updateUser } = useAuth();
+    const { showToast } = useToast();
     
     const [fullName, setFullName] = useState(currentUser?.fullName || '');
     const [username, setUsername] = useState(currentUser?.username || '');
@@ -17,20 +19,33 @@ const EditProfilePage = () => {
     const [showPhotoPicker, setShowPhotoPicker] = useState(false);
 
     const handleSave = async () => {
+        const cleanFullName = fullName.trim();
+        if (!cleanFullName) {
+            showToast('Full name is required', 'error');
+            return;
+        }
+
+        const nameRegex = /^[a-zA-Z]{2,}(?:\s+[a-zA-Z]+)*$/;
+        if (!nameRegex.test(cleanFullName)) {
+            showToast('Please enter a valid full name (letters and spaces only, min 2 characters)', 'error');
+            return;
+        }
+
         setLoading(true);
         try {
             const response = await userService.updateProfile({
-                fullName,
+                fullName: cleanFullName,
                 username,
                 bio
             });
             if (response.success) {
                 updateUser(response.user);
+                showToast('Profile updated successfully!', 'success');
                 navigate(-1);
             }
         } catch (error) {
             console.error('Failed to update profile:', error);
-            alert(error?.message || 'Failed to update profile');
+            showToast(error?.message || 'Failed to update profile', 'error');
         } finally {
             setLoading(false);
         }
@@ -55,10 +70,11 @@ const EditProfilePage = () => {
                     profilePicture: response.profilePicture,
                 };
                 updateUser(updatedUser);
+                showToast('Profile photo saved successfully!', 'success');
             }
         } catch (error) {
             console.error('Failed to upload profile picture:', error);
-            alert('Profile photo upload nahi ho saka. Dobara try karo.');
+            showToast('Profile photo upload failed. Please try again.', 'error');
         } finally {
             setUploading(false);
         }
@@ -118,7 +134,7 @@ const EditProfilePage = () => {
                         </div>
                     </div>
                     <p className="text-white/60 text-[13px] font-medium mt-4">
-                        {uploading ? 'Upload ho raha hai...' : 'Change photo'}
+                        {uploading ? 'Uploading...' : 'Change photo'}
                     </p>
                 </div>
 
@@ -130,7 +146,12 @@ const EditProfilePage = () => {
                             <input 
                                 type="text" 
                                 value={fullName} 
-                                onChange={(e) => setFullName(e.target.value)}
+                                onChange={(e) => {
+                                    const val = e.target.value;
+                                    if (/^[a-zA-Z\s]*$/.test(val)) {
+                                        setFullName(val);
+                                    }
+                                }}
                                 className="bg-transparent text-white text-[15px] w-full outline-none font-medium" 
                             />
                         </div>

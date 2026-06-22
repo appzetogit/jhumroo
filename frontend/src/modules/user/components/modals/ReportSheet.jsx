@@ -24,6 +24,7 @@ const ReportSheet = ({ isOpen, onClose, reelId }) => {
     setLoading(true);
     try {
       await reelService.reportReel(reelId, reason);
+      window.dispatchEvent(new CustomEvent('reel-reported', { detail: { reelId } }));
       setStep(2);
     } catch (err) {
       alert(err.message || "Failed to submit report");

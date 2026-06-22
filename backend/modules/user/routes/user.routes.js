@@ -14,7 +14,8 @@ import {
   reportUser,
   deleteAccount,
   toggleBlockCommenter,
-  getBlockedCommenters
+  getBlockedCommenters,
+  getBlockedUsers
 } from '../controllers/user.controller.js';
 import {
   getPreferences,
@@ -55,6 +56,7 @@ router.post('/me/preferences/not-interested', protect, markNotInterested);
 router.post('/:id/block', protect, toggleBlockUser);
 router.post('/:id/block-commenter', protect, toggleBlockCommenter);
 router.get('/me/blocked-commenters', protect, getBlockedCommenters);
+router.get('/me/blocked', protect, getBlockedUsers);
 router.post('/:id/report', protect, reportUser);
 
 export default router;

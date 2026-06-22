@@ -103,8 +103,7 @@ const SettingsPage = ({ onLogout }) => {
             <div className={`scrollable flex-1 px-4 pb-8 ${showLogoutModal ? 'overflow-hidden' : ''}`}>
                 {/* User Profile Section */}
                 <div 
-                  className="theme-panel-card rounded-[18px] p-4 flex items-center justify-between mb-4 cursor-pointer active:opacity-90 transition-all shadow-sm"
-                  onClick={() => navigate('/profile')}
+                  className="theme-panel-card rounded-[18px] p-4 flex items-center justify-between mb-4 shadow-sm"
                 >
                     <div className="flex items-center gap-3">
                         <div className="w-12 h-12 rounded-full overflow-hidden shrink-0 border border-white/10 bg-black/20">
@@ -119,7 +118,6 @@ const SettingsPage = ({ onLogout }) => {
                             <p className="theme-text-muted text-[13px] font-medium">@{currentUser?.username}</p>
                         </div>
                     </div>
-                    <BiChevronRight size={22} className="theme-text-faint" />
                 </div>
 
                 {/* Upgrade to Premium Card */}

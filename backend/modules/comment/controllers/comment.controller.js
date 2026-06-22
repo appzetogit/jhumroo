@@ -349,6 +349,16 @@ export const getReelComments = asyncHandler(async (req, res) => {
   // Get total count
   const totalComments = await Comment.countDocuments(query);
 
+  // Self-healing commentsCount sync
+  if (content && content.stats && content.stats.commentsCount !== totalComments) {
+    if (!isAd) {
+      await Reel.updateOne({ _id: reelId }, { $set: { 'stats.commentsCount': totalComments } });
+    } else {
+      await Ad.updateOne({ _id: reelId }, { $set: { 'stats.commentsCount': totalComments } });
+    }
+    content.stats.commentsCount = totalComments;
+  }
+
   // Enrich with follow status and like status (Instagram-like)
   const enrichedComments = await populateCommentWithUserDetails(
     comments,
@@ -380,10 +390,28 @@ export const getReelComments = asyncHandler(async (req, res) => {
     commentsBlocked = content.user.blockedCommenters.some(id => id.toString() === req.user._id.toString());
   }
 
+  // Check if current user is restricted due to 'friends only' comment privacy
+  let commentsMutualOnly = false;
+  if (
+    req.user &&
+    content.user &&
+    content.user._id.toString() !== req.user._id.toString() &&
+    content.user.commentPrivacy === 'friends'
+  ) {
+    const [followA, followB] = await Promise.all([
+      Follow.findOne({ follower: req.user._id, following: content.user._id, status: 'accepted' }),
+      Follow.findOne({ follower: content.user._id, following: req.user._id, status: 'accepted' })
+    ]);
+    if (!followA || !followB) {
+      commentsMutualOnly = true;
+    }
+  }
+
   res.status(200).json({
     success: true,
     comments: enrichedComments,
     commentsBlocked,
+    commentsMutualOnly,
     pagination: {
       currentPage: page,
       totalPages: Math.ceil(totalComments / limit),

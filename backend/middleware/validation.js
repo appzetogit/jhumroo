@@ -31,10 +31,23 @@ export const registerValidation = [
     .matches(/^[a-z0-9_]+$/).withMessage('Username can only contain lowercase letters, numbers, and underscores'),
   body('email')
     .optional()
-    .isEmail().withMessage('Invalid email address'),
+    .isEmail().withMessage('Invalid email address')
+    .custom((value) => {
+      const email = value.trim();
+      const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.(com|co|in|net|org|edu|gov|mil|info|biz)$/i;
+      if (!emailRegex.test(email)) {
+        throw new Error('Please enter a valid email address with a supported domain extension (e.g. .com, .co, .in)');
+      }
+      const domain = email.split('@')[1].toLowerCase();
+      if (domain.includes('gamil') || domain.includes('gmaill') || domain.includes('yaho') || domain.includes('hotmal')) {
+        throw new Error('Please enter a valid email domain (e.g. @gmail.com)');
+      }
+      return true;
+    }),
   body('fullName')
     .optional()
-    .isLength({ max: 50 }).withMessage('Full name cannot exceed 50 characters'),
+    .isLength({ min: 2, max: 50 }).withMessage('Full name must be between 2 and 50 characters')
+    .matches(/^[a-zA-Z]+(?:\s+[a-zA-Z]+)*$/).withMessage('Full name can only contain letters and spaces'),
   body('dateOfBirth')
     .optional()
     .isISO8601().withMessage('Invalid date format')
@@ -75,13 +88,41 @@ export const profileUpdateValidation = [
     .matches(/^[a-z0-9_]+$/).withMessage('Username can only contain lowercase letters, numbers, and underscores'),
   body('email')
     .optional()
-    .isEmail().withMessage('Invalid email address'),
+    .isEmail().withMessage('Invalid email address')
+    .custom((value) => {
+      const email = value.trim();
+      const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.(com|co|in|net|org|edu|gov|mil|info|biz)$/i;
+      if (!emailRegex.test(email)) {
+        throw new Error('Please enter a valid email address with a supported domain extension (e.g. .com, .co, .in)');
+      }
+      const domain = email.split('@')[1].toLowerCase();
+      if (domain.includes('gamil') || domain.includes('gmaill') || domain.includes('yaho') || domain.includes('hotmal')) {
+        throw new Error('Please enter a valid email domain (e.g. @gmail.com)');
+      }
+      return true;
+    }),
   body('fullName')
     .optional()
-    .isLength({ max: 50 }).withMessage('Full name cannot exceed 50 characters'),
+    .isLength({ min: 2, max: 50 }).withMessage('Full name must be between 2 and 50 characters')
+    .matches(/^[a-zA-Z]+(?:\s+[a-zA-Z]+)*$/).withMessage('Full name can only contain letters and spaces'),
   body('bio')
     .optional()
-    .isLength({ max: 150 }).withMessage('Bio cannot exceed 150 characters')
+    .isLength({ max: 150 }).withMessage('Bio cannot exceed 150 characters'),
+  body('notificationSettings')
+    .optional()
+    .isObject().withMessage('Notification settings must be an object'),
+  body('notificationSettings.likes')
+    .optional()
+    .isBoolean().withMessage('Likes setting must be a boolean'),
+  body('notificationSettings.comments')
+    .optional()
+    .isBoolean().withMessage('Comments setting must be a boolean'),
+  body('notificationSettings.newFollowers')
+    .optional()
+    .isBoolean().withMessage('New followers setting must be a boolean'),
+  body('notificationSettings.mentionsAndTags')
+    .optional()
+    .isBoolean().withMessage('Mentions and tags setting must be a boolean')
 ];
 
 /**

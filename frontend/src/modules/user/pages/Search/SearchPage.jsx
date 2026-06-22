@@ -1,5 +1,5 @@
 import React, { useDeferredValue, useMemo, useRef, useState } from 'react';
-import { BiChevronLeft, BiMicrophone, BiSearch, BiX } from 'react-icons/bi';
+import { BiMicrophone, BiSearch, BiX } from 'react-icons/bi';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { getSearchResults, normalizeSearchQuery } from '../../../../utils/searchUtils';
 import { useAppContent } from '../../../../hooks/useAppContent';
@@ -219,13 +219,7 @@ const SearchPage = () => {
     }
   };
 
-  const handleBack = () => {
-    if (window.history.length > 1) {
-      navigate(-1);
-      return;
-    }
-    navigate('/');
-  };
+
 
   const handleDraftChange = (nextValue) => {
     clearUsersLoader();
@@ -258,15 +252,7 @@ const SearchPage = () => {
 
   return (
     <div className="page-container theme-surface-page flex flex-col overflow-hidden">
-      <div className="theme-page-header flex items-center gap-3 px-4 pt-[max(0.75rem,var(--safe-area-top))] pb-3 shrink-0">
-        <button
-          type="button"
-          onClick={handleBack}
-          className="w-8 h-8 flex items-center justify-center theme-text-primary active:opacity-60 shrink-0"
-        >
-          <BiChevronLeft size={22} />
-        </button>
-
+      <div className="theme-page-header flex items-center gap-3 px-4 pt-[max(0.35rem,var(--safe-area-top))] pb-2 shrink-0">
         <div className="theme-input-shell flex-1 min-w-0 rounded-[6px] flex items-center gap-2 px-3 py-2">
           <button
             type="button"

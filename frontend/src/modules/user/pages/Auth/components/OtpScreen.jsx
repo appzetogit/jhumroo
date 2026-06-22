@@ -5,7 +5,7 @@ import { useAuth } from '../../../../../context/AuthContext';
 const OTP_LENGTH = 6;
 const EXPIRY_TIME = 120; // 2 minutes
 
-const OtpScreen = ({ phoneNumber, generatedOtp, onVerifySuccess, onBack, onRegenerateOtp, isThemed = false }) => {
+const OtpScreen = ({ phoneNumber, generatedOtp, onVerifySuccess, onBack, onEditPhone, onRegenerateOtp, isThemed = false }) => {
   const { verifyOTP, sendOTP } = useAuth();
   const [otp, setOtp] = useState('');
   const [timer, setTimer] = useState(EXPIRY_TIME);
@@ -128,9 +128,20 @@ const OtpScreen = ({ phoneNumber, generatedOtp, onVerifySuccess, onBack, onRegen
         style={{ paddingBottom: isThemed ? 'max(0.25rem, env(safe-area-inset-bottom))' : undefined }}
       >
         <h2 className={`text-[22px] sm:text-[24px] font-black mb-1 leading-tight ${isThemed ? 'text-white' : 'text-black'}`}>Verify it's you</h2>
-        <p className={`text-[13px] mb-6 sm:mb-8 leading-snug ${isThemed ? 'text-gray-400' : 'text-gray-500'}`}>
-          Enter the 6-digit code sent to <span className={isThemed ? 'text-white font-bold' : 'text-black font-bold'}>+91 {phoneNumber}</span>
-        </p>
+        <div className="flex items-center justify-between mb-6 sm:mb-8">
+          <p className={`text-[13px] leading-snug ${isThemed ? 'text-gray-400' : 'text-gray-500'}`}>
+            Enter the 6-digit code sent to <span className={isThemed ? 'text-white font-bold' : 'text-black font-bold'}>+91 {phoneNumber}</span>
+          </p>
+          {onEditPhone && (
+            <button
+              type="button"
+              onClick={onEditPhone}
+              className="ml-3 shrink-0 text-[12px] font-bold text-[#fe2c55] hover:underline active:scale-95 transition-transform"
+            >
+              Edit
+            </button>
+          )}
+        </div>
 
         <div className="flex gap-3 sm:gap-4 mb-6 sm:mb-8">
           {Array.from({ length: OTP_LENGTH }).map((_, i) => (

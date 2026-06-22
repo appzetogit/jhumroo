@@ -56,6 +56,7 @@ import PremiumPage from './modules/user/pages/Profile/PremiumPage';
 import { ThemeProvider, useTheme } from './context/ThemeContext';
 import { AdminConfigProvider } from './context/AdminConfigContext';
 import { SocketProvider } from './context/SocketContext';
+import { ToastProvider } from './context/ToastContext';
 import AdminLayout from './modules/admin/AdminLayout';
 import AdminLogin from './modules/admin/pages/AdminLogin';
 import { useAuth } from './context/AuthContext';
@@ -228,7 +229,13 @@ const AppContent = () => {
                 if (isAdminRoute) {
                     setAppState('main');
                 } else if (isAuthenticated) {
-                    if (user && !user.isOnboarded) {
+                    const isProfileCompleted = user?.isProfileCompleted !== undefined
+                        ? user.isProfileCompleted
+                        : (user?.username && !user.username.startsWith('user_') && user.fullName);
+
+                    if (user && !isProfileCompleted) {
+                        setAppState('auth');
+                    } else if (user && !user.isOnboarded) {
                         setAppState('onboarding');
                     } else {
                         setAppState('main');
@@ -318,7 +325,9 @@ function App() {
         <ThemeProvider>
           <AdminConfigProvider>
             <SocketProvider>
-              <AppContent />
+              <ToastProvider>
+                <AppContent />
+              </ToastProvider>
             </SocketProvider>
           </AdminConfigProvider>
         </ThemeProvider>

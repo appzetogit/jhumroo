@@ -245,6 +245,26 @@ const userService = {
   },
 
   /**
+   * Upload an attachment for a problem report
+   * @param {FormData} formData - Form data with the file
+   * @returns {Promise} Response
+   */
+  uploadProblemAttachment: async (formData) => {
+    try {
+      const response = await api.post('/problem-reports/upload-attachment', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+        timeout: 90000, // 90 seconds
+      });
+      return response;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+
+  /**
    * Get current user's problem reports
    * @returns {Promise} Response with reports
    */
@@ -292,6 +312,18 @@ const userService = {
   blockUser: async (userId) => {
     try {
       const response = await api.post(`/users/${userId}/block`);
+      return response;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  /**
+   * Get blocked users list
+   */
+  getBlockedUsers: async () => {
+    try {
+      const response = await api.get('/users/me/blocked');
       return response;
     } catch (error) {
       throw error;

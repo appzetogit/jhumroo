@@ -67,9 +67,28 @@ export const createNotification = async ({ recipient, sender, type, reel, commen
     // Send push notification if messaging is initialized and not suppressed
     if (!skipPush && messaging) {
       try {
-        // Fetch recipient's FCM tokens
-        const user = await User.findById(recipient).select('fcmToken fcmTokenMobile username fullName');
+        // Fetch recipient's FCM tokens and notification preferences
+        const user = await User.findById(recipient).select('fcmToken fcmTokenMobile username fullName notificationSettings');
         const senderUser = await User.findById(sender).select('username fullName');
+        
+        if (user) {
+          const settings = user.notificationSettings || {};
+          let shouldSkip = false;
+          if (type === 'like' && settings.likes === false) {
+            shouldSkip = true;
+          } else if (type === 'comment' && settings.comments === false) {
+            shouldSkip = true;
+          } else if (['follow', 'follow_back', 'follow_request', 'follow_accept'].includes(type) && settings.newFollowers === false) {
+            shouldSkip = true;
+          } else if (type === 'mention' && settings.mentionsAndTags === false) {
+            shouldSkip = true;
+          }
+
+          if (shouldSkip) {
+            console.log(`FCM: Skipping push notification of type ${type} for recipient ${recipient} due to user preferences.`);
+            return notification;
+          }
+        }
         
         if (user && (user.fcmToken || user.fcmTokenMobile)) {
           // Deduplicate tokens — same token can be stored in both fields (e.g., single device)
