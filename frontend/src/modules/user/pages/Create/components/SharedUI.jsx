@@ -27,8 +27,8 @@ export const Toggle = ({ enabled, onToggle, isDarkMode = false }) => (
   </button>
 );
 
-export const BottomSheet = ({ title, onClose, children, compact = false, scrollable = false }) => (
-  <div className={sheetOverlayClass} onClick={onClose}>
+export const BottomSheet = ({ title, onClose, children, compact = false, scrollable = false, transparentOverlay = false }) => (
+  <div className={transparentOverlay ? "absolute inset-0 z-40 flex items-end justify-center bg-transparent" : sheetOverlayClass} onClick={onClose}>
     <div
       className={`flex w-full max-w-[450px] flex-col overflow-hidden rounded-t-[24px] bg-white text-black shadow-2xl ${
         compact ? 'pb-[max(1rem,env(safe-area-inset-bottom))]' : 'max-h-[78%] pb-[max(1.25rem,env(safe-area-inset-bottom))]'

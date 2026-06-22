@@ -5,7 +5,7 @@ import reelService from '../../../../services/reelService';
 import adService from '../../../../services/adService';
 import { useSocket } from '../../../../context/SocketContext';
 
-const VideoCard = ({ videoData, isActive, preload = 'none' }) => {
+const VideoCard = ({ videoData, isActive, preload = 'none', compactBottom = false }) => {
   const videoRef = useRef(null);
   const hlsRef = useRef(null);
   const watchStartTimeRef = useRef(null);
@@ -535,6 +535,7 @@ const VideoCard = ({ videoData, isActive, preload = 'none' }) => {
         onMuteToggle={handleMuteToggle}
         isPlaying={playing}
         isImageAd={isImageAd}
+        compactBottom={compactBottom}
       />
 
       {showMuteOverlay && !isImageAd && (

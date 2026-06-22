@@ -121,7 +121,7 @@ const BottomNavBar = ({ isDarkTheme = true }) => {
     return () => observer.disconnect();
   }, []);
 
-  const usesDarkNavAppearance = isDarkMode || isHomePage || isReelOverlayOpen;
+  const usesDarkNavAppearance = isDarkMode || isHomePage;
 
   // Watch for active full-screen modal sheets in Jhumroo
   useEffect(() => {
@@ -209,7 +209,7 @@ const BottomNavBar = ({ isDarkTheme = true }) => {
     }
   }, [pathname, navItems]);
 
-  const containerClasses = `absolute left-0 w-full z-[1000] flex justify-around items-stretch transition-all duration-300 ${(isHomePage || isReelOverlayOpen)
+  const containerClasses = `absolute left-0 w-full z-[1000] flex justify-around items-stretch transition-all duration-300 ${isHomePage
       ? 'bg-black text-white/90 border-t border-white/10 shadow-[0_-5px_15px_rgba(0,0,0,0.45)]'
       : isDarkTheme && isDarkMode
         ? 'bg-black/85 backdrop-blur-md border-t border-white/10 text-white/70 shadow-[0_-5px_15px_rgba(0,0,0,0.5)]'

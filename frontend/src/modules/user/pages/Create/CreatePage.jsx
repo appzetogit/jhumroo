@@ -136,6 +136,41 @@ const CreatePage = () => {
   const [videoAction, setVideoAction] = useState('none');
   const [videoThumbnails, setVideoThumbnails] = useState([]);
   const [clipSequence, setClipSequence] = useState([]);
+  const [history, setHistory] = useState([]);
+  const [historyIndex, setHistoryIndex] = useState(-1);
+
+  // Track clipSequence changes for Undo/Redo history
+  useEffect(() => {
+    if (clipSequence.length === 0) return;
+    setHistory(prev => {
+      const currentHistoryState = prev[historyIndex];
+      if (currentHistoryState && JSON.stringify(currentHistoryState) === JSON.stringify(clipSequence)) {
+        return prev;
+      }
+      const nextHistory = prev.slice(0, historyIndex + 1);
+      const updatedHistory = [...nextHistory, clipSequence];
+      setHistoryIndex(updatedHistory.length - 1);
+      return updatedHistory;
+    });
+  }, [clipSequence]);
+
+  const handleUndo = () => {
+    if (historyIndex > 0) {
+      const nextIndex = historyIndex - 1;
+      setHistoryIndex(nextIndex);
+      setClipSequence(history[nextIndex]);
+      showToast('Undo');
+    }
+  };
+
+  const handleRedo = () => {
+    if (historyIndex < history.length - 1) {
+      const nextIndex = historyIndex + 1;
+      setHistoryIndex(nextIndex);
+      setClipSequence(history[nextIndex]);
+      showToast('Redo');
+    }
+  };
   const [currentClipIndex, setCurrentClipIndex] = useState(0);
   const [currentPreviewClipIndex, setCurrentPreviewClipIndex] = useState(0);
   const [isRestoring, setIsRestoring] = useState(true);
@@ -353,6 +388,7 @@ const CreatePage = () => {
   const [renderProgress, setRenderProgress] = useState(0);
   const [isUploading, setUploading] = useState(false);
   const [coverImageUrl, setCoverImageUrl] = useState(null); // user-selected or auto-generated cover
+  const [coverImageFile, setCoverImageFile] = useState(null);
   const coverInputRef = useRef(null);
   const ignoreScrollRef = useRef(false);
   const [textStartTime, setTextStartTime] = useState(0);
@@ -431,6 +467,7 @@ const CreatePage = () => {
       if (!previewAudioRef.current || previewAudioRef.current.src !== url) {
         const audio = new Audio(url);
         audio.loop = true;
+        audio.muted = isMuted || isMusicMuted;
         previewAudioRef.current = audio;
 
         const onCanPlay = () => {
@@ -459,7 +496,14 @@ const CreatePage = () => {
         previewAudioRef.current = null;
       }
     };
-  }, [stageStack, selectedSound]);
+  }, [stageStack, selectedSound, isMuted, isMusicMuted]);
+
+  // Synchronize muting for preview audio element dynamically
+  useEffect(() => {
+    if (previewAudioRef.current) {
+      previewAudioRef.current.muted = isMuted || isMusicMuted;
+    }
+  }, [isMuted, isMusicMuted]);
 
   // Handle Editor Video Playback Safely
   useEffect(() => {
@@ -833,6 +877,25 @@ const CreatePage = () => {
     }
   }, [isRestoring, stage, previewUrl, videoFile]);
 
+  // Intercept browser back gesture/button to pop stage stack
+  useEffect(() => {
+    const handlePopState = (e) => {
+      if (stageStack.length > 1) {
+        popStage();
+        window.history.pushState(null, '', window.location.pathname);
+      }
+    };
+
+    if (stageStack.length > 1) {
+      window.history.pushState(null, '', window.location.pathname);
+      window.addEventListener('popstate', handlePopState);
+    }
+
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, [stageStack]);
+
   // Ensure preview video plays when entering stage
   useEffect(() => {
     if (stage === 'preview' && previewVideoRef.current) {
@@ -891,6 +954,14 @@ const CreatePage = () => {
       }
     }
   }, [stage]);
+
+  // Pause/cleanup editor audio when selectedSounds becomes empty
+  useEffect(() => {
+    if (selectedSounds.length === 0 && audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
+    }
+  }, [selectedSounds]);
 
   const MOCK_STICKERS = [
     '🔥', '❤️', '😂', '👍', '🎉', '🌟', '💎', '🌈', '🍦', '🍕',
@@ -1062,6 +1133,28 @@ const CreatePage = () => {
     }
   }, [selectedSpeed, stage]);
 
+  // Apply speed to Instacam's internal video (drives the canvas feed) in camera stage
+  useEffect(() => {
+    if (stage !== 'camera') return;
+    const speedValue = parseFloat(selectedSpeed) || 1;
+
+    // Apply to Instacam internal video element
+    if (instacamRef.current && instacamRef.current.v) {
+      try {
+        instacamRef.current.v.playbackRate = speedValue;
+      } catch (e) { /* ignore if not supported */ }
+    }
+
+    // Apply to the recorded clip preview video shown after recording stops
+    if (canvasRef.current) {
+      const parent = canvasRef.current.closest('[data-instacam]') || canvasRef.current.parentElement;
+      const internalVideo = parent?.querySelector('video');
+      if (internalVideo) {
+        try { internalVideo.playbackRate = speedValue; } catch (e) { /* ignore */ }
+      }
+    }
+  }, [selectedSpeed, stage, instacamRef.current]);
+
   useEffect(() => {
     if (previewVideoRef.current) {
       previewVideoRef.current.volume = (editorSettings.volume || 100) / 100;
@@ -1076,7 +1169,7 @@ const CreatePage = () => {
     }
 
     return () => {
-      if (streamRef.current) stopCamera();
+      stopCamera();
     };
   }, [stage]);
 
@@ -1192,26 +1285,36 @@ const CreatePage = () => {
       // If the parent is the Instacam wrapper, unwrap the canvas
       if (parent && parent.hasAttribute('data-instacam')) {
         const grandParent = parent.parentElement;
-        if (grandParent) {
-          grandParent.insertBefore(canvas, parent);
-          grandParent.removeChild(parent);
+        if (grandParent && grandParent.contains(parent)) {
+          try {
+            grandParent.insertBefore(canvas, parent);
+            grandParent.removeChild(parent);
+          } catch (e) {
+            console.warn('Error unwrapping instacam canvas:', e);
+          }
         }
       }
 
       // Look for any other orphaned instacam elements in the container
       const container = canvas.parentElement;
       if (container) {
-        const elements = container.querySelectorAll('[data-instacam], [data-instacam-viewport], [data-instacam-stream], [data-instacam-blend]');
-        elements.forEach(el => {
-          if (el !== canvas && container.contains(el)) {
-            el.remove();
-          }
-        });
+        try {
+          const elements = container.querySelectorAll('[data-instacam], [data-instacam-viewport], [data-instacam-stream], [data-instacam-blend]');
+          elements.forEach(el => {
+            if (el !== canvas && container.contains(el)) {
+              el.remove();
+            }
+          });
+        } catch (e) {
+          console.warn('Error cleaning up orphaned instacam elements:', e);
+        }
       }
 
       // Reset custom canvas styles if any
-      canvas.removeAttribute('data-instacam-viewport');
-      canvas.style.transform = '';
+      try {
+        canvas.removeAttribute('data-instacam-viewport');
+        canvas.style.transform = '';
+      } catch (e) {}
     }
 
     streamRef.current = null;
@@ -2346,11 +2449,30 @@ const CreatePage = () => {
           setLocationSearchResults([]);
           setIsSearchingLocation(false);
           setCoverImageUrl(null);
+          setCoverImageFile(null);
         }, 1500);
       };
 
       if (directUploadSuccess) {
         showToast('Finalizing post...');
+
+        let finalThumbnailUrl = null;
+        if (coverImageFile) {
+          try {
+            showToast('Uploading cover image...');
+            const thumbResponse = await reelService.getPresignedUrl(
+              `cover_${Date.now()}_${coverImageFile.name}`,
+              coverImageFile.type
+            );
+            const { uploadUrl: thumbUploadUrl } = thumbResponse;
+            await axios.put(thumbUploadUrl, coverImageFile, {
+              headers: { 'Content-Type': coverImageFile.type }
+            });
+            finalThumbnailUrl = thumbUploadUrl.split('?')[0];
+          } catch (thumbErr) {
+            console.warn('Failed to upload cover to S3:', thumbErr);
+          }
+        }
 
         const postData = {
           videoId,
@@ -2369,7 +2491,7 @@ const CreatePage = () => {
           edits: editsPayload,
           isRemix: duetVideo ? true : false,
           originalReel: duetVideo ? duetVideo._id : undefined,
-          ...(coverImageUrl && { thumbnailUrl: coverImageUrl })
+          ...(finalThumbnailUrl && { thumbnailUrl: finalThumbnailUrl })
         };
 
         const response = await reelService.completeUpload(postData);
@@ -2392,9 +2514,6 @@ const CreatePage = () => {
         formData.append('autoCaptions', postState.autoCaptions);
         formData.append('captionLanguage', postState.captionLanguage || 'English');
         formData.append('isAgeRestricted', postState.audienceControls);
-        if (coverImageUrl) {
-          formData.append('thumbnailUrl', coverImageUrl);
-        }
         if (duetVideo) {
           formData.append('isRemix', 'true');
           formData.append('originalReel', duetVideo._id);
@@ -2413,6 +2532,16 @@ const CreatePage = () => {
         const response = await reelService.createReel(formData);
 
         if (response.success) {
+          if (coverImageFile) {
+            try {
+              showToast('Uploading cover image...');
+              const thumbFormData = new FormData();
+              thumbFormData.append('thumbnail', coverImageFile);
+              await reelService.updateReel(response.reel._id, thumbFormData);
+            } catch (thumbErr) {
+              console.warn('Failed to upload cover via fallback PUT:', thumbErr);
+            }
+          }
           handleUploadSuccess();
         }
       }
@@ -3184,7 +3313,7 @@ const CreatePage = () => {
           className="group flex flex-col items-center gap-1.5 active:scale-95 transition-transform"
         >
           <span className={getThemedCameraToolButtonClass(activeCameraTool === tool.id)}>
-            {getToolIcon(tool.id, 20)}
+            {getToolIcon(tool.id, 20, false, selectedSpeed)}
           </span>
           <span className="text-[10px] font-bold tracking-wide uppercase text-white shadow-black drop-shadow-md">
             {tool.label}
@@ -3245,7 +3374,10 @@ const CreatePage = () => {
             <button
               key={speedOption}
               type="button"
-              onClick={() => setSelectedSpeed(speedOption)}
+              onClick={() => {
+                setSelectedSpeed(speedOption);
+                setActiveCameraTool(null);
+              }}
               className={getDurationButtonClass(selectedSpeed === speedOption)}
             >
               {speedOption}
@@ -3475,6 +3607,9 @@ const CreatePage = () => {
                   loop
                   autoPlay
                   muted={isVideoMuted}
+                  ref={(el) => {
+                    if (el) el.playbackRate = parseFloat(selectedSpeed) || 1;
+                  }}
                 />
               )}
             </>
@@ -4010,8 +4145,24 @@ const CreatePage = () => {
           </div>
 
           <div className="flex items-center gap-4">
-            <button type="button" className="text-white/40 active:text-white" onClick={() => showToast('Undo')}><BiUndo size={24} /></button>
-            <button type="button" className="text-white/40 active:text-white" onClick={() => showToast('Redo')}><BiRedo size={24} /></button>
+            <button
+              type="button"
+              disabled={historyIndex <= 0}
+              className={`transition-colors ${historyIndex > 0 ? 'text-white active:scale-95 cursor-pointer' : 'text-white/20 cursor-default'}`}
+              onClick={handleUndo}
+              title="Undo"
+            >
+              <BiUndo size={24} />
+            </button>
+            <button
+              type="button"
+              disabled={historyIndex >= history.length - 1 || history.length === 0}
+              className={`transition-colors ${historyIndex < history.length - 1 && history.length > 0 ? 'text-white active:scale-95 cursor-pointer' : 'text-white/20 cursor-default'}`}
+              onClick={handleRedo}
+              title="Redo"
+            >
+              <BiRedo size={24} />
+            </button>
           </div>
         </div>
 
@@ -4719,7 +4870,7 @@ const CreatePage = () => {
                 src={duetVideo.video.url}
                 className="w-full h-full object-cover"
                 loop
-                muted={isDuetMuted}
+                muted={isDuetMuted || isMuted}
                 playsInline
               />
               <div className="absolute bottom-4 left-4 bg-black/60 backdrop-blur-md px-3 py-1 rounded-full text-xs font-bold text-white border border-white/10 flex items-center gap-1 z-10">
@@ -4754,7 +4905,7 @@ const CreatePage = () => {
                     }}
                     src={clipSequence.length > 0 ? clipSequence[currentPreviewClipIndex]?.url : previewUrl}
                     className="h-full w-full object-cover transition-all duration-500"
-                    muted={isVideoMuted}
+                    muted={isVideoMuted || isMuted}
                     playsInline
                     autoPlay
                     onTimeUpdate={handlePreviewTimeUpdate}
@@ -4830,7 +4981,7 @@ const CreatePage = () => {
                     }}
                     src={clipSequence.length > 0 ? clipSequence[currentPreviewClipIndex]?.url : previewUrl}
                     className="h-full w-full object-cover transition-all duration-500"
-                    muted={isVideoMuted}
+                    muted={isVideoMuted || isMuted}
                     playsInline
                     autoPlay
                     onTimeUpdate={handlePreviewTimeUpdate}
@@ -5180,6 +5331,7 @@ const CreatePage = () => {
                   if (!file) return;
                   const url = URL.createObjectURL(file);
                   setCoverImageUrl(url);
+                  setCoverImageFile(file);
                   e.target.value = '';
                 }}
               />
@@ -5828,6 +5980,8 @@ const CreatePage = () => {
 
               if (editingSoundIndex >= 0) {
                 setSelectedSounds(prev => prev.map((s, idx) => idx === editingSoundIndex ? updatedSound : s));
+              } else if (editingSoundIndex === -1) {
+                setSelectedSounds(prev => [...prev, updatedSound]);
               } else {
                 setSelectedSounds([updatedSound]);
               }
@@ -6135,17 +6289,7 @@ const CreatePage = () => {
                       const actualDuration = parseDurationSeconds(soundItem.duration) || 15;
                       const newSound = { ...soundItem, clipStart: 0, clipDuration: actualDuration };
 
-                      if (editingSoundIndex >= 0) {
-                        // Replace existing
-                        setSelectedSounds(prev => prev.map((s, idx) => idx === editingSoundIndex ? newSound : s));
-                        setEditorSound(newSound);
-                      } else {
-                        // Append new
-                        setSelectedSounds(prev => [...prev, newSound]);
-                        setEditorSound(newSound);
-                        setEditingSoundIndex(selectedSounds.length);
-                      }
-
+                      setEditorSound(newSound);
                       setClipStart(0);
                       setClipDuration(actualDuration);
                       pushStage('sound-editor');
@@ -6154,9 +6298,10 @@ const CreatePage = () => {
                     } else {
                       const actualDuration = parseDurationSeconds(soundItem.duration) || 15;
                       const newSound = { ...soundItem, clipStart: 0, clipDuration: actualDuration };
-                      setSelectedSounds([newSound]);
-                      setEditingSoundIndex(0);
+                      setEditingSoundIndex(-2); // -2 signifies single camera select
                       setEditorSound(newSound);
+                      setClipStart(0);
+                      setClipDuration(actualDuration);
                       pushStage('sound-editor');
                       setActiveSheet(null);
                     }
@@ -6198,24 +6343,32 @@ const CreatePage = () => {
                           // Update local state to reflect change immediately using server truth
                           const newIsSaved = response?.isSaved ?? !soundItem.isSaved;
                           
-                          // 1. Update libraryAudios
-                          setLibraryAudios(prev => prev.map(a =>
-                            (a._id === soundItem._id || a.id === soundItem.id)
+                          // 1. Update libraryAudios with safe ID checks (prevent undefined === undefined matching all items)
+                          setLibraryAudios(prev => prev.map(a => {
+                            const aId = a._id || a.id;
+                            const sId = soundItem._id || soundItem.id;
+                            return (aId && sId && aId === sId)
                               ? { ...a, isSaved: newIsSaved }
-                              : a
-                          ));
+                              : a;
+                          }));
 
                           // 2. Update savedAudiosList
                           if (newIsSaved) {
                             setSavedAudiosList(prev => {
-                              const exists = prev.some(a => (a._id === soundItem._id || a.id === soundItem.id));
+                              const exists = prev.some(a => {
+                                const aId = a._id || a.id;
+                                const sId = soundItem._id || soundItem.id;
+                                return aId && sId && aId === sId;
+                              });
                               if (exists) return prev;
                               return [...prev, { ...soundItem, isSaved: true }];
                             });
                           } else {
-                            setSavedAudiosList(prev => prev.filter(a =>
-                              !(a._id === soundItem._id || a.id === soundItem.id)
-                            ));
+                            setSavedAudiosList(prev => prev.filter(a => {
+                              const aId = a._id || a.id;
+                              const sId = soundItem._id || soundItem.id;
+                              return !(aId && sId && aId === sId);
+                            }));
                           }
 
                           showToast(response.message);
@@ -6659,6 +6812,38 @@ const CreatePage = () => {
           </div>
         </BottomSheet>
       )}
+      {activeSheet === 'stickers-preview' && (
+        <BottomSheet
+          title="Stickers"
+          onClose={() => setActiveSheet(null)}
+          scrollable={true}
+        >
+          <div className="grid grid-cols-5 gap-4 p-5 max-h-[300px]">
+            {MOCK_STICKERS.map((emoji, index) => (
+              <button
+                key={`${emoji}-${index}`}
+                type="button"
+                onClick={() => {
+                  setActiveStickers((prev) => [
+                    ...prev,
+                    {
+                      id: `${Date.now()}-${index}`,
+                      content: emoji,
+                      x: 0,
+                      y: 0,
+                    },
+                  ]);
+                  setActiveSheet(null);
+                  showToast('Sticker added');
+                }}
+                className="flex items-center justify-center text-[36px] hover:scale-125 transition-transform active:scale-95 py-2"
+              >
+                {emoji}
+              </button>
+            ))}
+          </div>
+        </BottomSheet>
+      )}
       {activeSheet === 'filters-preview' && (
         <div className="absolute inset-x-0 bottom-0 z-50 animate-in slide-in-from-bottom duration-500">
           <div className="bg-black/60 backdrop-blur-xl border-t border-white/10 rounded-t-[32px] pt-4 pb-10 shadow-[0_-20px_50px_rgba(0,0,0,0.5)]">
@@ -7042,7 +7227,7 @@ const CreatePage = () => {
         </div>
       )}
       {activeSheet === 'adjust-preview' && (
-        <BottomSheet title="Adjust" onClose={() => setActiveSheet(null)} scrollable>
+        <BottomSheet title="Adjust" onClose={() => setActiveSheet(null)} scrollable transparentOverlay={true}>
           <div className="flex flex-col gap-8 px-6 pb-12 pt-6">
             {[
               { id: 'brightness', label: 'Brightness', min: 0, max: 200, unit: '%' },

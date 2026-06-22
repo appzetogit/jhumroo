@@ -174,6 +174,9 @@ const ProfilePage = () => {
   useEffect(() => {
     const handlePopState = () => {
       if (activeOverlayIndex !== null) {
+        setUserVideos(prev => [...prev]);
+        setLikedVideos(prev => [...prev]);
+        setSavedVideos(prev => [...prev]);
         setActiveOverlayIndex(null);
         setOverlayVideos([]);
         document.body.removeAttribute('data-reel-overlay-open');
@@ -501,6 +504,9 @@ const ProfilePage = () => {
   };
 
   const handleCloseOverlay = () => {
+    setUserVideos(prev => [...prev]);
+    setLikedVideos(prev => [...prev]);
+    setSavedVideos(prev => [...prev]);
     setActiveOverlayIndex(null);
     setOverlayVideos([]);
     document.body.removeAttribute('data-reel-overlay-open');
@@ -508,6 +514,14 @@ const ProfilePage = () => {
       window.history.back();
     }
   };
+
+  useEffect(() => {
+    const handleCloseOverlayEvent = () => {
+      handleCloseOverlay();
+    };
+    window.addEventListener('close-reel-overlay', handleCloseOverlayEvent);
+    return () => window.removeEventListener('close-reel-overlay', handleCloseOverlayEvent);
+  }, [handleCloseOverlay]);
 
   const handleShareProfile = async () => {
     const shareData = {
@@ -941,7 +955,7 @@ const ProfilePage = () => {
 
       {/* Vertical Reel Overlay Player */}
       {activeOverlayIndex !== null && (
-        <div className="absolute inset-x-0 top-0 bottom-0 bg-black z-[900] flex flex-col animate-fade-in">
+        <div className="fixed inset-x-0 top-0 bg-black z-[999] flex flex-col animate-fade-in" style={{ bottom: 'var(--bottom-nav-height)' }}>
           {/* Top Header */}
           <div className="absolute top-[var(--safe-area-top)] left-0 w-full flex justify-between items-center px-4 py-6 z-[950] pointer-events-none">
             <button 
@@ -981,6 +995,7 @@ const ProfilePage = () => {
                       videoData={video}
                       isActive={index === activeOverlayIndex}
                       preload={index === activeOverlayIndex ? "auto" : (index === activeOverlayIndex + 1 ? "auto" : "none")}
+                      compactBottom={true}
                     />
                   ) : (
                     <div className="h-full w-full bg-black flex items-center justify-center">

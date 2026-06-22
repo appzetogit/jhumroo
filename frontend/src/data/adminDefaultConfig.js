@@ -244,11 +244,9 @@ export const getDefaultAdminConfig = () => ({
       { id: 'flip', label: 'Flip', icon: 'flip' },
       { id: 'speed', label: 'Speed', icon: 'speed' },
       { id: 'timer', label: 'Timer', icon: 'timer' },
-      { id: 'filters', label: 'Filters', icon: 'filters' },
     ],
     previewTools: [
       { id: 'text', label: 'Text', icon: 'text' },
-      { id: 'filters', label: 'Filters', icon: 'filters' },
       { id: 'speed', label: 'Speed', icon: 'speed' },
       { id: 'stickers', label: 'Stickers', icon: 'stickers' },
       { id: 'volume', label: 'Volume', icon: 'volume' },

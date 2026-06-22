@@ -29,7 +29,7 @@ const showOverlayToast = (message) => {
   setTimeout(() => { el.style.opacity = '0'; setTimeout(() => el.remove(), 300); }, 2500);
 };
 
-const VideoOverlay = ({ reelId, username, caption, musicName, isLiked, likes, comments, shares, isSaved, onSaveClick, onLikeClick, videoData, onUpdate, isMuted, onMuteToggle, isPlaying }) => {
+const VideoOverlay = ({ reelId, username, caption, musicName, isLiked, likes, comments, shares, isSaved, onSaveClick, onLikeClick, videoData, onUpdate, isMuted, onMuteToggle, isPlaying, compactBottom = false }) => {
   const isAd = videoData.isAd;
   const isAdminAd = isAd && videoData.onModel === 'Admin';
 
@@ -149,7 +149,13 @@ const VideoOverlay = ({ reelId, username, caption, musicName, isLiked, likes, co
     }
   };
 
+  const lastShareTimeRef = React.useRef(0);
+
   const handleShare = async (platform = 'general', targetUserId = null) => {
+    const now = Date.now();
+    if (now - lastShareTimeRef.current < 1000) return;
+    lastShareTimeRef.current = now;
+
     const shareUrl = `${window.location.origin}/reel/${reelId}`;
     const shareText = caption || 'Watch this amazing reel on Jhumroo!';
     
@@ -230,7 +236,7 @@ const VideoOverlay = ({ reelId, username, caption, musicName, isLiked, likes, co
   return (
     <>
       <div className="absolute inset-0 pointer-events-none flex flex-col justify-end bg-gradient-to-t from-black/80 via-black/20 to-transparent z-[30]">
-        <div className="flex justify-between items-end p-4 pb-[calc(var(--bottom-nav-height)+32px)]">
+        <div className={`flex justify-between items-end p-4 ${compactBottom ? 'pb-4' : 'pb-[calc(var(--bottom-nav-height)+32px)]'}`}>
           {/* Left: User info */}
           <div className="flex-1 pr-12 text-left text-white pointer-events-none flex flex-col items-start">
             {/* Ad Action Button - Moved above name */}
@@ -360,7 +366,16 @@ const VideoOverlay = ({ reelId, username, caption, musicName, isLiked, likes, co
                     className="w-12 h-12 rounded-full border-2 border-white bg-surface overflow-hidden cursor-pointer shadow-lg"
                     onClick={(e) => {
                       e.stopPropagation();
-                      navigate(`/user/${username}`);
+                      const currentPath = window.location.pathname.toLowerCase();
+                      const targetPath = `/user/${username}`.toLowerCase();
+                      const isOwnProfilePath = currentPath === '/profile';
+                      const isSelfProfile = isOwnProfilePath && currentUser && (currentUser.username?.toLowerCase() === username.toLowerCase());
+                      
+                      if (currentPath === targetPath || isSelfProfile || currentPath.includes(username.toLowerCase())) {
+                        window.dispatchEvent(new CustomEvent('close-reel-overlay'));
+                      } else {
+                        navigate(`/user/${username}`);
+                      }
                     }}
                     style={{ pointerEvents: 'auto' }}
                   >
@@ -417,9 +432,15 @@ const VideoOverlay = ({ reelId, username, caption, musicName, isLiked, likes, co
 
              {/* Comment */}
              <div 
-               className="flex flex-col items-center text-white tap-effect" 
+               className={`flex flex-col items-center text-white tap-effect ${
+                 videoData.allowComments === false ? 'opacity-40 cursor-not-allowed' : ''
+               }`} 
                onClick={(e) => {
                  e.stopPropagation();
+                 if (videoData.allowComments === false) {
+                   showOverlayToast('Comments are turned off');
+                   return;
+                 }
                  setIsCommentsOpen(true);
                }} 
                style={{ pointerEvents: 'auto' }}
@@ -516,6 +537,14 @@ const VideoOverlay = ({ reelId, username, caption, musicName, isLiked, likes, co
          onClose={() => setIsShareOpen(false)} 
          reelData={videoData}
          onShare={handleShare}
+         onReportClick={() => {
+           setIsShareOpen(false);
+           setIsReportOpen(true);
+         }}
+         onNotInterestedClick={() => {
+           setIsShareOpen(false);
+           handleNotInterested();
+         }}
       />
 
       {/* More Options Sheet */}

@@ -2,7 +2,7 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 
 /**
- * Parses a caption string and renders #hashtags and @mentions as clickable links.
+ * Parses a caption string and renders #hashtags as plain styled text and @mentions as clickable links.
  * All other text is rendered as plain text spans.
  */
 const CaptionRenderer = ({ text, className = '' }) => {
@@ -41,14 +41,11 @@ const CaptionRenderer = ({ text, className = '' }) => {
     <span className={className}>
       {parts.map((part, i) => {
         if (part.type === 'hashtag') {
+          // Hashtags are styled but NOT clickable
           return (
             <span
               key={i}
-              className="text-[#fe2c55] font-semibold cursor-pointer hover:underline pointer-events-auto"
-              onClick={(e) => {
-                e.stopPropagation();
-                navigate(`/search?q=${encodeURIComponent(part.slug)}&tab=hashtags`);
-              }}
+              className="text-[#fe2c55] font-semibold"
             >
               {part.value}
             </span>

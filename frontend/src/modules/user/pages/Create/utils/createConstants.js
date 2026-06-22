@@ -94,7 +94,6 @@ export const MOCK_STICKERS = [
 export const PREVIEW_TOOLS = [
   { id: 'edit', label: 'Edit' },
   { id: 'text', label: 'Text' },
-  { id: 'filters', label: 'Filters' },
   { id: 'speed', label: 'Speed' },
   { id: 'mute', label: 'Mute' },
   { id: 'stickers', label: 'Stickers' },

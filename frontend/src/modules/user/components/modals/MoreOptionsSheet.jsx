@@ -255,8 +255,8 @@ const MoreOptionsSheet = ({
               subLabel="Create Side-by-side"
               isDarkMode={isDarkMode}
               onClick={() => {
-                alert("Remix feature coming soon!");
                 handleClose();
+                navigate(`/create?duet=${reelData._id}`, { state: { duetVideo: reelData } });
               }}
             />
             <OptionItem 
