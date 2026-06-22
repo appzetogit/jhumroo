@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAppContent } from '../../../../hooks/useAppContent';
-import followService from '../../../../services/followService';
 import messageService from '../../../../services/messageService';
 import userService from '../../../../services/userService';
 import notificationService from '../../../../services/notificationService';
@@ -183,18 +182,11 @@ const InboxPage = () => {
   const [searchingUsers, setSearchingUsers] = useState(false);
   const [loading, setLoading] = useState(true);
   const [menuConfig, setMenuConfig] = useState(null); // { conv, x, y }
-  const [pendingRequestsCount, setPendingRequestsCount] = useState(0);
   const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0);
 
   const fetchCounts = async () => {
     try {
-      const [pendingRes, unreadRes] = await Promise.all([
-        followService.getFollowRequestsCount(),
-        notificationService.getUnreadCount()
-      ]);
-      if (pendingRes.success) {
-        setPendingRequestsCount(pendingRes.count);
-      }
+      const unreadRes = await notificationService.getUnreadCount();
       if (unreadRes.success) {
         setUnreadNotificationsCount(unreadRes.count);
       }
@@ -425,35 +417,6 @@ const InboxPage = () => {
                     </svg>
                   </div>
                 </div>
-
-                {/* Follow Requests Entry */}
-                <div 
-                  onClick={() => navigate('/user/requests')}
-                  className="flex items-center gap-4 p-4 bg-[#242424] hover:bg-white/5 active:bg-white/10 rounded-2xl border border-white/5 cursor-pointer transition-all duration-200"
-                >
-                  <div className="relative shrink-0 w-11 h-11 rounded-full bg-[#25f4ee]/10 border border-[#25f4ee]/20 flex items-center justify-center text-[#25f4ee]">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
-                      <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-                      <circle cx="8.5" cy="7" r="4" />
-                      <line x1="20" y1="8" x2="20" y2="14" />
-                      <line x1="23" y1="11" x2="17" y2="11" />
-                    </svg>
-                    {pendingRequestsCount > 0 && (
-                      <div className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 bg-[#FE2C55] rounded-full border-2 border-[#161616] flex items-center justify-center text-[10px] font-black text-white shadow-sm">
-                        {pendingRequestsCount}
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[15px] font-bold text-white leading-normal">Follow Requests</p>
-                    <p className="text-[12px] text-white/50 truncate">Manage pending followers requests</p>
-                  </div>
-                  <div className="shrink-0 text-white/30">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
-                      <path d="M9 18l6-6-6-6" />
-                    </svg>
-                  </div>
-                </div>
               </div>
             )}
 
@@ -469,7 +432,7 @@ const InboxPage = () => {
                       {filteredConversations.map((conv) => (
                         <ConversationItem 
                           key={conv._id} 
-                          conv={conv} 
+                          conv={conv}
                           currentUser={currentUser} 
                           navigate={navigate} 
                           onAction={handleAction}

@@ -383,7 +383,7 @@ const CreatePage = () => {
   const secondsPickerStartY = useRef(0);
   const secondsPickerScrollTop = useRef(0);
   const recordingAudioRef = useRef(null);
-  const previewAudioRef = useRef(null);
+  const previewAudiosRef = useRef([]);
   const [isRendering, setIsRendering] = useState(false);
   const [renderProgress, setRenderProgress] = useState(0);
   const [isUploading, setUploading] = useState(false);
@@ -399,6 +399,13 @@ const CreatePage = () => {
   const [recordedVoiceBlob, setRecordedVoiceBlob] = useState(null);
   const [voiceRecorder, setVoiceRecorder] = useState(null);
   const [voicePreviewUrl, setVoicePreviewUrl] = useState(null);
+  const [isVoicePreviewPlaying, setIsVoicePreviewPlaying] = useState(false);
+  const voicePreviewAudioRef = useRef(null);
+  const [originalVolume, setOriginalVolume] = useState(100);
+  const [addedVolume, setAddedVolume] = useState(100);
+  const [voiceRecordingSeconds, setVoiceRecordingSeconds] = useState(0);
+  const [voiceMaxDuration, setVoiceMaxDuration] = useState(0);
+  const voiceTimerIntervalRef = useRef(null);
   const [mergedVideoBlob, setMergedVideoBlob] = useState(null);
   const [imageAdjustments, setImageAdjustments] = useState({
     brightness: 100,
@@ -424,6 +431,8 @@ const CreatePage = () => {
       const url = selectedSound.url || selectedSound.audioUrl;
       const audio = new Audio(url);
       audio.currentTime = selectedSound.clipStart || 0;
+      audio.muted = isMusicMuted || addedVolume === 0;
+      audio.volume = addedVolume / 100;
       audio.play().catch(err => {
         if (err.name !== 'AbortError') console.error("Recording audio playback failed:", err);
       });
@@ -445,6 +454,14 @@ const CreatePage = () => {
     };
   }, [recordStatus, selectedSound]);
 
+  // Synchronize muting and volume for recording audio dynamically
+  useEffect(() => {
+    if (recordingAudioRef.current) {
+      recordingAudioRef.current.muted = isMusicMuted || addedVolume === 0;
+      recordingAudioRef.current.volume = addedVolume / 100;
+    }
+  }, [isMusicMuted, addedVolume]);
+
   // Play sound during preview
   useEffect(() => {
     const savedSound = localStorage.getItem('selectedSound');
@@ -462,48 +479,62 @@ const CreatePage = () => {
   // Play sound during preview
   useEffect(() => {
     const currentStage = stageStack[stageStack.length - 1];
-    if (currentStage === 'preview' && selectedSound && (selectedSound.url || selectedSound.audioUrl)) {
-      const url = selectedSound.url || selectedSound.audioUrl;
-      if (!previewAudioRef.current || previewAudioRef.current.src !== url) {
+
+    // Clear any existing preview audios
+    previewAudiosRef.current.forEach(audio => {
+      if (audio) audio.pause();
+    });
+    previewAudiosRef.current = [];
+
+    if (currentStage === 'preview' && selectedSounds.length > 0) {
+      selectedSounds.forEach((sound) => {
+        const url = sound.url || sound.audioUrl;
+        if (!url) return;
+
         const audio = new Audio(url);
-        audio.loop = true;
-        audio.muted = isMuted || isMusicMuted;
-        previewAudioRef.current = audio;
+        // Loop background music, but do not loop voiceover
+        audio.loop = sound.title !== 'Voiceover';
+        audio.muted = isMuted || (sound.title === 'Voiceover' ? false : isMusicMuted) || (sound.title === 'Voiceover' ? false : addedVolume === 0);
+        audio.volume = sound.title === 'Voiceover' ? 1.0 : (addedVolume / 100);
+
+        // Trim sound to its edited duration
+        audio.addEventListener('timeupdate', () => {
+          if (sound.clipDuration && audio.currentTime >= sound.clipDuration) {
+            audio.pause();
+            audio.currentTime = 0;
+          }
+        });
 
         const onCanPlay = () => {
-          audio.currentTime = selectedSound.clipStart || 0;
+          audio.currentTime = sound.clipStart || 0;
           audio.play().catch(err => {
             if (err.name !== 'AbortError') console.error("Preview audio playback failed:", err);
           });
         };
 
         audio.addEventListener('canplay', onCanPlay, { once: true });
-      } else {
-        previewAudioRef.current.play().catch(err => {
-          if (err.name !== 'AbortError') console.error("Preview audio playback failed:", err);
-        });
-      }
-    } else {
-      if (previewAudioRef.current) {
-        previewAudioRef.current.pause();
-        previewAudioRef.current = null;
-      }
+        previewAudiosRef.current.push(audio);
+      });
     }
 
     return () => {
-      if (previewAudioRef.current) {
-        previewAudioRef.current.pause();
-        previewAudioRef.current = null;
-      }
+      previewAudiosRef.current.forEach(audio => {
+        if (audio) audio.pause();
+      });
+      previewAudiosRef.current = [];
     };
-  }, [stageStack, selectedSound, isMuted, isMusicMuted]);
+  }, [stageStack, selectedSounds, isMuted, isMusicMuted, addedVolume]);
 
-  // Synchronize muting for preview audio element dynamically
+  // Synchronize muting for preview audio elements dynamically
   useEffect(() => {
-    if (previewAudioRef.current) {
-      previewAudioRef.current.muted = isMuted || isMusicMuted;
-    }
-  }, [isMuted, isMusicMuted]);
+    previewAudiosRef.current.forEach((audio, idx) => {
+      const sound = selectedSounds[idx];
+      if (audio && sound) {
+        audio.muted = isMuted || (sound.title === 'Voiceover' ? false : isMusicMuted) || (sound.title === 'Voiceover' ? false : addedVolume === 0);
+        audio.volume = sound.title === 'Voiceover' ? 1.0 : (addedVolume / 100);
+      }
+    });
+  }, [isMuted, isMusicMuted, addedVolume, selectedSounds]);
 
   // Handle Editor Video Playback Safely
   useEffect(() => {
@@ -1157,9 +1188,14 @@ const CreatePage = () => {
 
   useEffect(() => {
     if (previewVideoRef.current) {
-      previewVideoRef.current.volume = (editorSettings.volume || 100) / 100;
+      previewVideoRef.current.volume = originalVolume / 100;
+      previewVideoRef.current.muted = isVideoMuted || isMuted || originalVolume === 0;
     }
-  }, [editorSettings.volume, stage]);
+    if (editorVideoRef.current) {
+      editorVideoRef.current.volume = originalVolume / 100;
+      editorVideoRef.current.muted = isVideoMuted || originalVolume === 0;
+    }
+  }, [originalVolume, isVideoMuted, isMuted, stage]);
 
   useEffect(() => {
     if (stage === 'camera' && !streamRef.current) {
@@ -2290,6 +2326,10 @@ const CreatePage = () => {
       showToast(isMuted ? 'Audio unmuted' : 'Audio muted');
       return;
     }
+    if (toolId === 'volume-preview') {
+      setActiveSheet('volume-preview');
+      return;
+    }
     if (toolId === 'overlay' || toolId === 'import') {
       overlayInputRef.current.click();
       return;
@@ -2729,7 +2769,8 @@ const CreatePage = () => {
           audioRef.current.currentTime = (activeSound.clipStart || 0) + activeSoundOffset;
         }
 
-        audioRef.current.muted = isMusicMuted;
+        audioRef.current.muted = isMusicMuted || addedVolume === 0;
+        audioRef.current.volume = addedVolume / 100;
         const targetTime = (activeSound.clipStart || 0) + activeSoundOffset;
         const diff = Math.abs(audioRef.current.currentTime - targetTime);
 
@@ -2878,7 +2919,8 @@ const CreatePage = () => {
               audioRef.current = new Audio(url);
             }
             audioRef.current.currentTime = (startSound.clipStart || 0) + startOffset;
-            audioRef.current.muted = isMusicMuted;
+            audioRef.current.muted = isMusicMuted || addedVolume === 0;
+            audioRef.current.volume = addedVolume / 100;
             audioRef.current.play().catch(e => console.warn("Editor play audio failed:", e));
           }
         }
@@ -3294,6 +3336,19 @@ const CreatePage = () => {
               </div>
             )}
           </button>
+          {selectedSound?.title && !['Original sound', 'Original audio', 'Original Audio'].includes(selectedSound.title) && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsMusicMuted(!isMusicMuted);
+                showToast(isMusicMuted ? 'Background music unmuted' : 'Background music muted');
+              }}
+              className="ml-2 h-9 w-9 flex items-center justify-center rounded-full bg-black/40 text-white backdrop-blur-md hover:bg-black/60 transition-colors shadow-lg border border-white/5 active:scale-90"
+            >
+              {isMusicMuted ? <BiVolumeMute size={18} className="text-[#fe2c55]" /> : <IoVolumeHighOutline size={18} />}
+            </button>
+          )}
         </div>
         <span className="h-9 w-9 shrink-0" aria-hidden="true" />
       </div>
@@ -5232,6 +5287,19 @@ const CreatePage = () => {
                 </div>
               )}
             </button>
+            {selectedSound?.title && !['Original sound', 'Original audio', 'Original Audio'].includes(selectedSound.title) && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsMusicMuted(!isMusicMuted);
+                  showToast(isMusicMuted ? 'Background music unmuted' : 'Background music muted');
+                }}
+                className="ml-2 h-9 w-9 flex items-center justify-center rounded-full bg-black/40 text-white backdrop-blur-md hover:bg-black/60 transition-colors shadow-lg border border-white/5 active:scale-90 cursor-pointer"
+              >
+                {isMusicMuted ? <BiVolumeMute size={18} className="text-[#fe2c55]" /> : <IoVolumeHighOutline size={18} />}
+              </button>
+            )}
           </div>
 
           <div className="w-10" />
@@ -5250,6 +5318,7 @@ const CreatePage = () => {
             { id: 'stickers', label: 'Stickers', icon: <IoSparklesOutline size={26} /> },
             { id: 'audio', label: 'Voice', icon: <BiMicrophone size={26} /> },
             { id: 'filters', label: 'Filters', icon: <IoOptionsOutline size={26} /> },
+            { id: 'volume-preview', label: 'Volume', icon: <BiVolumeFull size={26} /> },
             { id: 'save', label: 'Save', icon: <BiDownload size={26} /> },
           ].map((tool) => (
             <button
@@ -6279,6 +6348,25 @@ const CreatePage = () => {
         {/* List Area */}
         <div className="flex-1 overflow-y-auto px-4 pb-[env(safe-area-inset-bottom,20px)] no-scrollbar">
           <div className="space-y-6">
+            {selectedSounds.length > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedSounds([]);
+                  setActiveSheet(null);
+                  showToast('Background sound removed');
+                }}
+                className="flex w-full items-center gap-4 py-3 px-3 hover:bg-white/5 bg-white/[0.02] border border-white/5 rounded-xl transition-all mb-4"
+              >
+                <div className="h-[52px] w-[52px] rounded-[6px] bg-red-500/10 border border-red-500/20 flex items-center justify-center text-red-500 shrink-0">
+                  <BiTrash size={24} />
+                </div>
+                <div className="min-w-0 flex-1 text-left">
+                  <p className="text-[15px] font-bold text-red-500">Remove background sound</p>
+                  <p className="text-[13px] text-white/40 mt-1 truncate">Currently: {selectedSound.title}</p>
+                </div>
+              </button>
+            )}
             {(soundBrowserTab === 'favorites' || soundBrowserTab === 'saved' ? favoriteSounds : libraryAudios)
               .filter(s => s.title.toLowerCase().includes(mentionSearchQuery.toLowerCase()) || s.artist.toLowerCase().includes(mentionSearchQuery.toLowerCase()))
               .map((soundItem) => (
@@ -6875,7 +6963,7 @@ const CreatePage = () => {
                       }`}
                   >
                     <img
-                      src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&h=200"
+                      src="https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=200&h=200"
                       className="h-full w-full object-cover"
                       style={{ filter: FILTER_PRESETS[filter] }}
                       alt={filter}
@@ -6927,18 +7015,46 @@ const CreatePage = () => {
           <div className="space-y-8 px-6 pb-10 pt-4">
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <span className="text-[15px] font-medium">Original sound</span>
-                <span className="text-[13px] text-black/40">100%</span>
+                <span className="text-[15px] font-bold text-white">Original sound</span>
+                <span className="text-[13px] text-white/50 font-bold">{originalVolume}%</span>
               </div>
-              <input type="range" className="w-full accent-[#fe2c55]" defaultValue={100} />
+              <input
+                type="range"
+                min="0"
+                max="100"
+                value={originalVolume}
+                onChange={(e) => setOriginalVolume(Number(e.target.value))}
+                className="w-full accent-[#fe2c55] h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer"
+              />
             </div>
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <span className="text-[15px] font-medium">Added sound</span>
-                <span className="text-[13px] text-black/40">100%</span>
+            {selectedSounds.length > 0 && (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-[15px] font-bold text-white">Added sound ({selectedSound.title})</span>
+                  <span className="text-[13px] text-white/50 font-bold">{addedVolume}%</span>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  value={addedVolume}
+                  onChange={(e) => setAddedVolume(Number(e.target.value))}
+                  className="w-full accent-[#fe2c55] h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedSounds([]);
+                    showToast('Background sound removed');
+                    setActiveSheet(null);
+                  }}
+                  className="w-full mt-6 py-3.5 rounded-2xl bg-red-500/10 hover:bg-red-500/20 text-red-500 text-[14px] font-bold transition-all active:scale-95 flex items-center justify-center gap-2 border border-red-500/10"
+                >
+                  <BiTrash size={16} />
+                  Remove Added Sound
+                </button>
               </div>
-              <input type="range" className="w-full accent-[#fe2c55]" defaultValue={100} />
-            </div>
+            )}
           </div>
         </BottomSheet>
       )}
@@ -6948,13 +7064,38 @@ const CreatePage = () => {
           title="Voiceover"
           onClose={() => {
             if (isRecordingVoice && voiceRecorder) voiceRecorder.stop();
+            if (voicePreviewAudioRef.current) {
+              voicePreviewAudioRef.current.pause();
+              voicePreviewAudioRef.current = null;
+            }
+            if (voiceTimerIntervalRef.current) {
+              clearInterval(voiceTimerIntervalRef.current);
+              voiceTimerIntervalRef.current = null;
+            }
+            setIsVoicePreviewPlaying(false);
             setActiveSheet(null);
           }}
         >
-          <div className="flex flex-col items-center gap-10 px-6 pb-12 pt-8">
+          <div className="flex flex-col items-center gap-6 px-6 pb-12 pt-8">
             <div className="flex flex-col items-center text-center">
               <h2 className="text-xl font-bold mb-2">Record your voice</h2>
-              <p className="text-[13px] text-black/40">Hold the button to record voiceover for your video</p>
+              <p className="text-[13px] text-black/40">Tap the button to record voiceover for your video</p>
+            </div>
+
+            {/* Live Recording Duration / Preview Duration Counter */}
+            <div className="h-8 flex items-center justify-center">
+              {isRecordingVoice ? (
+                <div className="text-3xl font-black text-[#fe2c55] animate-pulse drop-shadow-[0_0_10px_rgba(254,44,85,0.4)]">
+                  {voiceRecordingSeconds.toFixed(1)}s
+                </div>
+              ) : voicePreviewUrl ? (
+                <div className="text-[14px] font-bold text-white/60 bg-white/5 border border-white/5 px-3 py-1.5 rounded-full flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-[#00f2ea]"></span>
+                  <span>Recorded: {voiceRecordingSeconds.toFixed(1)}s</span>
+                </div>
+              ) : (
+                <div className="text-[13px] text-white/35 font-semibold italic">Ready to record</div>
+              )}
             </div>
 
             <div className="relative flex items-center justify-center h-40 w-40">
@@ -6980,39 +7121,45 @@ const CreatePage = () => {
                     ? 'border-[#fe2c55] bg-[#fe2c55]/10 scale-110'
                     : 'border-black/5 bg-black/5 hover:bg-black/10'
                   }`}
-                onPointerDown={async (e) => {
-                  try {
-                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                    const recorder = new MediaRecorder(stream);
-                    const chunks = [];
-                    recorder.ondataavailable = (e) => chunks.push(e.data);
-                    recorder.onstop = () => {
-                      const blob = new Blob(chunks, { type: 'audio/webm' });
-                      setRecordedVoiceBlob(blob);
-                      const url = URL.createObjectURL(blob);
-                      setVoicePreviewUrl(url);
-                      stream.getTracks().forEach(t => t.stop());
-                    };
-                    recorder.start();
-                    setVoiceRecorder(recorder);
-                    setIsRecordingVoice(true);
-                    showToast('Recording...');
-                  } catch (err) {
-                    console.error("Mic access failed:", err);
-                    showToast('Microphone access denied');
-                  }
-                }}
-                onPointerUp={() => {
-                  if (voiceRecorder && isRecordingVoice) {
-                    voiceRecorder.stop();
-                    setIsRecordingVoice(false);
-                    showToast('Recording finished');
-                  }
-                }}
-                onPointerLeave={() => {
-                  if (voiceRecorder && isRecordingVoice) {
-                    voiceRecorder.stop();
-                    setIsRecordingVoice(false);
+                onClick={async () => {
+                  if (isRecordingVoice) {
+                    if (voiceRecorder) {
+                      voiceRecorder.stop();
+                      setIsRecordingVoice(false);
+                      showToast('Recording finished');
+                    }
+                    if (voiceTimerIntervalRef.current) {
+                      clearInterval(voiceTimerIntervalRef.current);
+                      voiceTimerIntervalRef.current = null;
+                    }
+                    setVoiceMaxDuration(voiceRecordingSeconds);
+                  } else {
+                    try {
+                      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                      const recorder = new MediaRecorder(stream);
+                      const chunks = [];
+                      recorder.ondataavailable = (e) => chunks.push(e.data);
+                      recorder.onstop = () => {
+                        const mime = recorder.mimeType || 'audio/webm';
+                        const blob = new Blob(chunks, { type: mime });
+                        setRecordedVoiceBlob(blob);
+                        const url = URL.createObjectURL(blob);
+                        setVoicePreviewUrl(url);
+                        stream.getTracks().forEach(t => t.stop());
+                      };
+                      setVoiceRecordingSeconds(0);
+                      setVoiceMaxDuration(0);
+                      voiceTimerIntervalRef.current = setInterval(() => {
+                        setVoiceRecordingSeconds(prev => prev + 0.1);
+                      }, 100);
+                      recorder.start();
+                      setVoiceRecorder(recorder);
+                      setIsRecordingVoice(true);
+                      showToast('Recording...');
+                    } catch (err) {
+                      console.error("Mic access failed:", err);
+                      showToast('Microphone access denied');
+                    }
                   }
                 }}
               >
@@ -7020,36 +7167,105 @@ const CreatePage = () => {
               </button>
             </div>
 
+            {/* Voiceover Clip Duration Editor */}
+            {recordedVoiceBlob && voiceMaxDuration > 0 && (
+              <div className="w-full space-y-3 px-4 border-t border-white/5 pt-4">
+                <div className="flex items-center justify-between text-[14px]">
+                  <span className="font-bold text-white">Clip Duration</span>
+                  <span className="font-black text-[#00f2ea]">
+                    {voiceRecordingSeconds.toFixed(1)}s <span className="text-white/40 text-[12px]">/ {voiceMaxDuration.toFixed(1)}s</span>
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min="0.5"
+                  max={voiceMaxDuration}
+                  step="0.1"
+                  value={voiceRecordingSeconds}
+                  onChange={(e) => {
+                    const val = Number(e.target.value);
+                    setVoiceRecordingSeconds(val);
+                    if (voicePreviewAudioRef.current) {
+                      voicePreviewAudioRef.current.pause();
+                      setIsVoicePreviewPlaying(false);
+                    }
+                  }}
+                  className="w-full accent-[#00f2ea] h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer"
+                />
+                <p className="text-[11px] text-white/40 text-center font-medium">
+                  Drag to trim or adjust the duration of your voiceover clip
+                </p>
+              </div>
+            )}
+
             <div className="flex w-full items-center justify-center gap-8">
               {voicePreviewUrl && (
                 <button
                   onClick={() => {
-                    const audio = new Audio(voicePreviewUrl);
-                    audio.play().catch(e => {
-                      console.error("Preview play failed:", e);
-                      showToast('Playback failed');
-                    });
+                    if (isVoicePreviewPlaying) {
+                      if (voicePreviewAudioRef.current) {
+                        voicePreviewAudioRef.current.pause();
+                        voicePreviewAudioRef.current.currentTime = 0;
+                      }
+                      setIsVoicePreviewPlaying(false);
+                    } else {
+                      if (voicePreviewAudioRef.current) {
+                        voicePreviewAudioRef.current.pause();
+                      }
+                      const audio = new Audio(voicePreviewUrl);
+                      voicePreviewAudioRef.current = audio;
+                      
+                      // Stop playing once it reaches the edited duration
+                      audio.addEventListener('timeupdate', () => {
+                        if (audio.currentTime >= voiceRecordingSeconds) {
+                          audio.pause();
+                          audio.currentTime = 0;
+                          setIsVoicePreviewPlaying(false);
+                        }
+                      });
+
+                      audio.addEventListener('ended', () => {
+                        setIsVoicePreviewPlaying(false);
+                      });
+                      setIsVoicePreviewPlaying(true);
+                      audio.play().catch(e => {
+                        console.error("Preview play failed:", e);
+                        showToast('Playback failed');
+                        setIsVoicePreviewPlaying(false);
+                      });
+                    }
                   }}
                   className="flex flex-col items-center gap-2"
                 >
-                  <div className="h-14 w-14 rounded-full bg-black/5 flex items-center justify-center text-black/60 active:scale-95 transition-transform">
-                    <BiPlay size={28} />
+                  <div className={`h-14 w-14 rounded-full flex items-center justify-center active:scale-95 transition-all shadow-md ${
+                    isVoicePreviewPlaying 
+                      ? 'bg-[#fe2c55] text-white shadow-[#fe2c55]/30' 
+                      : 'bg-white/10 hover:bg-white/15 text-white'
+                  }`}>
+                    {isVoicePreviewPlaying ? <BiPause size={28} /> : <BiPlay size={28} />}
                   </div>
-                  <span className="text-[11px] font-bold text-black/40">Preview</span>
+                  <span className={`text-[11px] font-bold ${isVoicePreviewPlaying ? 'text-[#fe2c55]' : 'text-white/60'}`}>
+                    {isVoicePreviewPlaying ? 'Playing' : 'Preview'}
+                  </span>
                 </button>
               )}
 
               {recordedVoiceBlob && (
                 <button
                   onClick={() => {
-                    // Add to sounds or handle separately
+                    if (voicePreviewAudioRef.current) {
+                      voicePreviewAudioRef.current.pause();
+                      voicePreviewAudioRef.current = null;
+                    }
+                    setIsVoicePreviewPlaying(false);
                     const url = URL.createObjectURL(recordedVoiceBlob);
                     setSelectedSounds(prev => [...prev, {
                       id: Date.now(),
                       title: 'Voiceover',
                       url: url,
-                      clipDuration: 15, // Should calculate from blob
-                      clipStart: 0
+                      clipDuration: voiceRecordingSeconds,
+                      clipStart: 0,
+                      duration: voiceRecordingSeconds
                     }]);
                     setActiveSheet(null);
                     showToast('Voiceover added');
@@ -7059,7 +7275,7 @@ const CreatePage = () => {
                   <div className="h-14 w-14 rounded-full bg-[#00f2ea] flex items-center justify-center text-white shadow-lg active:scale-95 transition-transform">
                     <BiCheck size={32} />
                   </div>
-                  <span className="text-[11px] font-bold text-black/40">Done</span>
+                  <span className="text-[11px] font-bold text-white/60">Done</span>
                 </button>
               )}
             </div>
