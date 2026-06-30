@@ -1573,11 +1573,14 @@
 
 /* Perfect Vertical Reel Snapping & Scroll Stop Rules */
 .reels-feed-container {
-  scroll-snap-type: y mandatory !important;
-  /* overscroll-behavior-y is managed dynamically in HomePage.jsx:
-     - 'auto' when scrollTop=0 (first reel) → allows Flutter pull-to-refresh
-     - 'none' when scrolled down → prevents accidental refresh between reels */
+  /* overscroll-behavior-y and scroll-snap-type are managed dynamically in HomePage.jsx:
+     - 'auto' & no snapping when scrollTop=0 (first reel) → allows Flutter pull-to-refresh
+     - 'none' & snapping enabled when scrolled down → prevents accidental refresh between reels */
   -webkit-overflow-scrolling: touch !important;
+}
+
+.reels-feed-container.snap-enabled {
+  scroll-snap-type: y mandatory !important;
 }
 
 .video-card-wrapper,

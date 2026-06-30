@@ -130,17 +130,20 @@ const HomePage = () => {
     };
   }, [displayedVideos.length, lenis]);
 
-  // Pull-to-Refresh: Dynamically enable/disable overscroll-behavior-y
-  // When the reel feed is at the top (first reel), allow the native pull gesture
-  // to propagate to Flutter's PullToRefreshController.
-  // When scrolled down to any other reel, lock to prevent accidental refresh.
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
 
     const updateOverscroll = () => {
-      // Enable pull-to-refresh only when scrolled to the very top
-      container.style.overscrollBehaviorY = container.scrollTop <= 0 ? 'auto' : 'none';
+      if (container.scrollTop <= 0) {
+        // At the top: allow overscroll/pull-to-refresh & disable snap-back forces
+        container.style.overscrollBehaviorY = 'auto';
+        container.classList.remove('snap-enabled');
+      } else {
+        // Scrolled down: prevent accidental refresh & enable vertical snapping
+        container.style.overscrollBehaviorY = 'none';
+        container.classList.add('snap-enabled');
+      }
     };
 
     // Initialize: at mount we are always at the top → allow pull-to-refresh
@@ -149,7 +152,10 @@ const HomePage = () => {
     container.addEventListener('scroll', updateOverscroll, { passive: true });
     return () => {
       container.removeEventListener('scroll', updateOverscroll);
-      if (container) container.style.overscrollBehaviorY = '';
+      if (container) {
+        container.style.overscrollBehaviorY = '';
+        container.classList.remove('snap-enabled');
+      }
     };
   }, []);
 
@@ -243,7 +249,7 @@ const HomePage = () => {
       {/* Vertical Feed */}
       <div
         ref={containerRef}
-        className={`h-full w-full overflow-y-auto reels-feed-container no-scrollbar ${!lenis ? 'snap-y snap-mandatory' : ''}`}
+        className={`h-full w-full overflow-y-auto reels-feed-container no-scrollbar ${!lenis ? 'snap-enabled' : ''}`}
         style={{ WebkitOverflowScrolling: 'touch', scrollBehavior: 'auto', touchAction: 'pan-y' }}
       >
         {displayedVideos.length === 0 && !loading ? (
