@@ -453,7 +453,7 @@ const VideoOverlay = ({ reelId, username, caption, musicName, isLiked, likes, co
              
 
              {/* Share */}
-             <div className="flex flex-col items-center text-white tap-effect" onClick={(e) => { e.stopPropagation(); setIsShareOpen(true); }} style={{ pointerEvents: 'auto' }}>
+             <div className="flex flex-col items-center text-white tap-effect" onClick={(e) => { e.stopPropagation(); handleShare('general'); }} style={{ pointerEvents: 'auto' }}>
                 <svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="white" stroke="white" strokeWidth="0" strokeLinecap="round" strokeLinejoin="round">
                     <path d="m22 2-7 20-4-9-9-4Z"></path>
                     <path d="M22 2 11 13"></path>
@@ -556,7 +556,7 @@ const VideoOverlay = ({ reelId, username, caption, musicName, isLiked, likes, co
          onSaveClick={onSaveClick}
          onShareClick={() => {
            setIsMoreOpen(false);
-           setIsShareOpen(true);
+           handleShare('general');
          }}
          onReportClick={() => {
            setIsMoreOpen(false);
