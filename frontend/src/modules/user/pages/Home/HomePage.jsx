@@ -130,6 +130,29 @@ const HomePage = () => {
     };
   }, [displayedVideos.length, lenis]);
 
+  // Pull-to-Refresh: Dynamically enable/disable overscroll-behavior-y
+  // When the reel feed is at the top (first reel), allow the native pull gesture
+  // to propagate to Flutter's PullToRefreshController.
+  // When scrolled down to any other reel, lock to prevent accidental refresh.
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const updateOverscroll = () => {
+      // Enable pull-to-refresh only when scrolled to the very top
+      container.style.overscrollBehaviorY = container.scrollTop <= 0 ? 'auto' : 'none';
+    };
+
+    // Initialize: at mount we are always at the top → allow pull-to-refresh
+    updateOverscroll();
+
+    container.addEventListener('scroll', updateOverscroll, { passive: true });
+    return () => {
+      container.removeEventListener('scroll', updateOverscroll);
+      if (container) container.style.overscrollBehaviorY = '';
+    };
+  }, []);
+
   // Desktop Keyboard navigation helper (ArrowUp, ArrowDown)
   useEffect(() => {
     const handleKeyDown = (e) => {

@@ -1574,7 +1574,9 @@
 /* Perfect Vertical Reel Snapping & Scroll Stop Rules */
 .reels-feed-container {
   scroll-snap-type: y mandatory !important;
-  overscroll-behavior-y: none !important;
+  /* overscroll-behavior-y is managed dynamically in HomePage.jsx:
+     - 'auto' when scrollTop=0 (first reel) → allows Flutter pull-to-refresh
+     - 'none' when scrolled down → prevents accidental refresh between reels */
   -webkit-overflow-scrolling: touch !important;
 }
 
@@ -1609,13 +1611,7 @@
 }
 
 
-/* ============================================================ */
-/* Native Pull-to-Refresh: Document Scrolling Architecture      */
-/* Applied on ALL screen sizes when .document-scrollable active */
-/* ============================================================ */
 
-/* --- Always allow overscroll on html/body so Flutter WebView  */
-/* --- can detect the gesture even before class is added        */
 html {
   overscroll-behavior-y: auto;
 }
@@ -1651,6 +1647,7 @@ body.document-scrollable:not([data-reel-overlay-open="true"]) {
   overflow-y: auto !important;
   height: auto !important;
   min-height: 100% !important;
+  flex-direction: column !important;
   align-items: stretch !important;
   overscroll-behavior-y: auto !important;
 }
@@ -1716,4 +1713,4 @@ body.document-scrollable:not([data-reel-overlay-open="true"]) .absolute .overflo
 
 
 
-
+
