@@ -176,16 +176,21 @@ const AppContent = () => {
     }, [pathname]);
 
     useEffect(() => {
+        const cleanPath = pathname.endsWith('/') && pathname.length > 1 
+            ? pathname.slice(0, -1) 
+            : pathname;
+
         const isFullScreenRoute = 
-            pathname === '/' || 
-            pathname === '/login' ||
-            pathname === '/signup' ||
-            pathname.startsWith('/reel/') ||
-            pathname.startsWith('/inbox/chat/') || 
-            pathname === '/create' ||
-            pathname === '/settings/interests' ||
+            cleanPath === '' ||
+            cleanPath === '/' || 
+            cleanPath === '/login' ||
+            cleanPath === '/signup' ||
+            cleanPath.startsWith('/reel/') ||
+            cleanPath.startsWith('/inbox/chat/') || 
+            cleanPath === '/create' ||
+            cleanPath === '/settings/interests' ||
             appState === 'onboarding' ||
-            pathname.startsWith('/admin');
+            cleanPath.startsWith('/admin');
             
         const isScrollable = !isFullScreenRoute;
 

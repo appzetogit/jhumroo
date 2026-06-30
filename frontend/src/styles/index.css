@@ -1643,13 +1643,14 @@
   
   body.document-scrollable:not([data-reel-overlay-open="true"]) .page-container {
     display: block !important;
+    overflow: visible !important;
     height: auto !important;
     min-height: 100vh !important;
     min-height: 100svh !important;
   }
   
-  body.document-scrollable:not([data-reel-overlay-open="true"]) .page-container > .scrollable,
-  body.document-scrollable:not([data-reel-overlay-open="true"]) .page-container > .overflow-y-auto {
+  body.document-scrollable:not([data-reel-overlay-open="true"]) .scrollable:not(.fixed *):not(.absolute *),
+  body.document-scrollable:not([data-reel-overlay-open="true"]) .overflow-y-auto:not(.fixed *):not(.absolute *) {
     display: block !important;
     overflow-y: visible !important;
     height: auto !important;
