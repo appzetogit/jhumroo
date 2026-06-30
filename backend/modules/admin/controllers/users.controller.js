@@ -113,7 +113,7 @@ export const getUserById = asyncHandler(async (req, res) => {
  */
 export const updateUser = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const { username, fullName, email, bio, isVerified, isPrivate } = req.body;
+  const { username, fullName, email, bio, isVerified, isPrivate, interests } = req.body;
 
   const user = await User.findById(id);
 
@@ -141,11 +141,27 @@ export const updateUser = asyncHandler(async (req, res) => {
   }
 
   // Update fields
-  if (fullName !== undefined) user.fullName = fullName;
+  if (fullName !== undefined) {
+    if (fullName.trim() !== '') {
+      const nameRegex = /^[a-zA-Z\s.'\-]+$/;
+      if (!nameRegex.test(fullName)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Full name can only contain letters, spaces, dots, hyphens, and apostrophes'
+        });
+      }
+    }
+    user.fullName = fullName;
+  }
   if (email !== undefined) user.email = email;
   if (bio !== undefined) user.bio = bio;
   if (isVerified !== undefined) user.isVerified = isVerified;
   if (isPrivate !== undefined) user.isPrivate = isPrivate;
+  if (interests !== undefined) {
+    if (Array.isArray(interests)) {
+      user.interests = interests;
+    }
+  }
 
   await user.save();
 

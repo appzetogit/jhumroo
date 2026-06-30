@@ -120,6 +120,9 @@ export const verifyOTP = asyncHandler(async (req, res) => {
   // Clear OTP and update last login
   user.clearOTP();
   user.lastLoginAt = new Date();
+  if (!user.isActive) {
+    user.isActive = true; // Reactivate account if it was deactivated/soft-deleted
+  }
   await user.save({ validateBeforeSave: false });
 
   // Send token response

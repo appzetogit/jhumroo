@@ -7,6 +7,7 @@ import SystemSetting from '../../../models/SystemSetting.model.js';
 import { asyncHandler } from '../../../middleware/errorHandler.js';
 import { uploadToS3, getFileUrl, deleteFromS3 } from '../../../utils/s3.js';
 import razorpayService from '../../../services/razorpay.service.js';
+import { createAdminAlert } from '../../../utils/adminAlertService.js';
 import fs from 'fs';
 
 // Helper to get ads pricing settings
@@ -160,6 +161,13 @@ export const createAd = asyncHandler(async (req, res) => {
       ad.razorpayOrderId = order.id;
       ad.paymentAmount = totalAmount;
       await ad.save();
+
+      createAdminAlert({
+        type: 'new_ad',
+        title: 'New User Ad Submitted',
+        message: `@${req.user.username} submitted a new ad for review: "${caption || '(no caption)'}"`,
+        link: '/admin/user-ads'
+      }).catch(err => console.error('[createAd] admin alert failed:', err));
 
       return res.status(201).json({
         success: true,

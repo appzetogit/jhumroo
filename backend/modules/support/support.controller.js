@@ -1,4 +1,5 @@
 import SupportRequest from '../../models/SupportRequest.model.js';
+import { createAdminAlert } from '../../utils/adminAlertService.js';
 
 /**
  * Submit a new support request
@@ -42,6 +43,13 @@ export const createSupportRequest = async (req, res) => {
       phoneNumber,
       reason
     });
+
+    createAdminAlert({
+      type: 'new_support',
+      title: 'New Support Request',
+      message: `${name} submitted a support ticket: "${reason || 'no reason'}"`,
+      link: '/admin/support-requests'
+    }).catch(err => console.error('[createSupportRequest] admin alert failed:', err));
 
     res.status(201).json({
       success: true,

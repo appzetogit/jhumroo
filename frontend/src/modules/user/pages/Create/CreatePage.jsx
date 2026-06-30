@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState, useRef, memo } from 'react';
+import React, { useEffect, useMemo, useState, useRef, memo, useCallback } from 'react';
 import axios from 'axios';
 import Instacam from 'instacam';
 import {
@@ -29,6 +29,7 @@ import {
   BiPause,
   BiSlider,
   BiCrop,
+  BiExpand,
 } from 'react-icons/bi';
 import {
   IoCameraReverseOutline,
@@ -56,12 +57,14 @@ import { formatElapsed, parseDurationSeconds, readSoundFavorites } from './utils
 import { initDB, saveVideoToCache, getVideoFromCache, saveSequenceToCache, getSequenceFromCache, clearVideoCache } from './services/videoCacheService';
 import { sheetOverlayClass, Toggle, BottomSheet, CenterModal } from './components/SharedUI';
 import { DynamicAudioDuration, MediaPreview, DraggableOverlay, TimelineThumbnail } from './components/MediaComponents';
-const getToolIcon = (toolId, size = 22, isMuted = false, selectedSpeed = '1x') => {
+const getToolIcon = (toolId, size = 22, isMuted = false, selectedSpeed = '1x', selectedZoom = '1x') => {
   switch (toolId) {
     case 'flip':
       return <BiRefresh size={size + 1} />;
     case 'speed':
       return <span className="text-[13px] font-black leading-none tracking-tight">{selectedSpeed}</span>;
+    case 'zoom':
+      return <span className="text-[13px] font-black leading-none tracking-tight">{selectedZoom}</span>;
     case 'timer':
       return (
         <span className="relative flex items-center justify-center">
@@ -197,6 +200,7 @@ const CreatePage = () => {
   const createFlow = config?.createFlow || {};
   const DURATION_OPTIONS = createFlow.durations || ['15s', '30s', '60s'];
   const SPEED_OPTIONS = createFlow.speeds || ['0.3x', '0.5x', '1x', '2x', '3x'];
+  const ZOOM_OPTIONS = createFlow.zooms || ['1x', '2x', '3x', '5x'];
   const CREATE_CANVAS_IMAGE = createFlow.canvasImage || '';
   const CREATE_GALLERY_ITEMS = createFlow.galleryItems || [];
   const CREATE_FILTER_GROUPS = (createFlow.filters && createFlow.filters.length > 0) ? createFlow.filters : [
@@ -235,9 +239,15 @@ const CreatePage = () => {
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoMuted, setIsVideoMuted] = useState(false);
   const [isMusicMuted, setIsMusicMuted] = useState(false);
+  const [selectedZoom, setSelectedZoom] = useState('1x');
   const [overlayText, setOverlayText] = useState(() => {
     return localStorage.getItem('create_overlayText') || '';
   });
+  const [textList, setTextList] = useState(() => {
+    const saved = localStorage.getItem('create_textList');
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [selectedTextId, setSelectedTextId] = useState(null);
   const [overlayFont, setOverlayFont] = useState(() => {
     return localStorage.getItem('create_overlayFont') || 'Classic';
   });
@@ -294,7 +304,8 @@ const CreatePage = () => {
     try {
       const saved = localStorage.getItem('create_stageStack');
       const parsed = saved ? JSON.parse(saved) : ['camera'];
-      return (Array.isArray(parsed) && parsed.length > 0) ? parsed : ['camera'];
+      const filtered = (Array.isArray(parsed) && parsed.length > 0) ? parsed : ['camera'];
+      return filtered.filter(s => s !== 'sound-editor');
     } catch {
       return ['camera'];
     }
@@ -375,6 +386,7 @@ const CreatePage = () => {
   const [savedAudiosList, setSavedAudiosList] = useState([]);
   const [playingAudioId, setPlayingAudioId] = useState(null);
   const [editorSound, setEditorSound] = useState(null);
+  const [editorSoundMaxSec, setEditorSoundMaxSec] = useState(60); // actual detected duration
   const [clipDuration, setClipDuration] = useState(15);
   const [clipStart, setClipStart] = useState(0);
   const audioPreviewRef = useRef(null);
@@ -393,8 +405,14 @@ const CreatePage = () => {
   const ignoreScrollRef = useRef(false);
   const [textStartTime, setTextStartTime] = useState(0);
   const [textEndTime, setTextEndTime] = useState(5); // Default 5 seconds
+  // Refs for stable access inside drag handlers (avoids stale closures)
+  const textStartTimeRef = useRef(0);
+  const textEndTimeRef = useRef(5);
   const [selectedStickerId, setSelectedStickerId] = useState(null);
   const [isTextSelected, setIsTextSelected] = useState(false);
+  const [isTextTrackSelected, setIsTextTrackSelected] = useState(false); // timeline clip selection
+  const textListRef = useRef(textList);
+  useEffect(() => { textListRef.current = textList; }, [textList]);
   const [isRecordingVoice, setIsRecordingVoice] = useState(false);
   const [recordedVoiceBlob, setRecordedVoiceBlob] = useState(null);
   const [voiceRecorder, setVoiceRecorder] = useState(null);
@@ -425,40 +443,46 @@ const CreatePage = () => {
     return `${base} ${adj}`.trim() || 'none';
   };
 
-  // Play sound during recording
+  // Ensure background audio is cleaned up on unmount
   useEffect(() => {
-    if (recordStatus === 'recording' && selectedSound && (selectedSound.url || selectedSound.audioUrl)) {
-      const url = selectedSound.url || selectedSound.audioUrl;
-      const audio = new Audio(url);
-      audio.currentTime = selectedSound.clipStart || 0;
-      audio.muted = isMusicMuted || addedVolume === 0;
-      audio.volume = addedVolume / 100;
-      audio.play().catch(err => {
-        if (err.name !== 'AbortError') console.error("Recording audio playback failed:", err);
-      });
-      recordingAudioRef.current = audio;
-
-      // Handle loop or stop if needed, but usually we just play for the duration of recording
-    } else {
-      if (recordingAudioRef.current) {
-        recordingAudioRef.current.pause();
-        recordingAudioRef.current = null;
-      }
-    }
-
     return () => {
       if (recordingAudioRef.current) {
         recordingAudioRef.current.pause();
         recordingAudioRef.current = null;
       }
     };
-  }, [recordStatus, selectedSound]);
+  }, []);
 
   // Synchronize muting and volume for recording audio dynamically
   useEffect(() => {
     if (recordingAudioRef.current) {
       recordingAudioRef.current.muted = isMusicMuted || addedVolume === 0;
       recordingAudioRef.current.volume = addedVolume / 100;
+    }
+  }, [isMusicMuted, addedVolume]);
+
+  // Camera stage background music preview (Disabled per user request - music only plays when recording starts)
+  const cameraPreviewAudioRef = useRef(null);
+  useEffect(() => {
+    // Stop camera preview audio if it was somehow playing
+    if (cameraPreviewAudioRef.current) {
+      cameraPreviewAudioRef.current.pause();
+      cameraPreviewAudioRef.current = null;
+    }
+
+    return () => {
+      if (cameraPreviewAudioRef.current) {
+        cameraPreviewAudioRef.current.pause();
+        cameraPreviewAudioRef.current = null;
+      }
+    };
+  }, [stageStack, recordStatus]);
+
+  // Sync mute/volume for camera preview audio dynamically (no-op since preview is disabled)
+  useEffect(() => {
+    if (cameraPreviewAudioRef.current) {
+      cameraPreviewAudioRef.current.muted = isMusicMuted || addedVolume === 0;
+      cameraPreviewAudioRef.current.volume = addedVolume / 100;
     }
   }, [isMusicMuted, addedVolume]);
 
@@ -499,9 +523,16 @@ const CreatePage = () => {
 
         // Trim sound to its edited duration
         audio.addEventListener('timeupdate', () => {
-          if (sound.clipDuration && audio.currentTime >= sound.clipDuration) {
-            audio.pause();
-            audio.currentTime = 0;
+          const startSec = sound.clipStart || 0;
+          const durationSec = sound.clipDuration || 15;
+          const endSec = startSec + durationSec;
+          if (audio.currentTime >= endSec) {
+            if (sound.title === 'Voiceover') {
+              audio.pause();
+              audio.currentTime = startSec;
+            } else {
+              audio.currentTime = startSec;
+            }
           }
         });
 
@@ -607,6 +638,67 @@ const CreatePage = () => {
       audioPreviewRef.current.currentTime = clipStart;
     }
   }, [clipStart, playingAudioId, stageStack]);
+
+  // Auto-play music when sound-editor stage becomes active
+  useEffect(() => {
+    const currentStage = stageStack[stageStack.length - 1];
+    if (currentStage === 'sound-editor' && editorSound) {
+      // Small delay to let the stage render first
+      const t = setTimeout(() => {
+        if (audioPreviewRef.current) return; // already playing
+        const url = editorSound.url || editorSound.audioUrl;
+        if (!url) return;
+        const newAudio = new Audio(url);
+        newAudio.currentTime = editorSound.clipStart || 0;
+        newAudio.play().catch(() => {});
+        newAudio.onended = () => setPlayingAudioId(null);
+        audioPreviewRef.current = newAudio;
+        setPlayingAudioId(editorSound._id || editorSound.id);
+      }, 200);
+      return () => clearTimeout(t);
+    } else {
+      // Leaving sound-editor — stop any playing preview audio
+      if (audioPreviewRef.current) {
+        audioPreviewRef.current.pause();
+        audioPreviewRef.current = null;
+        setPlayingAudioId(null);
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stageStack, editorSound?.id]);
+
+  // Detect real audio duration when editorSound changes (for clip duration picker)
+  useEffect(() => {
+    if (!editorSound) return;
+    const parsedDur = typeof editorSound.duration === 'number'
+      ? editorSound.duration
+      : parseDurationSeconds(editorSound.duration);
+    if (parsedDur && parsedDur > 1) {
+      setEditorSoundMaxSec(Math.floor(parsedDur));
+      return;
+    }
+    // duration missing or 0 — detect from audio metadata
+    const url = editorSound.url || editorSound.audioUrl;
+    if (!url) { setEditorSoundMaxSec(60); return; }
+    const probe = new Audio(url);
+    probe.preload = 'metadata';
+    probe.onloadedmetadata = () => {
+      const d = Math.floor(probe.duration);
+      if (d && isFinite(d) && d > 0) {
+        setEditorSoundMaxSec(d);
+        setClipDuration(prev => Math.min(prev, d));
+      } else {
+        setEditorSoundMaxSec(60);
+      }
+      probe.src = '';
+    };
+    probe.onerror = () => { setEditorSoundMaxSec(60); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editorSound?.id, editorSound?.url]);
+
+  // Keep text timing refs in sync with state (used in drag handlers to avoid stale closures)
+  useEffect(() => { textStartTimeRef.current = textStartTime; }, [textStartTime]);
+  useEffect(() => { textEndTimeRef.current = textEndTime; }, [textEndTime]);
 
   // Prevent page zoom and scroll
   useEffect(() => {
@@ -731,6 +823,7 @@ const CreatePage = () => {
           localStorage.removeItem('create_overlayFontSize');
           localStorage.removeItem('create_textPos');
           localStorage.removeItem('create_textRotation');
+          localStorage.removeItem('create_textList');
           localStorage.removeItem('create_stageStack');
           localStorage.removeItem('create_recordStatus');
           localStorage.removeItem('create_recordedSeconds');
@@ -902,7 +995,7 @@ const CreatePage = () => {
 
   // Safety: Reset to camera if data is lost but stage is advanced
   useEffect(() => {
-    if (!isRestoring && stage !== 'camera' && !previewUrl && !videoFile) {
+    if (!isRestoring && stage !== 'camera' && stage !== 'sound-editor' && !previewUrl && !videoFile) {
       console.warn("Session data lost, resetting create flow to camera.");
       setStageStack(['camera']);
     }
@@ -958,7 +1051,8 @@ const CreatePage = () => {
 
   // Persistence logic for UI states
   useEffect(() => {
-    localStorage.setItem('create_stageStack', JSON.stringify(stageStack));
+    const cleanStack = stageStack.filter(s => s !== 'sound-editor');
+    localStorage.setItem('create_stageStack', JSON.stringify(cleanStack));
     localStorage.setItem('create_recordStatus', recordStatus);
     localStorage.setItem('create_recordedSeconds', recordedSeconds.toString());
     localStorage.setItem('create_selectedSounds', JSON.stringify(selectedSounds));
@@ -971,7 +1065,31 @@ const CreatePage = () => {
     localStorage.setItem('create_overlayFontSize', overlayFontSize.toString());
     localStorage.setItem('create_textPos', JSON.stringify(textPos));
     localStorage.setItem('create_textRotation', textRotation.toString());
-  }, [stageStack, recordStatus, recordedSeconds, selectedSound, postState, activeStickers, activeOverlays, overlayText, overlayFont, overlayColor, overlayFontSize, textPos, textRotation]);
+    localStorage.setItem('create_textList', JSON.stringify(textList));
+  }, [stageStack, recordStatus, recordedSeconds, selectedSound, postState, activeStickers, activeOverlays, overlayText, overlayFont, overlayColor, overlayFontSize, textPos, textRotation, textList]);
+
+  // Synchronize composer edits in real-time to the selected item in textList
+  useEffect(() => {
+    if (selectedTextId) {
+      setTextList(prev => prev.map(item => {
+        if (item.id === selectedTextId) {
+          return {
+            ...item,
+            text: overlayText,
+            startTime: textStartTime,
+            endTime: textEndTime,
+            x: textPos.x,
+            y: textPos.y,
+            rotation: textRotation,
+            color: overlayColor,
+            font: overlayFont,
+            fontSize: overlayFontSize
+          };
+        }
+        return item;
+      }));
+    }
+  }, [overlayText, textStartTime, textEndTime, textPos.x, textPos.y, textRotation, overlayColor, overlayFont, overlayFontSize, selectedTextId]);
 
   // Stop editor playback when leaving the stage
   useEffect(() => {
@@ -1066,9 +1184,10 @@ const CreatePage = () => {
   const popStage = () => {
     if (stageStack.length <= 1) return;
 
+    const currentStage = stageStack[stageStack.length - 1];
     const nextStage = stageStack[stageStack.length - 2];
 
-    if (nextStage === 'camera') {
+    if (nextStage === 'camera' && currentStage !== 'sound-editor') {
       setSelectedSounds([]);
       // Also clear any temporary recording fragments if needed
       handleDiscardClip();
@@ -1186,6 +1305,55 @@ const CreatePage = () => {
     }
   }, [selectedSpeed, stage, instacamRef.current]);
 
+  const applyZoom = useCallback(async (zoomValue) => {
+    const zoomNumber = parseFloat(zoomValue) || 1.0;
+    let hardwareApplied = false;
+    
+    if (instacamRef.current && instacamRef.current.v) {
+      const videoTrack = instacamRef.current.v.getVideoTracks()[0];
+      if (videoTrack) {
+        try {
+          const capabilities = videoTrack.getCapabilities ? videoTrack.getCapabilities() : {};
+          if (capabilities.zoom) {
+            const min = capabilities.zoom.min || 1;
+            const max = capabilities.zoom.max || 4;
+            const targetZoom = Math.max(min, Math.min(max, zoomNumber));
+            await videoTrack.applyConstraints({
+              advanced: [{ zoom: targetZoom }]
+            });
+            hardwareApplied = true;
+            console.log(`Applied hardware zoom constraint: ${targetZoom}`);
+          }
+        } catch (err) {
+          console.warn("Failed to apply hardware zoom constraints:", err);
+        }
+      }
+    }
+
+    if (canvasRef.current) {
+      if (hardwareApplied) {
+        canvasRef.current.style.transform = 'scale(1)';
+      } else {
+        canvasRef.current.style.transform = `scale(${zoomNumber})`;
+        canvasRef.current.style.transformOrigin = 'center';
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    if (stage === 'camera') {
+      applyZoom(selectedZoom);
+    }
+  }, [selectedZoom, stage, applyZoom]);
+
+  const handleCanvasDoubleClick = () => {
+    setSelectedZoom((prevZoom) => {
+      const currentIndex = ZOOM_OPTIONS.indexOf(prevZoom);
+      const nextIndex = (currentIndex + 1) % ZOOM_OPTIONS.length;
+      return ZOOM_OPTIONS[nextIndex];
+    });
+  };
+
   useEffect(() => {
     if (previewVideoRef.current) {
       previewVideoRef.current.volume = originalVolume / 100;
@@ -1198,13 +1366,23 @@ const CreatePage = () => {
   }, [originalVolume, isVideoMuted, isMuted, stage]);
 
   useEffect(() => {
+    let active = true;
     if (stage === 'camera' && !streamRef.current) {
-      startCamera();
+      const checkAndStart = () => {
+        if (!active) return;
+        if (canvasRef.current) {
+          startCamera();
+        } else {
+          requestAnimationFrame(checkAndStart);
+        }
+      };
+      checkAndStart();
     } else if (stage !== 'camera' && streamRef.current) {
       stopCamera();
     }
 
     return () => {
+      active = false;
       stopCamera();
     };
   }, [stage]);
@@ -1255,6 +1433,7 @@ const CreatePage = () => {
           console.log('Instacam ready');
           // Get the stream for recording
           if (instacamRef.current) {
+            applyZoom(selectedZoom);
             const videoStream = instacamRef.current.v; // Accessing internal stream
             try {
               // Request microphone audio stream
@@ -1897,6 +2076,12 @@ const CreatePage = () => {
         duetVideoPlayerRef.current.pause();
       }
       setIsTimerRecording(false);
+
+      // Pause camera background audio
+      if (recordingAudioRef.current) {
+        recordingAudioRef.current.pause();
+        recordingAudioRef.current = null;
+      }
       return;
     }
 
@@ -1958,6 +2143,36 @@ const CreatePage = () => {
 
     recorder.start();
     setRecordStatus('recording');
+
+    // Stop camera preview audio before starting recording audio (avoid double play)
+    if (cameraPreviewAudioRef.current) {
+      cameraPreviewAudioRef.current.pause();
+      cameraPreviewAudioRef.current = null;
+    }
+
+    // Play camera background audio synchronously to bypass browser autoplay restrictions
+    if (selectedSound && (selectedSound.url || selectedSound.audioUrl) && selectedSound.id !== 'sound-original') {
+      const url = selectedSound.url || selectedSound.audioUrl;
+      const audio = new Audio(url);
+      const startSec = selectedSound.clipStart || 0;
+      const durationSec = selectedSound.clipDuration || 15;
+      const endSec = startSec + durationSec;
+
+      audio.currentTime = startSec;
+      audio.muted = isMusicMuted || addedVolume === 0;
+      audio.volume = addedVolume / 100;
+
+      audio.addEventListener('timeupdate', () => {
+        if (audio.currentTime >= endSec) {
+          audio.currentTime = startSec;
+        }
+      });
+
+      audio.play().catch(err => {
+        console.error("Recording background audio playback failed:", err);
+      });
+      recordingAudioRef.current = audio;
+    }
   };
 
   const handleConfirmClip = () => {
@@ -1978,6 +2193,11 @@ const CreatePage = () => {
       duetVideoPlayerRef.current.pause();
       duetVideoPlayerRef.current.currentTime = 0;
     }
+    // Clean up camera background audio
+    if (recordingAudioRef.current) {
+      recordingAudioRef.current.pause();
+      recordingAudioRef.current = null;
+    }
 
     // Clear cache
     clearVideoCache();
@@ -1994,6 +2214,7 @@ const CreatePage = () => {
     localStorage.removeItem('create_overlayFontSize');
     localStorage.removeItem('create_textPos');
     localStorage.removeItem('create_textRotation');
+    localStorage.removeItem('create_textList');
 
     // Reset Text Overlay states
     setOverlayText('');
@@ -2013,6 +2234,7 @@ const CreatePage = () => {
     setPostState(createInitialPostState());
     setVideoDuration(0);
     setVideoThumbnails([]);
+    setTextList([]);
     setClipSequence([]);
     setCurrentClipIndex(0);
     setLocationSearchResults([]);
@@ -2065,7 +2287,7 @@ const CreatePage = () => {
   };
 
   const handleNextClick = () => {
-    const hasEdits = overlayText ||
+    const hasEdits = textList.length > 0 ||
       activeStickers.length > 0 ||
       selectedFilter !== 'Normal' ||
       editorSettings.rotation !== 0 ||
@@ -2097,6 +2319,7 @@ const CreatePage = () => {
   const performMergeSave = async (isExportOnly = true) => {
     if (isRendering) return;
 
+    const previewAudiosToPlay = [];
     try {
       setIsRendering(true);
       setRenderProgress(0);
@@ -2110,14 +2333,38 @@ const CreatePage = () => {
       const renderVideo = document.createElement('video');
       renderVideo.playsInline = true;
 
-      // Setup Web Audio routing to capture video audio silently
+      // Setup Web Audio routing to capture video audio and combine with background music
       let audioTrack = null;
       let audioCtx = null;
       try {
         audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        const sourceNode = audioCtx.createMediaElementSource(renderVideo);
         const destNode = audioCtx.createMediaStreamDestination();
+
+        // 1. Connect recorded camera video/microphone audio track
+        const sourceNode = audioCtx.createMediaElementSource(renderVideo);
         sourceNode.connect(destNode);
+
+        // 2. Connect any selected background music/soundtracks
+        selectedSounds.forEach((sound) => {
+          const url = sound.url || sound.audioUrl;
+          if (url && sound.title !== 'Original sound') {
+            const soundAudio = new Audio(url);
+            soundAudio.crossOrigin = 'anonymous'; // prevent CORS canvas taint issues
+            soundAudio.muted = false;
+            soundAudio.volume = sound.title === 'Voiceover' ? 1.0 : (addedVolume / 100);
+            
+            // Connect this audio element as a source in Web Audio context
+            const soundSource = audioCtx.createMediaElementSource(soundAudio);
+            soundSource.connect(destNode);
+
+            previewAudiosToPlay.push({
+              audio: soundAudio,
+              startTime: sound.clipStart || 0,
+              duration: sound.clipDuration || 15
+            });
+          }
+        });
+
         audioTrack = destNode.stream.getAudioTracks()[0];
       } catch (err) {
         console.warn("Web Audio API failed, falling back to silent video:", err);
@@ -2141,6 +2388,11 @@ const CreatePage = () => {
       };
 
       recorder.onstop = () => {
+        // Pause all background audios
+        previewAudiosToPlay.forEach(p => {
+          try { p.audio.pause(); } catch(e) {}
+        });
+
         const blob = new Blob(recordedChunks, { type: 'video/webm' });
         const url = URL.createObjectURL(blob);
 
@@ -2149,8 +2401,7 @@ const CreatePage = () => {
         } else {
           setMergedVideoBlob(blob);
           setPreviewUrl(url);
-          setClipSequence([]);
-          setCurrentClipIndex(0);
+          // Keep clipSequence and currentClipIndex intact so project is fully editable when going back
           pushStage('post');
         }
 
@@ -2162,6 +2413,12 @@ const CreatePage = () => {
       if (audioCtx && audioCtx.state === 'suspended') {
         await audioCtx.resume();
       }
+
+      // Start playing all background music tracks in sync with exporter rendering
+      previewAudiosToPlay.forEach(p => {
+        p.audio.currentTime = p.startTime;
+        p.audio.play().catch(err => console.warn("Failed to play background audio in exporter:", err));
+      });
 
       for (let i = 0; i < clipSequence.length; i++) {
         const clip = clipSequence[i];
@@ -2188,16 +2445,18 @@ const CreatePage = () => {
             ctx.drawImage(img, -canvas.width / 2, -canvas.height / 2, canvas.width, canvas.height);
             ctx.restore();
 
-            if (overlayText && globalTime >= textStartTime && globalTime <= textEndTime) {
-              ctx.save();
-              ctx.fillStyle = overlayColor;
-              ctx.font = `${overlayFontSize * 2}px ${overlayFont}`;
-              ctx.textAlign = 'center';
-              ctx.translate(canvas.width / 2 + textPos.x * 2, canvas.height / 2 + textPos.y * 2);
-              ctx.rotate((textRotation * Math.PI) / 180);
-              ctx.fillText(overlayText, 0, 0);
-              ctx.restore();
-            }
+            textList.forEach(item => {
+              if (item.text && globalTime >= item.startTime && globalTime <= item.endTime) {
+                ctx.save();
+                ctx.fillStyle = item.color || '#ffffff';
+                ctx.font = `${(item.fontSize || 28) * 2}px ${item.font || 'Standard'}`;
+                ctx.textAlign = 'center';
+                ctx.translate(canvas.width / 2 + item.x * 2, canvas.height / 2 + item.y * 2);
+                ctx.rotate(((item.rotation || 0) * Math.PI) / 180);
+                ctx.fillText(item.text, 0, 0);
+                ctx.restore();
+              }
+            });
 
             activeStickers.forEach(sticker => {
               ctx.save();
@@ -2244,16 +2503,18 @@ const CreatePage = () => {
             ctx.drawImage(renderVideo, -canvas.width / 2, -canvas.height / 2, canvas.width, canvas.height);
             ctx.restore();
 
-            if (overlayText && globalTime >= textStartTime && globalTime <= textEndTime) {
-              ctx.save();
-              ctx.fillStyle = overlayColor;
-              ctx.font = `${overlayFontSize * 2}px ${overlayFont}`;
-              ctx.textAlign = 'center';
-              ctx.translate(canvas.width / 2 + textPos.x * 2, canvas.height / 2 + textPos.y * 2);
-              ctx.rotate((textRotation * Math.PI) / 180);
-              ctx.fillText(overlayText, 0, 0);
-              ctx.restore();
-            }
+            textList.forEach(item => {
+              if (item.text && globalTime >= item.startTime && globalTime <= item.endTime) {
+                ctx.save();
+                ctx.fillStyle = item.color || '#ffffff';
+                ctx.font = `${(item.fontSize || 28) * 2}px ${item.font || 'Standard'}`;
+                ctx.textAlign = 'center';
+                ctx.translate(canvas.width / 2 + item.x * 2, canvas.height / 2 + item.y * 2);
+                ctx.rotate(((item.rotation || 0) * Math.PI) / 180);
+                ctx.fillText(item.text, 0, 0);
+                ctx.restore();
+              }
+            });
 
             activeStickers.forEach(sticker => {
               ctx.save();
@@ -2276,9 +2537,59 @@ const CreatePage = () => {
       showToast('Export complete!');
     } catch (err) {
       console.error("Render failed:", err);
+      // Clean up background audios
+      previewAudiosToPlay.forEach(p => {
+        try { p.audio.pause(); } catch(e) {}
+      });
       showToast('Export failed.');
       setIsRendering(false);
     }
+  };
+
+  const handleTextCancel = () => {
+    setIsEditingText(false);
+    setSelectedTextId(null);
+    setOverlayText('');
+  };
+
+  const handleTextDone = () => {
+    if (!overlayText.trim()) {
+      if (selectedTextId) {
+        setTextList(prev => prev.filter(t => t.id !== selectedTextId));
+      }
+      setIsEditingText(false);
+      setSelectedTextId(null);
+      setOverlayText('');
+      return;
+    }
+
+    const itemData = {
+      id: selectedTextId || `text-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      text: overlayText,
+      startTime: textStartTime,
+      endTime: textEndTime,
+      x: textPos.x,
+      y: textPos.y,
+      rotation: textRotation,
+      color: overlayColor,
+      font: overlayFont,
+      fontSize: overlayFontSize
+    };
+
+    setTextList(prev => {
+      const idx = prev.findIndex(t => t.id === itemData.id);
+      if (idx >= 0) {
+        const next = [...prev];
+        next[idx] = itemData;
+        return next;
+      } else {
+        return [...prev, itemData];
+      }
+    });
+
+    setIsEditingText(false);
+    setSelectedTextId(null);
+    setOverlayText('');
   };
 
   const handlePreviewToolClick = (toolId) => {
@@ -2287,12 +2598,21 @@ const CreatePage = () => {
       return;
     }
     if (toolId === 'text') {
+      const maxEndTime = textList.reduce((max, t) => Math.max(max, t.endTime), 0);
+      const start = Math.min(videoDuration, maxEndTime);
+      const end = Math.min(videoDuration, start + 5);
+      setOverlayText('');
+      setTextStartTime(start);
+      setTextEndTime(end);
+      textStartTimeRef.current = start;
+      textEndTimeRef.current = end;
+      setTextPos({ x: 0, y: 0 });
+      setTextRotation(0);
+      setOverlayColor('#ffffff');
+      setOverlayFont('Standard');
+      setOverlayFontSize(28);
+      setSelectedTextId(null);
       setIsEditingText(true);
-      if (!overlayText) {
-        // Initialize timing for new text
-        setTextStartTime(0);
-        setTextEndTime(Math.min(videoDuration, 5));
-      }
       return;
     }
     if (toolId === 'filters') {
@@ -2404,14 +2724,15 @@ const CreatePage = () => {
         console.warn('Direct S3 upload failed, falling back to server-side upload:', uploadError);
       }
 
+      const firstText = textList[0];
       const editsData = {
-        text: overlayText ? {
-          content: overlayText,
-          font: overlayFont,
-          color: overlayColor,
-          fontSize: overlayFontSize,
-          position: textPos,
-          rotation: textRotation
+        text: firstText ? {
+          content: firstText.text,
+          font: firstText.font || 'Standard',
+          color: firstText.color || '#ffffff',
+          fontSize: firstText.fontSize || 28,
+          position: { x: firstText.x, y: firstText.y },
+          rotation: firstText.rotation || 0
         } : null,
         stickers: activeStickers.map(s => ({
           id: s.id,
@@ -2468,6 +2789,7 @@ const CreatePage = () => {
         localStorage.removeItem('create_overlayFontSize');
         localStorage.removeItem('create_textPos');
         localStorage.removeItem('create_textRotation');
+        localStorage.removeItem('create_textList');
 
         setTimeout(() => {
           navigate('/');
@@ -2485,6 +2807,7 @@ const CreatePage = () => {
           setVideoDuration(0);
           setVideoThumbnails([]);
           setClipSequence([]);
+          setTextList([]);
           setCurrentClipIndex(0);
           setLocationSearchResults([]);
           setIsSearchingLocation(false);
@@ -2827,6 +3150,18 @@ const CreatePage = () => {
     if (video.currentTime < startTime) {
       video.currentTime = startTime;
     }
+
+    // Show/hide preview text overlays based on globalTime vs text timing
+    const pastDuration = clipSequence.slice(0, currentPreviewClipIndex).reduce((a, c) => a + c.duration, 0);
+    const globalTime = pastDuration + (video.currentTime - startOffset) / speed;
+
+    textList.forEach(item => {
+      const textOverlay = document.getElementById(`preview-text-overlay-${item.id}`);
+      if (textOverlay) {
+        const shouldShow = globalTime >= item.startTime && globalTime <= item.endTime;
+        textOverlay.style.display = shouldShow ? '' : 'none';
+      }
+    });
   };
 
   useEffect(() => {
@@ -3317,7 +3652,7 @@ const CreatePage = () => {
           <button
             type="button"
             onClick={() => setActiveSheet('music-library')}
-            className={`${themedFloatingPillClass} max-w-[200px] overflow-hidden flex items-center gap-2 pr-1`}
+            className={`${themedFloatingPillClass} max-w-[200px] overflow-hidden flex items-center gap-2 ${selectedSound?.title && !['Original sound', 'Original audio', 'Original Audio'].includes(selectedSound.title) ? 'pr-1' : ''}`}
           >
             <BiMusic size={15} className={selectedSound?.title && !['Original sound', 'Original audio', 'Original Audio'].includes(selectedSound.title) ? 'animate-pulse text-[#fe2c55]' : ''} />
             <span className="truncate">
@@ -3330,25 +3665,13 @@ const CreatePage = () => {
                   setSelectedSounds([]);
                   showToast('Sound removed');
                 }}
-                className="ml-1 p-1 hover:bg-white/10 rounded-full transition-colors"
+                className="ml-1 p-1 hover:bg-white/10 rounded-full transition-colors cursor-pointer"
               >
                 <BiX size={16} className="text-white/60" />
               </div>
             )}
           </button>
-          {selectedSound?.title && !['Original sound', 'Original audio', 'Original Audio'].includes(selectedSound.title) && (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                setIsMusicMuted(!isMusicMuted);
-                showToast(isMusicMuted ? 'Background music unmuted' : 'Background music muted');
-              }}
-              className="ml-2 h-9 w-9 flex items-center justify-center rounded-full bg-black/40 text-white backdrop-blur-md hover:bg-black/60 transition-colors shadow-lg border border-white/5 active:scale-90"
-            >
-              {isMusicMuted ? <BiVolumeMute size={18} className="text-[#fe2c55]" /> : <IoVolumeHighOutline size={18} />}
-            </button>
-          )}
+
         </div>
         <span className="h-9 w-9 shrink-0" aria-hidden="true" />
       </div>
@@ -3368,7 +3691,7 @@ const CreatePage = () => {
           className="group flex flex-col items-center gap-1.5 active:scale-95 transition-transform"
         >
           <span className={getThemedCameraToolButtonClass(activeCameraTool === tool.id)}>
-            {getToolIcon(tool.id, 20, false, selectedSpeed)}
+            {getToolIcon(tool.id, 20, false, selectedSpeed, selectedZoom)}
           </span>
           <span className="text-[10px] font-bold tracking-wide uppercase text-white shadow-black drop-shadow-md">
             {tool.label}
@@ -3436,6 +3759,24 @@ const CreatePage = () => {
               className={getDurationButtonClass(selectedSpeed === speedOption)}
             >
               {speedOption}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {activeCameraTool === 'zoom' && (
+        <div className="mb-5 flex items-center justify-center gap-4 text-[13px] font-medium text-white/80">
+          {ZOOM_OPTIONS.map((zoomOption) => (
+            <button
+              key={zoomOption}
+              type="button"
+              onClick={() => {
+                setSelectedZoom(zoomOption);
+                setActiveCameraTool(null);
+              }}
+              className={getDurationButtonClass(selectedZoom === zoomOption)}
+            >
+              {zoomOption}
             </button>
           ))}
         </div>
@@ -3585,6 +3926,17 @@ const CreatePage = () => {
     }
     const progressPercent = (recordedSeconds / maxDurationSeconds) * 100;
 
+    const supportsHardwareZoom = (() => {
+      if (!instacamRef.current || !instacamRef.current.v) return false;
+      const videoTrack = instacamRef.current.v.getVideoTracks()[0];
+      if (!videoTrack || !videoTrack.getCapabilities) return false;
+      try {
+        return !!videoTrack.getCapabilities().zoom;
+      } catch (e) {
+        return false;
+      }
+    })();
+
     return (
       <div className={`relative h-full w-full overflow-hidden ${isDarkMode ? 'bg-black text-white' : 'bg-[var(--theme-page-bg)] text-white'}`}>
         <style>
@@ -3634,6 +3986,7 @@ const CreatePage = () => {
               <div className="w-1/2 h-full bg-black relative">
                 <canvas
                   ref={canvasRef}
+                  onDoubleClick={handleCanvasDoubleClick}
                   className="w-full h-full object-cover transition-all duration-300"
                 />
                 {recordStatus === 'recorded' && previewUrl && (
@@ -3644,6 +3997,10 @@ const CreatePage = () => {
                     loop
                     autoPlay
                     muted={isVideoMuted}
+                    style={{
+                      transform: supportsHardwareZoom ? 'none' : `scale(${parseFloat(selectedZoom) || 1.0})`,
+                      transformOrigin: 'center'
+                    }}
                   />
                 )}
               </div>
@@ -3652,6 +4009,7 @@ const CreatePage = () => {
             <>
               <canvas
                 ref={canvasRef}
+                onDoubleClick={handleCanvasDoubleClick}
                 className="h-full w-full object-cover transition-all duration-300"
               />
               {recordStatus === 'recorded' && previewUrl && (
@@ -3664,6 +4022,10 @@ const CreatePage = () => {
                   muted={isVideoMuted}
                   ref={(el) => {
                     if (el) el.playbackRate = parseFloat(selectedSpeed) || 1;
+                  }}
+                  style={{
+                    transform: supportsHardwareZoom ? 'none' : `scale(${parseFloat(selectedZoom) || 1.0})`,
+                    transformOrigin: 'center'
                   }}
                 />
               )}
@@ -3793,6 +4155,15 @@ const CreatePage = () => {
         timeSpan.innerText = formatted;
       }
     }
+
+    // Update text overlays visibility when scrubbing while paused
+    textListRef.current.forEach(item => {
+      const textOverlay = document.getElementById(`editor-text-overlay-${item.id}`);
+      if (textOverlay) {
+        const shouldShow = newGlobalTime >= item.startTime && newGlobalTime <= item.endTime;
+        textOverlay.style.display = shouldShow ? '' : 'none';
+      }
+    });
   };
 
   useEffect(() => {
@@ -3817,6 +4188,15 @@ const CreatePage = () => {
             timeSpan.innerText = formatted;
           }
         }
+
+        // Show/hide text overlays based on globalTime vs text timing
+        textListRef.current.forEach(item => {
+          const textOverlay = document.getElementById(`editor-text-overlay-${item.id}`);
+          if (textOverlay) {
+            const shouldShow = globalTime >= item.startTime && globalTime <= item.endTime;
+            textOverlay.style.display = shouldShow ? '' : 'none';
+          }
+        });
       }
       rafId = requestAnimationFrame(updateScroll);
     };
@@ -3951,84 +4331,110 @@ const CreatePage = () => {
               </div>
             )}
 
-            {/* Text Overlay Display */}
-            {overlayText && (
-              (() => {
-                const pastDuration = clipSequence.slice(0, currentClipIndex).reduce((a, c) => a + c.duration, 0);
-                const globalTime = pastDuration + (editorVideoRef.current?.currentTime || 0);
-                if (globalTime < textStartTime || globalTime > textEndTime) return null;
+            {/* Multiple Text Overlays Display - visibility controlled by RAF loop during playback */}
+            {textList.map((overlay) => {
+              const pastDuration = clipSequence.slice(0, currentClipIndex).reduce((a, c) => a + c.duration, 0);
+              const currentTime = editorVideoRef.current?.currentTime || 0;
+              const globalTime = pastDuration + currentTime;
+              const initiallyVisible = globalTime >= overlay.startTime && globalTime <= overlay.endTime;
+              const isSelected = selectedTextId === overlay.id;
 
-                return (
-                  <div className="absolute inset-0 z-30 overflow-hidden pointer-events-none">
-                    <div
-                      className={`absolute pointer-events-auto cursor-move select-none touch-none transition-all ${isTextSelected ? 'ring-2 ring-white/30 rounded-lg p-2' : ''
-                        }`}
+              return (
+                <div
+                  key={overlay.id}
+                  id={`editor-text-overlay-${overlay.id}`}
+                  className="absolute inset-0 z-30 overflow-hidden pointer-events-none"
+                  style={{ display: initiallyVisible ? '' : 'none' }}
+                >
+                  <div
+                    className={`absolute pointer-events-auto cursor-move select-none touch-none transition-all ${
+                      isSelected && isTextSelected ? 'ring-2 ring-white/30 rounded-lg p-2' : ''
+                    }`}
+                    style={{
+                      left: `calc(50% + ${overlay.x}px)`,
+                      top: `calc(50% + ${overlay.y}px)`,
+                      transform: `translate(-50%, -50%) rotate(${overlay.rotation || 0}deg)`,
+                      padding: '10px'
+                    }}
+                    onPointerDown={(e) => {
+                      e.stopPropagation();
+                      const target = e.currentTarget;
+                      target.setPointerCapture(e.pointerId);
+                      const startX = e.clientX;
+                      const startY = e.clientY;
+                      const initialX = overlay.x;
+                      const initialY = overlay.y;
+                      let hasMoved = false;
+
+                      // Synchronize composer states with this selected text item
+                      setSelectedTextId(overlay.id);
+                      setOverlayText(overlay.text);
+                      setTextStartTime(overlay.startTime);
+                      setTextEndTime(overlay.endTime);
+                      textStartTimeRef.current = overlay.startTime;
+                      textEndTimeRef.current = overlay.endTime;
+                      setTextPos({ x: overlay.x, y: overlay.y });
+                      setTextRotation(overlay.rotation || 0);
+                      setOverlayColor(overlay.color || '#ffffff');
+                      setOverlayFont(overlay.font || 'Standard');
+                      setOverlayFontSize(overlay.fontSize || 28);
+
+                      setIsTextSelected(true);
+                      setSelectedStickerId(null);
+
+                      const moveHandler = (moveEvent) => {
+                        const dx = moveEvent.clientX - startX;
+                        const dy = moveEvent.clientY - startY;
+                        if (Math.abs(dx) > 3 || Math.abs(dy) > 3) hasMoved = true;
+                        setTextPos({ x: initialX + dx, y: initialY + dy });
+                      };
+
+                      const upHandler = () => {
+                        if (!hasMoved) {
+                          setIsEditingText(true);
+                        }
+                        target.removeEventListener('pointermove', moveHandler);
+                        target.removeEventListener('pointerup', upHandler);
+                      };
+
+                      target.addEventListener('pointermove', moveHandler);
+                      target.addEventListener('pointerup', upHandler);
+                    }}
+                  >
+                    <span
                       style={{
-                        left: `calc(50% + ${textPos.x}px)`,
-                        top: `calc(50% + ${textPos.y}px)`,
-                        transform: `translate(-50%, -50%) rotate(${textRotation}deg)`,
-                        padding: '10px'
-                      }}
-                      onPointerDown={(e) => {
-                        const target = e.currentTarget;
-                        target.setPointerCapture(e.pointerId);
-                        const startX = e.clientX;
-                        const startY = e.clientY;
-                        const initialX = textPos.x;
-                        const initialY = textPos.y;
-                        let hasMoved = false;
-
-                        setIsTextSelected(true);
-                        setSelectedStickerId(null);
-
-                        const moveHandler = (moveEvent) => {
-                          const dx = moveEvent.clientX - startX;
-                          const dy = moveEvent.clientY - startY;
-                          if (Math.abs(dx) > 3 || Math.abs(dy) > 3) hasMoved = true;
-                          setTextPos({ x: initialX + dx, y: initialY + dy });
-                        };
-                        const upHandler = () => {
-                          if (!hasMoved) setIsEditingText(true);
-                          target.removeEventListener('pointermove', moveHandler);
-                          target.removeEventListener('pointerup', upHandler);
-                        };
-                        target.addEventListener('pointermove', moveHandler);
-                        target.addEventListener('pointerup', upHandler);
+                        fontSize: `${overlay.fontSize || 28}px`,
+                        fontFamily: FONT_OPTIONS.find(f => f.name === (overlay.font || 'Standard'))?.family || 'serif',
+                        color: overlay.color || '#ffffff',
+                        whiteSpace: 'pre-wrap',
+                        textAlign: 'center',
+                        textShadow: '0 2px 4px rgba(0,0,0,0.5)',
+                        display: 'block'
                       }}
                     >
-                      <span
-                        style={{
-                          fontSize: `${overlayFontSize}px`,
-                          fontFamily: FONT_OPTIONS.find(f => f.name === overlayFont)?.family || 'serif',
-                          color: overlayColor,
-                          whiteSpace: 'pre-wrap',
-                          textAlign: 'center',
-                          textShadow: '0 2px 4px rgba(0,0,0,0.5)',
-                          display: 'block'
-                        }}
-                      >
-                        {overlayText}
-                      </span>
+                      {overlay.text}
+                    </span>
 
-                      {/* Delete Icon for Text */}
-                      {isTextSelected && (
-                        <button
-                          onPointerDown={(e) => {
-                            e.stopPropagation();
-                            setOverlayText('');
-                            setIsTextSelected(false);
-                            showToast('Text deleted');
-                          }}
-                          className="absolute -top-3 -right-3 w-6 h-6 rounded-full bg-red-500 text-white flex items-center justify-center shadow-lg active:scale-90 transition-transform z-40 border-2 border-white pointer-events-auto"
-                        >
-                          <BiX size={16} />
-                        </button>
-                      )}
-                    </div>
+                    {/* Delete Icon for Text */}
+                    {isSelected && isTextSelected && (
+                      <button
+                        onPointerDown={(e) => {
+                          e.stopPropagation();
+                          setTextList(prev => prev.filter(t => t.id !== overlay.id));
+                          setSelectedTextId(null);
+                          setOverlayText('');
+                          setIsTextSelected(false);
+                          showToast('Text deleted');
+                        }}
+                        className="absolute -top-3 -right-3 w-6 h-6 rounded-full bg-red-500 text-white flex items-center justify-center shadow-lg active:scale-90 transition-transform z-40 border-2 border-white pointer-events-auto"
+                      >
+                        <BiX size={16} />
+                      </button>
+                    )}
                   </div>
-                );
-              })()
-            )}
+                </div>
+              );
+            })}
 
             {/* Stickers Overlay Display */}
             {activeStickers.map((sticker) => (
@@ -4230,7 +4636,7 @@ const CreatePage = () => {
           <div
             id="editor-timeline"
             onScroll={handleTimelineScroll}
-            onClick={() => setFocusedTrack(null)}
+            onClick={() => { setFocusedTrack(null); setIsTextTrackSelected(false); }}
             className="relative overflow-x-auto no-scrollbar pb-10"
           >
             {/* Centered Playhead Line */}
@@ -4303,6 +4709,7 @@ const CreatePage = () => {
                               e.stopPropagation();
                               setFocusedTrack('video');
                               setCurrentClipIndex(idx);
+                              setIsTextTrackSelected(false);
                             }}
                             className={`h-full flex shrink-0 relative transition-all ${focusedTrack === 'video' && currentClipIndex === idx
                                 ? 'border-y-4 border-[#ffcc00] z-10 bg-white/5 shadow-lg'
@@ -4687,98 +5094,236 @@ const CreatePage = () => {
             </div>
 
             {/* Text Track Row */}
-            <div className="flex h-12 mt-2">
+            <div className="flex h-12 mt-2" onClick={(e) => {
+              // Clicking outside text clip deselects
+              if (e.target === e.currentTarget) {
+                setIsTextTrackSelected(false);
+                setSelectedTextId(null);
+              }
+            }}>
               <div className="sticky left-0 w-[60px] h-full bg-[#121214] border-r border-white/5 flex items-center justify-center z-30 shrink-0">
                 {/* Text Icon */}
-                <IoTextOutline size={18} className="text-white/20" />
+                <IoTextOutline size={18} className={isTextTrackSelected ? 'text-white' : 'text-white/20'} />
               </div>
               <div className="flex ml-[calc(50%-30px)] items-center relative h-full">
-                {overlayText ? (
-                  <div
-                    className="absolute h-10 rounded-[4px] bg-white/20 border border-white/30 flex items-center px-3 group shadow-lg cursor-pointer"
-                    style={{
-                      left: textStartTime * PIXELS_PER_SECOND,
-                      width: (textEndTime - textStartTime) * PIXELS_PER_SECOND
-                    }}
-                    onPointerDown={(e) => {
-                      const target = e.currentTarget;
-                      target.setPointerCapture(e.pointerId);
-                      const startX = e.clientX;
-                      const initialStart = textStartTime;
-                      const initialEnd = textEndTime;
+                {textList.map((item) => {
+                  const isSelected = selectedTextId === item.id;
+                  return (
+                    <div key={item.id} className="relative">
+                      {/* Clip Bar */}
+                      <div
+                        className={`absolute h-10 rounded-[4px] flex items-center px-3 shadow-lg cursor-pointer transition-all ${
+                          isSelected && isTextTrackSelected
+                            ? 'border-y-4 border-[#ffcc00] z-10 bg-white/5 shadow-lg animate-pulse-subtle'
+                            : 'bg-white/20 border border-white/30'
+                        }`}
+                        style={{
+                          left: item.startTime * PIXELS_PER_SECOND,
+                          width: (item.endTime - item.startTime) * PIXELS_PER_SECOND,
+                          top: '-20px'
+                        }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          // Ignore click if it was a drag gesture
+                          if (e.currentTarget.dataset.dragged === 'true') {
+                            e.currentTarget.removeAttribute('data-dragged');
+                            return;
+                          }
 
-                      const moveHandler = (mE) => {
-                        const delta = (mE.clientX - startX) / PIXELS_PER_SECOND;
-                        setTextStartTime(Math.max(0, initialStart + delta));
-                        setTextEndTime(Math.min(videoDuration, initialEnd + delta));
-                      };
+                          // Select this item and sync states
+                          setSelectedTextId(item.id);
+                          setOverlayText(item.text);
+                          setTextStartTime(item.startTime);
+                          setTextEndTime(item.endTime);
+                          textStartTimeRef.current = item.startTime;
+                          textEndTimeRef.current = item.endTime;
+                          setTextPos({ x: item.x, y: item.y });
+                          setTextRotation(item.rotation || 0);
+                          setOverlayColor(item.color || '#ffffff');
+                          setOverlayFont(item.font || 'Standard');
+                          setOverlayFontSize(item.fontSize || 28);
 
-                      const upHandler = () => {
-                        target.removeEventListener('pointermove', moveHandler);
-                        target.removeEventListener('pointerup', upHandler);
-                      };
+                          setIsTextTrackSelected(prev => {
+                            const next = !prev || selectedTextId !== item.id;
+                            if (next) {
+                              setFocusedTrack('text');
+                            } else {
+                              setFocusedTrack(null);
+                            }
+                            return next;
+                          });
+                        }}
+                        onPointerDown={(e) => {
+                          const target = e.currentTarget;
+                          target.setPointerCapture(e.pointerId);
+                          const startX = e.clientX;
+                          const initialStart = item.startTime;
+                          const initialEnd = item.endTime;
+                          const width = initialEnd - initialStart;
+                          let hasMoved = false;
 
-                      target.addEventListener('pointermove', moveHandler);
-                      target.addEventListener('pointerup', upHandler);
-                    }}
-                  >
-                    <span className="text-[10px] font-bold text-white truncate pointer-events-none">
-                      {overlayText}
-                    </span>
+                          const moveHandler = (mE) => {
+                            const dx = Math.abs(mE.clientX - startX);
+                            if (dx > 4) {
+                              hasMoved = true;
+                              target.dataset.dragged = 'true';
+                            }
+                            if (!hasMoved) return;
+                            const delta = (mE.clientX - startX) / PIXELS_PER_SECOND;
+                            const newStart = Math.max(0, Math.min(videoDuration - width, initialStart + delta));
+                            const newEnd = newStart + width;
+                            
+                            // Update this item directly in state
+                            setTextList(prev => prev.map(t => {
+                              if (t.id === item.id) {
+                                return { ...t, startTime: newStart, endTime: newEnd };
+                              }
+                              return t;
+                            }));
 
-                    {/* Start Handle */}
-                    <div
-                      className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/40"
-                      onPointerDown={(e) => {
-                        e.stopPropagation();
-                        const target = e.currentTarget;
-                        target.setPointerCapture(e.pointerId);
-                        const startX = e.clientX;
-                        const initialStart = textStartTime;
-                        const moveHandler = (mE) => {
-                          const delta = (mE.clientX - startX) / PIXELS_PER_SECOND;
-                          setTextStartTime(Math.max(0, Math.min(textEndTime - 0.5, initialStart + delta)));
-                        };
-                        const upHandler = () => {
-                          target.removeEventListener('pointermove', moveHandler);
-                          target.removeEventListener('pointerup', upHandler);
-                        };
-                        target.addEventListener('pointermove', moveHandler);
-                        target.addEventListener('pointerup', upHandler);
-                      }}
-                    />
+                            if (isSelected) {
+                              textStartTimeRef.current = newStart;
+                              textEndTimeRef.current = newEnd;
+                              setTextStartTime(newStart);
+                              setTextEndTime(newEnd);
+                            }
+                          };
 
-                    {/* End Handle */}
-                    <div
-                      className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/40"
-                      onPointerDown={(e) => {
-                        e.stopPropagation();
-                        const target = e.currentTarget;
-                        target.setPointerCapture(e.pointerId);
-                        const startX = e.clientX;
-                        const initialEnd = textEndTime;
-                        const moveHandler = (mE) => {
-                          const delta = (mE.clientX - startX) / PIXELS_PER_SECOND;
-                          setTextEndTime(Math.min(videoDuration, Math.max(textStartTime + 0.5, initialEnd + delta)));
-                        };
-                        const upHandler = () => {
-                          target.removeEventListener('pointermove', moveHandler);
-                          target.removeEventListener('pointerup', upHandler);
-                        };
-                        target.addEventListener('pointermove', moveHandler);
-                        target.addEventListener('pointerup', upHandler);
-                      }}
-                    />
-                  </div>
-                ) : (
-                  <button
-                    onClick={() => setIsEditingText(true)}
-                    className="h-10 flex items-center gap-2 text-white/40 px-3 bg-white/5 rounded-[4px] hover:text-white hover:bg-white/10 transition-all border border-transparent hover:border-white/10"
-                  >
-                    <BiPlus size={18} />
-                    <span className="text-[11px] font-medium">Add text</span>
-                  </button>
-                )}
+                          const upHandler = () => {
+                            try {
+                              if (target.hasPointerCapture(e.pointerId)) {
+                                target.releasePointerCapture(e.pointerId);
+                              }
+                            } catch (err) {}
+                            window.removeEventListener('pointermove', moveHandler);
+                            window.removeEventListener('pointerup', upHandler);
+                          };
+
+                          window.addEventListener('pointermove', moveHandler);
+                          window.addEventListener('pointerup', upHandler);
+                        }}
+                      >
+                        <span className={`text-[10px] font-bold text-white truncate pointer-events-none flex-1 transition-all ${isSelected && isTextTrackSelected ? 'pl-4' : ''}`}>
+                          {item.text}
+                        </span>
+                        <span className={`text-[9px] text-white/50 pointer-events-none ml-1 shrink-0 transition-all ${isSelected && isTextTrackSelected ? 'pr-4' : ''}`}>
+                          {(item.endTime - item.startTime).toFixed(1)}s
+                        </span>
+
+                        {/* Start Handle */}
+                        <div
+                          className={`absolute z-50 cursor-col-resize flex items-center justify-center transition-all duration-150 ${isSelected && isTextTrackSelected
+                              ? '-top-[4px] -bottom-[4px] -left-[4px] w-[18px] bg-[#ffcc00] rounded-l-[8px] opacity-100 pointer-events-auto'
+                              : 'top-0 bottom-0 left-0 w-[18px] bg-transparent opacity-0 hover:opacity-20 hover:bg-[#ffcc00] rounded-l-[8px] pointer-events-auto'
+                            }`}
+                          onPointerDown={(e) => {
+                            e.stopPropagation();
+                            const target = e.currentTarget;
+                            target.setPointerCapture(e.pointerId);
+                            const startX = e.clientX;
+                            const initialStart = item.startTime;
+                            const moveHandler = (mE) => {
+                              const delta = (mE.clientX - startX) / PIXELS_PER_SECOND;
+                              const newStart = Math.max(0, Math.min(item.endTime - 0.5, initialStart + delta));
+                              
+                              setTextList(prev => prev.map(t => {
+                                if (t.id === item.id) {
+                                  return { ...t, startTime: newStart };
+                                }
+                                return t;
+                              }));
+
+                              if (isSelected) {
+                                textStartTimeRef.current = newStart;
+                                setTextStartTime(newStart);
+                              }
+                            };
+                            const upHandler = () => {
+                              target.removeEventListener('pointermove', moveHandler);
+                              target.removeEventListener('pointerup', upHandler);
+                            };
+                            target.addEventListener('pointermove', moveHandler);
+                            target.addEventListener('pointerup', upHandler);
+                          }}
+                        >
+                          {isSelected && isTextTrackSelected && (
+                            <svg className="w-3 h-3 text-white font-black" fill="none" stroke="currentColor" strokeWidth="4.5" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+                            </svg>
+                          )}
+                        </div>
+
+                        {/* End Handle */}
+                        <div
+                          className={`absolute z-50 cursor-col-resize flex items-center justify-center transition-all duration-150 ${isSelected && isTextTrackSelected
+                              ? '-top-[4px] -bottom-[4px] -right-[4px] w-[18px] bg-[#ffcc00] rounded-r-[8px] opacity-100 pointer-events-auto'
+                              : 'top-0 bottom-0 right-0 w-[18px] bg-transparent opacity-0 hover:opacity-20 hover:bg-[#ffcc00] rounded-r-[8px] pointer-events-auto'
+                            }`}
+                          onPointerDown={(e) => {
+                            e.stopPropagation();
+                            const target = e.currentTarget;
+                            target.setPointerCapture(e.pointerId);
+                            const startX = e.clientX;
+                            const initialEnd = item.endTime;
+                            const moveHandler = (mE) => {
+                              const delta = (mE.clientX - startX) / PIXELS_PER_SECOND;
+                              const newEnd = Math.min(videoDuration, Math.max(item.startTime + 0.5, initialEnd + delta));
+                              
+                              setTextList(prev => prev.map(t => {
+                                if (t.id === item.id) {
+                                  return { ...t, endTime: newEnd };
+                                }
+                                return t;
+                              }));
+
+                              if (isSelected) {
+                                textEndTimeRef.current = newEnd;
+                                setTextEndTime(newEnd);
+                              }
+                            };
+                            const upHandler = () => {
+                              target.removeEventListener('pointermove', moveHandler);
+                              target.removeEventListener('pointerup', upHandler);
+                            };
+                            target.addEventListener('pointermove', moveHandler);
+                            target.addEventListener('pointerup', upHandler);
+                          }}
+                        >
+                          {isSelected && isTextTrackSelected && (
+                            <svg className="w-3 h-3 text-white font-black" fill="none" stroke="currentColor" strokeWidth="4.5" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+                            </svg>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {/* Add text button - always positioned after the last text clip */}
+                <button
+                  onClick={() => {
+                    const maxEndTime = textList.reduce((max, t) => Math.max(max, t.endTime), 0);
+                    const start = Math.min(videoDuration, maxEndTime);
+                    const end = Math.min(videoDuration, start + 5);
+                    setOverlayText('');
+                    setTextStartTime(start);
+                    setTextEndTime(end);
+                    textStartTimeRef.current = start;
+                    textEndTimeRef.current = end;
+                    setSelectedTextId(null);
+                    setIsTextTrackSelected(false);
+                    setIsEditingText(true);
+                  }}
+                  className="absolute h-10 flex items-center gap-2 text-white/40 px-3 bg-white/5 rounded-[4px] hover:text-white hover:bg-white/10 transition-all border border-transparent hover:border-white/10 shrink-0 pointer-events-auto whitespace-nowrap"
+                  style={{
+                    left: (textList.reduce((max, t) => Math.max(max, t.endTime), 0) * PIXELS_PER_SECOND) + 12,
+                    top: '4px'
+                  }}
+                >
+                  <BiPlus size={18} />
+                  <span className="text-[11px] font-medium">Add text</span>
+                </button>
               </div>
             </div>
           </div>
@@ -4786,7 +5331,60 @@ const CreatePage = () => {
 
         {/* Bottom Toolbar */}
         <div className="bg-black border-t border-white/5 pt-4 pb-[max(1.2rem,env(safe-area-inset-bottom))]">
-          {focusedTrack === 'video' ? (
+          {isTextTrackSelected ? (
+            <div className="flex justify-around items-center w-full px-6 py-2">
+              {[
+                { id: 'edit', label: 'Edit', icon: <IoTextOutline size={24} /> },
+                { id: 'delete', label: 'Delete', icon: <BiTrash size={24} className="text-red-500" /> },
+                { id: 'done', label: 'Done', icon: <BiCheck size={26} className="text-green-500" /> },
+              ].map((tool) => (
+                <button
+                  key={tool.id}
+                  type="button"
+                  onClick={() => {
+                    if (tool.id === 'edit') {
+                      const item = textList.find(t => t.id === selectedTextId);
+                      if (item) {
+                        setOverlayText(item.text);
+                        setTextStartTime(item.startTime);
+                        setTextEndTime(item.endTime);
+                        textStartTimeRef.current = item.startTime;
+                        textEndTimeRef.current = item.endTime;
+                        setTextPos({ x: item.x, y: item.y });
+                        setTextRotation(item.rotation || 0);
+                        setOverlayColor(item.color || '#ffffff');
+                        setOverlayFont(item.font || 'Standard');
+                        setOverlayFontSize(item.fontSize || 28);
+                        setIsEditingText(true);
+                      }
+                      setIsTextTrackSelected(false);
+                      setFocusedTrack(null);
+                    } else if (tool.id === 'delete') {
+                      setTextList(prev => prev.filter(t => t.id !== selectedTextId));
+                      setSelectedTextId(null);
+                      setOverlayText('');
+                      setIsTextTrackSelected(false);
+                      setFocusedTrack(null);
+                      showToast('Text deleted');
+                    } else if (tool.id === 'done') {
+                      setIsTextTrackSelected(false);
+                      setFocusedTrack(null);
+                      setSelectedTextId(null);
+                    }
+                  }}
+                  className="flex flex-col items-center gap-2 active:opacity-70"
+                >
+                  <div className={`flex h-12 w-12 items-center justify-center rounded-[12px] ${tool.id === 'done' ? 'bg-green-500/10 border border-green-500/20' : (
+                      tool.id === 'delete' ? 'bg-red-500/10 border border-red-500/20' : 'bg-white/5 border border-white/5'
+                    )
+                    }`}>
+                    {tool.icon}
+                  </div>
+                  <span className="text-[11px] font-medium text-white/60">{tool.label}</span>
+                </button>
+              ))}
+            </div>
+          ) : focusedTrack === 'video' ? (
             <div className="flex flex-col gap-3">
               {/* Speed selection overlay */}
               {editorSubPanel === 'speed' && (
@@ -5162,6 +5760,39 @@ const CreatePage = () => {
         </div>
       )}
 
+      {/* Multiple Text Overlays Display in Preview */}
+      {textList.map((overlay) => (
+        <div
+          key={overlay.id}
+          id={`preview-text-overlay-${overlay.id}`}
+          className="absolute inset-0 z-30 overflow-hidden pointer-events-none"
+          style={{ display: 'none' }}
+        >
+          <div
+            className="absolute select-none pointer-events-none"
+            style={{
+              left: `calc(50% + ${overlay.x}px)`,
+              top: `calc(50% + ${overlay.y}px)`,
+              transform: `translate(-50%, -50%) rotate(${overlay.rotation || 0}deg)`,
+              padding: '10px'
+            }}
+          >
+            <p
+              className="whitespace-nowrap px-4 text-center font-black drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)]"
+              style={{
+                fontSize: `${overlay.fontSize || 28}px`,
+                color: overlay.color || '#ffffff',
+                fontFamily: FONT_OPTIONS.find(f => f.name === (overlay.font || 'Standard'))?.family || 'inherit',
+                whiteSpace: 'pre',
+                textShadow: overlay.font === 'Outline' ? `-1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000` : (overlay.font === 'Glowing' ? `0 0 20px ${overlay.color}` : 'none')
+              }}
+            >
+              {overlay.text}
+            </p>
+          </div>
+        </div>
+      ))}
+
       {/* Stickers Overlay */}
       {activeStickers.map((sticker, index) => (
         <div
@@ -5268,7 +5899,7 @@ const CreatePage = () => {
             <button
               type="button"
               onClick={() => setActiveSheet('music-library')}
-              className={`${themedFloatingPillClass} max-w-[200px] overflow-hidden flex items-center gap-2 pr-1 cursor-pointer pointer-events-auto active:opacity-90`}
+              className={`${themedFloatingPillClass} max-w-[200px] overflow-hidden flex items-center gap-2 ${selectedSound?.title && !['Original sound', 'Original audio', 'Original Audio'].includes(selectedSound.title) ? 'pr-1' : ''} cursor-pointer pointer-events-auto active:opacity-90`}
             >
               <BiMusic size={15} className={selectedSound?.title && !['Original sound', 'Original audio', 'Original Audio'].includes(selectedSound.title) ? 'animate-pulse text-[#fe2c55]' : ''} />
               <span className="truncate">
@@ -5287,19 +5918,7 @@ const CreatePage = () => {
                 </div>
               )}
             </button>
-            {selectedSound?.title && !['Original sound', 'Original audio', 'Original Audio'].includes(selectedSound.title) && (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setIsMusicMuted(!isMusicMuted);
-                  showToast(isMusicMuted ? 'Background music unmuted' : 'Background music muted');
-                }}
-                className="ml-2 h-9 w-9 flex items-center justify-center rounded-full bg-black/40 text-white backdrop-blur-md hover:bg-black/60 transition-colors shadow-lg border border-white/5 active:scale-90 cursor-pointer"
-              >
-                {isMusicMuted ? <BiVolumeMute size={18} className="text-[#fe2c55]" /> : <IoVolumeHighOutline size={18} />}
-              </button>
-            )}
+
           </div>
 
           <div className="w-10" />
@@ -5381,7 +6000,7 @@ const CreatePage = () => {
                   caption: event.target.value,
                 }))
               }
-              placeholder="Describe your post, add hashtags, or mention creators that inspired you"
+              placeholder="Describe your post"
               className="min-h-[110px] flex-1 resize-none border-none bg-transparent text-[15px] outline-none placeholder:text-black/35"
             />
             <button
@@ -5626,14 +6245,25 @@ const CreatePage = () => {
                   onClick={() => u.username && handleSelectMention(u.username)}
                   className="flex w-full items-center gap-3 px-4 py-3 active:bg-black/[0.03]"
                 >
-                  <div className="h-11 w-11 shrink-0 overflow-hidden rounded-full bg-black/5">
-                    {u.profilePicture ? (
-                      <img src={u.profilePicture} alt={u.username} className="h-full w-full object-cover" />
-                    ) : (
-                      <div className="flex h-full w-full items-center justify-center bg-[#fe2c55]/10 text-[14px] font-bold text-[#fe2c55]">
-                        {u.username?.[0]?.toUpperCase() || '?'}
-                      </div>
-                    )}
+                  <div className="h-11 w-11 shrink-0 overflow-hidden rounded-full bg-black/5 relative">
+                    {u.profilePicture?.url ? (
+                      <img
+                        src={u.profilePicture.url}
+                        alt={u.username}
+                        className="h-full w-full object-cover"
+                        onError={(e) => {
+                          e.target.style.display = 'none';
+                          const fallback = e.target.nextSibling;
+                          if (fallback) fallback.style.display = 'flex';
+                        }}
+                      />
+                    ) : null}
+                    <div
+                      className="flex h-full w-full items-center justify-center bg-[#fe2c55]/10 text-[14px] font-bold text-[#fe2c55]"
+                      style={{ display: u.profilePicture?.url ? 'none' : 'flex' }}
+                    >
+                      {u.username?.[0]?.toUpperCase() || '?'}
+                    </div>
                   </div>
                   <div className="flex flex-1 flex-col items-start overflow-hidden text-left">
                     <span className="truncate text-[15px] font-semibold">{u.username}</span>
@@ -5900,7 +6530,11 @@ const CreatePage = () => {
 
   const ITEM_H = 52; // px per row in scroll picker
   const MIN_SEC = 1;
-  const MAX_SEC = 60;
+  const MAX_SEC = editorSoundMaxSec > 1 ? editorSoundMaxSec : 60;
+
+  // Ref to track clipDuration without stale closure in scroll handler
+  const clipDurationRef = useRef(clipDuration);
+  useEffect(() => { clipDurationRef.current = clipDuration; }, [clipDuration]);
 
   // Sync scroll position whenever clipDuration changes from outside
   const syncPickerScroll = (dur) => {
@@ -5913,7 +6547,7 @@ const CreatePage = () => {
     if (!secondsPickerRef.current) return;
     const idx = Math.round(secondsPickerRef.current.scrollTop / ITEM_H);
     const newVal = Math.min(MAX_SEC, Math.max(MIN_SEC, idx + MIN_SEC));
-    if (newVal !== clipDuration) setClipDuration(newVal);
+    if (newVal !== clipDurationRef.current) setClipDuration(newVal);
   };
 
   const renderDurationSheet = () => (
@@ -5937,8 +6571,12 @@ const CreatePage = () => {
 
           <div
             ref={(el) => {
-              secondsPickerRef.current = el;
-              if (el) setTimeout(() => { el.scrollTop = (clipDuration - MIN_SEC) * ITEM_H; }, 0);
+              if (el && !secondsPickerRef.current) {
+                secondsPickerRef.current = el;
+                setTimeout(() => { el.scrollTop = (clipDuration - MIN_SEC) * ITEM_H; }, 50);
+              } else if (!el) {
+                secondsPickerRef.current = null;
+              }
             }}
             onScroll={handlePickerScroll}
             className="h-full overflow-y-scroll no-scrollbar"
@@ -5983,6 +6621,9 @@ const CreatePage = () => {
   const renderSoundEditorStage = () => {
     if (!editorSound) return null;
 
+    // Auto-play when sound editor opens (so user hears the clip immediately)
+    // This is handled declaratively via togglePreviewAudio called from useEffect below
+
     // Blurred bg art url
     const artUrl = editorSound.thumbnail || editorSound.cover;
 
@@ -5995,10 +6636,10 @@ const CreatePage = () => {
             <img
               src={artUrl}
               alt=""
-              className="absolute inset-0 w-full h-full object-cover opacity-20 scale-110"
+              className="absolute inset-0 w-full h-full object-cover opacity-20 scale-110 pointer-events-none"
               style={{ filter: 'blur(40px) saturate(1.5)' }}
             />
-            <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/30 to-black/80" />
+            <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/30 to-black/80 pointer-events-none" />
           </>
         )}
 
@@ -6011,8 +6652,11 @@ const CreatePage = () => {
           <div className="flex items-center gap-3">
             <button
               type="button"
-              onClick={() => popStage()}
-              className="flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-white active:opacity-70"
+              onClick={() => {
+                console.log('Trimmer back clicked');
+                popStage();
+              }}
+              className="flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-white active:opacity-70 cursor-pointer"
             >
               <BiChevronLeft size={24} />
             </button>
@@ -6035,31 +6679,36 @@ const CreatePage = () => {
           <button
             type="button"
             onClick={() => {
-              // Stop preview audio
-              if (audioPreviewRef.current) {
-                audioPreviewRef.current.pause();
+              console.log('Trimmer Done clicked. editorSound:', editorSound, 'clipStart:', clipStart, 'clipDuration:', clipDuration, 'editingSoundIndex:', editingSoundIndex);
+              try {
+                // Stop preview audio
+                if (audioPreviewRef.current) {
+                  audioPreviewRef.current.pause();
+                }
+                setPlayingAudioId(null);
+
+                const updatedSound = {
+                  ...editorSound,
+                  clipStart: clipStart,
+                  clipDuration: clipDuration
+                };
+
+                if (editingSoundIndex >= 0) {
+                  setSelectedSounds(prev => prev.map((s, idx) => idx === editingSoundIndex ? updatedSound : s));
+                } else if (editingSoundIndex === -1) {
+                  setSelectedSounds(prev => [...prev, updatedSound]);
+                } else {
+                  setSelectedSounds([updatedSound]);
+                }
+
+                setEditingSoundIndex(-1); // Reset
+                popStage();
+                showToast('Sound applied');
+              } catch (e) {
+                console.error('Error inside trimmer Done handler:', e);
               }
-              setPlayingAudioId(null);
-
-              const updatedSound = {
-                ...editorSound,
-                clipStart: clipStart,
-                clipDuration: clipDuration
-              };
-
-              if (editingSoundIndex >= 0) {
-                setSelectedSounds(prev => prev.map((s, idx) => idx === editingSoundIndex ? updatedSound : s));
-              } else if (editingSoundIndex === -1) {
-                setSelectedSounds(prev => [...prev, updatedSound]);
-              } else {
-                setSelectedSounds([updatedSound]);
-              }
-
-              setEditingSoundIndex(-1); // Reset
-              popStage();
-              showToast('Sound applied');
             }}
-            className="shrink-0 px-5 py-2 rounded-full text-[14px] font-bold text-black active:scale-95 transition-transform shadow-lg"
+            className="shrink-0 px-5 py-2 rounded-full text-[14px] font-bold text-black active:scale-95 transition-transform shadow-lg cursor-pointer"
             style={{ background: 'linear-gradient(135deg, #ffcc00, #ff3366)' }}
           >
             Done
@@ -6373,26 +7022,29 @@ const CreatePage = () => {
                 <div
                   key={soundItem._id || soundItem.id}
                   onClick={() => {
-                    if (stage === 'editor' || stage === 'preview') {
-                      const actualDuration = parseDurationSeconds(soundItem.duration) || 15;
-                      const newSound = { ...soundItem, clipStart: 0, clipDuration: actualDuration };
+                    const actualDuration = parseDurationSeconds(soundItem.duration) || 15;
+                    const newSound = { ...soundItem, clipStart: 0, clipDuration: actualDuration };
 
-                      setEditorSound(newSound);
-                      setClipStart(0);
-                      setClipDuration(actualDuration);
-                      pushStage('sound-editor');
-                      setActiveSheet(null);
-                      showToast('Sound added to sequence');
-                    } else {
-                      const actualDuration = parseDurationSeconds(soundItem.duration) || 15;
-                      const newSound = { ...soundItem, clipStart: 0, clipDuration: actualDuration };
-                      setEditingSoundIndex(-2); // -2 signifies single camera select
-                      setEditorSound(newSound);
-                      setClipStart(0);
-                      setClipDuration(actualDuration);
-                      pushStage('sound-editor');
-                      setActiveSheet(null);
+                    // Stop library preview audio if it is playing
+                    if (audioPreviewRef.current) {
+                      audioPreviewRef.current.pause();
+                      audioPreviewRef.current = null;
                     }
+                    setPlayingAudioId(null);
+
+                    // Open sound editor trimmer so user can choose kahan se kahan tak play ho
+                    setEditorSound(newSound);
+                    setClipStart(0);
+                    setClipDuration(actualDuration);
+
+                    if (stage === 'editor' || stage === 'preview') {
+                      setEditingSoundIndex(editingSoundIndex >= 0 ? editingSoundIndex : -1);
+                    } else {
+                      setEditingSoundIndex(-2); // -2 = camera single select
+                    }
+
+                    pushStage('sound-editor');
+                    setActiveSheet(null);
                   }}
                   className="flex w-full cursor-pointer items-center gap-4"
                 >
@@ -6531,6 +7183,7 @@ const CreatePage = () => {
               localStorage.removeItem('create_overlayFontSize');
               localStorage.removeItem('create_textPos');
               localStorage.removeItem('create_textRotation');
+              localStorage.removeItem('create_textList');
 
               // Reset local state
               setVideoFile(null);
@@ -6546,6 +7199,7 @@ const CreatePage = () => {
               setVideoDuration(0);
               setVideoThumbnails([]);
               setClipSequence([]);
+              setTextList([]);
               setCurrentClipIndex(0);
               setLocationSearchResults([]);
               setIsSearchingLocation(false);
@@ -7289,14 +7943,14 @@ const CreatePage = () => {
           <div className="flex items-center justify-between px-5 pt-8">
             <button
               type="button"
-              onClick={() => setIsEditingText(false)}
+              onClick={handleTextCancel}
               className="text-[16px] font-medium text-white/80"
             >
               Cancel
             </button>
             <button
               type="button"
-              onClick={() => setIsEditingText(false)}
+              onClick={handleTextDone}
               className="rounded-[6px] bg-white px-4 py-1.5 text-[14px] font-bold text-black"
             >
               Done

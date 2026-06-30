@@ -147,12 +147,14 @@ const AdminLayout = () => {
 
       <div className="admin-main">
         <header className="admin-topbar">
-          <div className="admin-search">
-            <BiSearch size={18} />
-            <input placeholder="Search admin data, users, reels..." />
-          </div>
+          <div />
           <div className="admin-top-actions">
-            <button type="button" className="admin-icon-btn" aria-label="Notifications">
+            <button 
+              type="button" 
+              className="admin-icon-btn" 
+              aria-label="Notifications"
+              onClick={() => navigate('/admin/notifications')}
+            >
               <BiBell size={18} />
             </button>
             <button 

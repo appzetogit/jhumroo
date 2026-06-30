@@ -1,6 +1,7 @@
 import AdminNotification from '../../../models/AdminNotification.model.js';
 import User from '../../../models/User.model.js';
 import Notification from '../../../models/Notification.model.js';
+import AdminAlert from '../../../models/AdminAlert.model.js';
 import { uploadImage } from '../../../config/cloudinary.js';
 import { messaging } from '../../../config/firebase.js';
 import { asyncHandler } from '../../../middleware/errorHandler.js';
@@ -148,5 +149,61 @@ export const getNotifications = asyncHandler(async (req, res) => {
   res.status(200).json({
     success: true,
     notifications
+  });
+});
+
+/**
+ * @desc    Get all system/inbound alerts for the admin notifications inbox
+ * @route   GET /api/admin/notifications/alerts
+ * @access  Private (Admin)
+ */
+export const getAdminAlerts = asyncHandler(async (req, res) => {
+  const alerts = await AdminAlert.find().sort({ createdAt: -1 });
+  res.status(200).json({
+    success: true,
+    alerts
+  });
+});
+
+/**
+ * @desc    Mark all inbound alerts as read
+ * @route   PUT /api/admin/notifications/alerts/read-all
+ * @access  Private (Admin)
+ */
+export const markAlertsAsRead = asyncHandler(async (req, res) => {
+  await AdminAlert.updateMany({ isRead: false }, { isRead: true });
+  res.status(200).json({
+    success: true,
+    message: 'All alerts marked as read'
+  });
+});
+
+/**
+ * @desc    Mark a specific inbound alert as read
+ * @route   PUT /api/admin/notifications/alerts/:id/read
+ * @access  Private (Admin)
+ */
+export const markAlertAsRead = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const alert = await AdminAlert.findByIdAndUpdate(id, { isRead: true }, { new: true });
+  if (!alert) {
+    return res.status(404).json({ success: false, message: 'Alert not found' });
+  }
+  res.status(200).json({
+    success: true,
+    alert
+  });
+});
+
+/**
+ * @desc    Clear all inbound alerts from database
+ * @route   DELETE /api/admin/notifications/alerts/clear
+ * @access  Private (Admin)
+ */
+export const clearAdminAlerts = asyncHandler(async (req, res) => {
+  await AdminAlert.deleteMany({});
+  res.status(200).json({
+    success: true,
+    message: 'All alerts cleared successfully'
   });
 });

@@ -16,6 +16,7 @@ const ShareSheet = ({ isOpen, onClose, reelData, onShare, onReportClick, onNotIn
   const [selectedAction, setSelectedAction] = useState(null); // 'report' or 'not_interested' or null
 
   const { user: currentUser } = useAuth();
+  const isOwner = currentUser?._id && reelData?.user && (currentUser._id === (reelData.user._id || reelData.user));
   const [friends, setFriends] = useState([]);
   const [loadingFriends, setLoadingFriends] = useState(false);
   const [sentStatus, setSentStatus] = useState({});
@@ -273,55 +274,61 @@ const ShareSheet = ({ isOpen, onClose, reelData, onShare, onReportClick, onNotIn
                 </div>
             </div>
 
-            <div className={`flex gap-4 py-4 px-2 rounded-xl ${isDarkMode ? 'bg-white/5' : 'bg-black/5'}`}>
-                <div 
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (selectedAction === 'report') {
-                      setSelectedAction(null);
-                    } else {
-                      setSelectedAction('report');
-                      onReportClick?.();
-                    }
-                  }}
-                  className={`flex-1 flex flex-col items-center gap-2 tap-effect cursor-pointer group ${
-                    selectedAction === 'report' ? 'text-tiktok-red' : isDarkMode ? 'text-white' : 'text-black/80'
-                  }`}
-                >
-                   <BiFlag size={20} className={selectedAction === 'report' ? 'text-tiktok-red' : 'group-hover:text-tiktok-red transition-colors'} />
-                   <span className="text-[10px] font-bold">Report</span>
-                </div>
-                <div 
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (selectedAction === 'not_interested') {
-                      setSelectedAction(null);
-                    } else {
-                      setSelectedAction('not_interested');
-                      onNotInterestedClick?.();
-                    }
-                  }}
-                  className={`flex-1 flex flex-col items-center gap-2 tap-effect cursor-pointer group ${
-                    selectedAction === 'not_interested' ? 'text-tiktok-cyan' : isDarkMode ? 'text-white' : 'text-black/80'
-                  }`}
-                >
-                   <BiMessageSquareDetail size={20} className={selectedAction === 'not_interested' ? 'text-tiktok-cyan' : 'group-hover:text-tiktok-cyan transition-colors'} />
-                   <span className="text-[10px] font-bold">Not interested</span>
-                </div>
-                {((reelData?.user?.downloadPrivacy !== 'Off') && (reelData?.allowDownload !== false)) && (
-                  <div 
-                    onClick={handleDownload}
-                    className={`flex-1 flex flex-col items-center gap-2 tap-effect cursor-pointer group ${isDarkMode ? 'text-white' : 'text-black/80'} ${isDownloading ? 'opacity-50 pointer-events-none' : ''}`}
-                  >
-                    {isDownloading ? (
-                      <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                    ) : (
-                      <BiDownload size={20} className="group-hover:text-success transition-colors" />
-                    )}
-                    <span className="text-[10px] font-bold">{isDownloading ? "Saving..." : "Save video"}</span>
-                  </div>
-                )}
-            </div>
+            {(!isOwner || ((reelData?.user?.downloadPrivacy !== 'Off') && (reelData?.allowDownload !== false))) && (
+              <div className={`flex gap-4 py-4 px-2 rounded-xl ${isDarkMode ? 'bg-white/5' : 'bg-black/5'}`}>
+                  {!isOwner && (
+                    <>
+                      <div 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (selectedAction === 'report') {
+                            setSelectedAction(null);
+                          } else {
+                            setSelectedAction('report');
+                            onReportClick?.();
+                          }
+                        }}
+                        className={`flex-1 flex flex-col items-center gap-2 tap-effect cursor-pointer group ${
+                          selectedAction === 'report' ? 'text-tiktok-red' : isDarkMode ? 'text-white' : 'text-black/80'
+                        }`}
+                      >
+                         <BiFlag size={20} className={selectedAction === 'report' ? 'text-tiktok-red' : 'group-hover:text-tiktok-red transition-colors'} />
+                         <span className="text-[10px] font-bold">Report</span>
+                      </div>
+                      <div 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (selectedAction === 'not_interested') {
+                            setSelectedAction(null);
+                          } else {
+                            setSelectedAction('not_interested');
+                            onNotInterestedClick?.();
+                          }
+                        }}
+                        className={`flex-1 flex flex-col items-center gap-2 tap-effect cursor-pointer group ${
+                          selectedAction === 'not_interested' ? 'text-tiktok-cyan' : isDarkMode ? 'text-white' : 'text-black/80'
+                        }`}
+                      >
+                         <BiMessageSquareDetail size={20} className={selectedAction === 'not_interested' ? 'text-tiktok-cyan' : 'group-hover:text-tiktok-cyan transition-colors'} />
+                         <span className="text-[10px] font-bold">Not interested</span>
+                      </div>
+                    </>
+                  )}
+                  {((reelData?.user?.downloadPrivacy !== 'Off') && (reelData?.allowDownload !== false)) && (
+                    <div 
+                      onClick={handleDownload}
+                      className={`flex-1 flex flex-col items-center gap-2 tap-effect cursor-pointer group ${isDarkMode ? 'text-white' : 'text-black/80'} ${isDownloading ? 'opacity-50 pointer-events-none' : ''}`}
+                    >
+                      {isDownloading ? (
+                        <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                      ) : (
+                        <BiDownload size={20} className="group-hover:text-success transition-colors" />
+                      )}
+                      <span className="text-[10px] font-bold">{isDownloading ? "Saving..." : "Save video"}</span>
+                    </div>
+                  )}
+              </div>
+            )}
         </div>
       </div>
     </div>

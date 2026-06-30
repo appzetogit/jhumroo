@@ -8,6 +8,7 @@ import User from '../../../models/User.model.js';
 import Follow from '../../../models/Follow.model.js';
 import Report from '../../../models/Report.model.js';
 import { createNotification } from '../../../utils/notificationService.js';
+import { createAdminAlert } from '../../../utils/adminAlertService.js';
 import { asyncHandler } from '../../../middleware/errorHandler.js';
 import { uploadToS3, getPresignedUploadUrl, getFileUrl, getPresignedDownloadUrl, deleteFromS3 } from '../../../utils/s3.js';
 import { processReelWithAudio } from '../../../utils/videoProcessor.js';
@@ -272,6 +273,14 @@ export const createReel = asyncHandler(async (req, res) => {
 
   // Handle mentions
   handleMentionNotifications(reel, req.user._id);
+
+  // Create admin alert for new reel
+  createAdminAlert({
+    type: 'new_reel',
+    title: 'New Reel Uploaded',
+    message: `@${req.user.username} uploaded a new reel: "${reel.caption || '(no caption)'}"`,
+    link: '/admin/reels'
+  }).catch(err => console.error('[createReel] admin alert failed:', err));
 
   // Trigger background processing for uploaded files
   processReelWithAudio(reel._id, s3Result.key, reel.music)
@@ -1407,13 +1416,20 @@ export const reportReel = asyncHandler(async (req, res) => {
     });
   }
 
-  await Report.create({
+  const report = await Report.create({
     reportedBy: req.user._id,
     reportType: 'Reel',
     reportedItem: reelId,
     reason,
     description
   });
+
+  createAdminAlert({
+    type: 'new_report',
+    title: 'New Reel Report',
+    message: `@${req.user.username} reported a reel: "${reason || 'no reason'}"`,
+    link: '/admin/reports'
+  }).catch(err => console.error('[reportReel] admin alert failed:', err));
 
   res.status(201).json({
     success: true,
@@ -1457,7 +1473,7 @@ export const editReel = asyncHandler(async (req, res) => {
   if (audience !== undefined) reel.audience = audience;
 
   await reel.save();
-  await reel.populate('user', 'username fullName profilePicture isVerified');
+  await reel.populate('user', 'username fullName profilePicture isVerified downloadPrivacy isPrivate');
 
   // Handle mentions (only if caption was modified)
   if (caption !== undefined) {

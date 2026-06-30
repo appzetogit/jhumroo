@@ -250,7 +250,7 @@ const AdminCreateAd = () => {
                     value={musicName}
                     onChange={(e) => setMusicName(e.target.value)}
                     placeholder="e.g. Chill Beats"
-                    className="w-full bg-[#F5F5F5] dark:bg-[#1A1A1A] px-4 py-2.5 rounded-xl text-[14px] outline-none"
+                    className="w-full bg-[#F5F5F5] dark:bg-[#1A1A1A] text-[#1A1A1A] dark:text-white px-4 py-2.5 rounded-xl text-[14px] outline-none"
                   />
                 </div>
                 <div>
@@ -297,7 +297,7 @@ const AdminCreateAd = () => {
                     value={caption}
                     onChange={(e) => setCaption(e.target.value)}
                     placeholder="Enter ad caption..."
-                    className="w-full bg-[#F5F5F5] dark:bg-[#1A1A1A] px-4 py-2.5 rounded-xl text-[14px] outline-none min-h-[100px] resize-none"
+                    className="w-full bg-[#F5F5F5] dark:bg-[#1A1A1A] text-[#1A1A1A] dark:text-white px-4 py-2.5 rounded-xl text-[14px] outline-none min-h-[100px] resize-none"
                   />
                 </div>
 
@@ -311,7 +311,7 @@ const AdminCreateAd = () => {
                         value={link}
                         onChange={(e) => setLink(e.target.value)}
                         placeholder="https://example.com/shop"
-                        className="flex-1 bg-transparent text-[14px] outline-none"
+                        className="flex-1 bg-transparent text-[#1A1A1A] dark:text-white text-[14px] outline-none"
                       />
                     </div>
                   </div>
@@ -330,7 +330,7 @@ const AdminCreateAd = () => {
                         }}
                         placeholder="Enter 10-digit number"
                         maxLength={10}
-                        className="w-full bg-[#F5F5F5] dark:bg-[#1A1A1A] px-4 py-2.5 rounded-xl text-[14px] outline-none"
+                        className="w-full bg-[#F5F5F5] dark:bg-[#1A1A1A] text-[#1A1A1A] dark:text-white px-4 py-2.5 rounded-xl text-[14px] outline-none"
                       />
                     </div>
                     <div>
@@ -339,7 +339,7 @@ const AdminCreateAd = () => {
                         value={welcomeMessage}
                         onChange={(e) => setWelcomeMessage(e.target.value)}
                         placeholder="Pre-filled message for WhatsApp..."
-                        className="w-full bg-[#F5F5F5] dark:bg-[#1A1A1A] px-4 py-2.5 rounded-xl text-[14px] outline-none min-h-[80px] resize-none"
+                        className="w-full bg-[#F5F5F5] dark:bg-[#1A1A1A] text-[#1A1A1A] dark:text-white px-4 py-2.5 rounded-xl text-[14px] outline-none min-h-[80px] resize-none"
                       />
                     </div>
                   </div>
@@ -384,7 +384,7 @@ const AdminCreateAd = () => {
                       setTargetStates([]);
                       setTargetDistricts([]);
                     }}
-                    className="w-full bg-[#F5F5F5] dark:bg-[#1A1A1A] px-4 py-2.5 rounded-xl text-[14px] outline-none appearance-none"
+                    className="w-full bg-[#F5F5F5] dark:bg-[#1A1A1A] text-[#1A1A1A] dark:text-white px-4 py-2.5 rounded-xl text-[14px] outline-none appearance-none"
                   >
                     {COUNTRIES.map(country => (
                       <option className="bg-white text-black dark:bg-[#1A1A1A] dark:text-white" key={country} value={country}>{country}</option>
@@ -411,7 +411,7 @@ const AdminCreateAd = () => {
                       onChange={(e) => {
                         if (e.target.value) toggleState(e.target.value);
                       }}
-                      className="w-full bg-[#F5F5F5] dark:bg-[#1A1A1A] px-4 py-2.5 rounded-xl text-[14px] outline-none appearance-none"
+                      className="w-full bg-[#F5F5F5] dark:bg-[#1A1A1A] text-[#1A1A1A] dark:text-white px-4 py-2.5 rounded-xl text-[14px] outline-none appearance-none"
                     >
                       <option className="bg-white text-black dark:bg-[#1A1A1A] dark:text-white" value="">Select to add a state...</option>
                       {COUNTRY_STATES[targetCountry]
@@ -436,7 +436,7 @@ const AdminCreateAd = () => {
                             }
                           }
                         }}
-                        className="flex-1 bg-[#F5F5F5] dark:bg-[#1A1A1A] px-4 py-2.5 rounded-xl text-[14px] outline-none"
+                        className="flex-1 bg-[#F5F5F5] dark:bg-[#1A1A1A] text-[#1A1A1A] dark:text-white px-4 py-2.5 rounded-xl text-[14px] outline-none"
                       />
                       <button
                         type="button"
@@ -484,7 +484,7 @@ const AdminCreateAd = () => {
                             onChange={(e) => {
                               if (e.target.value) toggleDistrict(e.target.value);
                             }}
-                            className="w-full bg-[#F5F5F5] dark:bg-[#1A1A1A] px-4 py-2.5 rounded-xl text-[14px] outline-none appearance-none"
+                            className="w-full bg-[#F5F5F5] dark:bg-[#1A1A1A] text-[#1A1A1A] dark:text-white px-4 py-2.5 rounded-xl text-[14px] outline-none appearance-none"
                           >
                             <option className="bg-white text-black dark:bg-[#1A1A1A] dark:text-white" value="">Select to add a district...</option>
                             {availableDistricts
@@ -521,7 +521,7 @@ const AdminCreateAd = () => {
                             }
                           }
                         }}
-                        className="flex-1 bg-[#F5F5F5] dark:bg-[#1A1A1A] px-4 py-2.5 rounded-xl text-[14px] outline-none"
+                        className="flex-1 bg-[#F5F5F5] dark:bg-[#1A1A1A] text-[#1A1A1A] dark:text-white px-4 py-2.5 rounded-xl text-[14px] outline-none"
                       />
                       <button
                         type="button"

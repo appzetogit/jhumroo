@@ -87,7 +87,7 @@ const AdminTermsAndPolicy = () => {
             onClick={() => setActiveSlug('terms-and-condition')}
             className={`w-full flex items-center gap-3 p-4 rounded-xl font-bold transition-all ${
               activeSlug === 'terms-and-condition' 
-                ? 'bg-admin-primary text-black shadow-lg shadow-admin-primary/20' 
+                ? 'bg-[#FE2C55] text-white shadow-lg shadow-[#FE2C55]/20' 
                 : 'bg-white text-gray-900 hover:bg-gray-50 border border-gray-100'
             }`}
           >
@@ -98,7 +98,7 @@ const AdminTermsAndPolicy = () => {
             onClick={() => setActiveSlug('privacy-policy')}
             className={`w-full flex items-center gap-3 p-4 rounded-xl font-bold transition-all ${
               activeSlug === 'privacy-policy' 
-                ? 'bg-admin-primary text-black shadow-lg shadow-admin-primary/20' 
+                ? 'bg-[#FE2C55] text-white shadow-lg shadow-[#FE2C55]/20' 
                 : 'bg-white text-gray-900 hover:bg-gray-50 border border-gray-100'
             }`}
           >

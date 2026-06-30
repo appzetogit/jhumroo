@@ -779,6 +779,11 @@ export const getReelGeoAnalytics = asyncHandler(async (req, res) => {
   if (district) userMatchStage.district = district;
 
   // ----- TOP LEVEL: Group by country -----
+  const countryMatchUser = { 'creator.isActive': true };
+  if (country) countryMatchUser['creator.country'] = country;
+  if (state) countryMatchUser['creator.state'] = state;
+  if (district) countryMatchUser['creator.district'] = district;
+
   const byCountry = await Reel.aggregate([
     { $match: { createdAt: { $gte: startDate }, isActive: true } },
     {
@@ -790,7 +795,7 @@ export const getReelGeoAnalytics = asyncHandler(async (req, res) => {
       }
     },
     { $unwind: '$creator' },
-    { $match: { 'creator.isActive': true } },
+    { $match: countryMatchUser },
     {
       $group: {
         _id: '$creator.country',
@@ -810,6 +815,8 @@ export const getReelGeoAnalytics = asyncHandler(async (req, res) => {
   const stateMatchReel = { createdAt: { $gte: startDate }, isActive: true };
   const stateMatchUser = { 'creator.isActive': true };
   if (country) stateMatchUser['creator.country'] = country;
+  if (state) stateMatchUser['creator.state'] = state;
+  if (district) stateMatchUser['creator.district'] = district;
 
   const byState = await Reel.aggregate([
     { $match: stateMatchReel },
@@ -843,6 +850,7 @@ export const getReelGeoAnalytics = asyncHandler(async (req, res) => {
   const districtMatchUser = { 'creator.isActive': true };
   if (country) districtMatchUser['creator.country'] = country;
   if (state) districtMatchUser['creator.state'] = state;
+  if (district) districtMatchUser['creator.district'] = district;
 
   const byDistrict = await Reel.aggregate([
     { $match: stateMatchReel },

@@ -89,6 +89,7 @@ export const CREATE_SIDE_TOOLS = [
   { id: 'flip', label: 'Flip' },
   { id: 'speed', label: 'Speed' },
   { id: 'timer', label: 'Timer' },
+  { id: 'zoom', label: 'Zoom' },
   { id: 'filters', label: 'Filters' },
 ];
 

@@ -21,7 +21,15 @@ export const getReports = asyncHandler(async (req, res) => {
 
   const reports = await Report.find(query)
     .populate('reportedBy', 'username fullName profilePicture')
-    .populate('reportedItem')
+    .populate({
+      path: 'reportedItem',
+      populate: {
+        path: 'user',
+        select: 'username fullName profilePicture isBanned',
+        options: { strictPopulate: false }
+      },
+      options: { strictPopulate: false }
+    })
     .sort({ createdAt: -1 })
     .skip(skip)
     .limit(limit);

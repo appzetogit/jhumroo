@@ -259,36 +259,40 @@ const MoreOptionsSheet = ({
                 navigate(`/create?duet=${reelData._id}`, { state: { duetVideo: reelData } });
               }}
             />
-            <OptionItem 
-              icon={BiPlusCircle} 
-              label="Interested" 
-              color="success"
-              isDarkMode={isDarkMode}
-              onClick={() => {
-                onInterestedClick();
-                handleClose();
-              }}
-            />
-            <OptionItem 
-              icon={BiMinusCircle} 
-              label="Not interested" 
-              color="warning"
-              isDarkMode={isDarkMode}
-              onClick={() => {
-                onNotInterestedClick();
-                handleClose();
-              }}
-            />
-            <OptionItem 
-              icon={BiFlag} 
-              label="Report" 
-              color="danger"
-              isDarkMode={isDarkMode}
-              onClick={() => {
-                onReportClick();
-                // handleClose();
-              }}
-            />
+            {!isOwner && (
+              <>
+                <OptionItem 
+                  icon={BiPlusCircle} 
+                  label="Interested" 
+                  color="success"
+                  isDarkMode={isDarkMode}
+                  onClick={() => {
+                    onInterestedClick();
+                    handleClose();
+                  }}
+                />
+                <OptionItem 
+                  icon={BiMinusCircle} 
+                  label="Not interested" 
+                  color="warning"
+                  isDarkMode={isDarkMode}
+                  onClick={() => {
+                    onNotInterestedClick();
+                    handleClose();
+                  }}
+                />
+                <OptionItem 
+                  icon={BiFlag} 
+                  label="Report" 
+                  color="danger"
+                  isDarkMode={isDarkMode}
+                  onClick={() => {
+                    onReportClick();
+                    // handleClose();
+                  }}
+                />
+              </>
+            )}
             {isOwner && (
               <>
                 <OptionItem 

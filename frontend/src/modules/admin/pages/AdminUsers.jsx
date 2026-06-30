@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BiCheckCircle, BiEdit, BiTrash, BiBlock, BiRefresh, BiShow } from 'react-icons/bi';
+import { BiCheckCircle, BiEdit, BiTrash, BiBlock, BiRefresh, BiShow, BiXCircle, BiSearch, BiX } from 'react-icons/bi';
 import adminUserService from '../../../services/adminUserService';
+import adminInterestService from '../../../services/adminInterestService';
 
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -14,15 +15,22 @@ const AdminUsers = () => {
   const [activeUser, setActiveUser] = useState(null);
   const [draft, setDraft] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [availableCategories, setAvailableCategories] = useState([]);
+  const [showInterestsSelector, setShowInterestsSelector] = useState(false);
 
   useEffect(() => {
-    fetchUsers();
-  }, []);
+    const delayDebounceFn = setTimeout(() => {
+      fetchUsers(searchTerm);
+    }, 300);
 
-  const fetchUsers = async () => {
+    return () => clearTimeout(delayDebounceFn);
+  }, [searchTerm]);
+
+  const fetchUsers = async (searchVal = searchTerm) => {
     setLoading(true);
     try {
-      const response = await adminUserService.getAllUsers();
+      const response = await adminUserService.getAllUsers({ search: searchVal });
       if (response.success) {
         setUsers(response.users);
       } else {
@@ -59,8 +67,8 @@ const AdminUsers = () => {
         user.stats?.followersCount || 0,
         user.stats?.followingCount || 0,
         user.stats?.likesCount || 0,
-        user.isBanned ? 'Suspended' : 'Active',
-        user.isVerified ? 'Yes' : 'No'
+         !user.isActive ? 'Inactive' : user.isBanned ? 'Suspended' : 'Active',
+         user.isVerified ? 'Yes' : 'No'
       ]);
 
       // Add table using the plugin
@@ -82,9 +90,17 @@ const AdminUsers = () => {
     }
   };
 
-  const openEditor = (user) => {
+  const openEditor = async (user) => {
     setActiveUser(user);
     setDraft({ ...user });
+    try {
+      const res = await adminInterestService.getInterests();
+      if (res.success) {
+        setAvailableCategories(res.data || []);
+      }
+    } catch (err) {
+      console.error('Error fetching available interests:', err);
+    }
   };
 
   const closeEditor = () => {
@@ -97,6 +113,14 @@ const AdminUsers = () => {
     if (!draft?.username) {
       setError('Username is required');
       return;
+    }
+
+    if (draft?.fullName && draft.fullName.trim() !== '') {
+      const nameRegex = /^[a-zA-Z\s.'\-]+$/;
+      if (!nameRegex.test(draft.fullName)) {
+        setError('Full name can only contain letters, spaces, dots, hyphens, and apostrophes');
+        return;
+      }
     }
 
     setIsSaving(true);
@@ -166,8 +190,35 @@ const AdminUsers = () => {
           <h1>Users</h1>
           <p>Manage creator profiles, saved reels, and profile stats.</p>
         </div>
-        <div style={{ display: 'flex', gap: '10px' }}>
-          <button type="button" className="admin-secondary-btn" onClick={fetchUsers}>
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+          <div style={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: '8px', 
+            background: 'var(--admin-surface)', 
+            border: '1px solid var(--admin-border)', 
+            borderRadius: '12px', 
+            padding: '8px 14px', 
+            width: '260px', 
+            boxShadow: '0 4px 12px rgba(254, 44, 85, 0.04)' 
+          }}>
+            <BiSearch size={18} style={{ color: 'var(--admin-muted)' }} />
+            <input 
+              type="text" 
+              placeholder="Search users..." 
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              style={{ 
+                border: 'none', 
+                outline: 'none', 
+                width: '100%', 
+                fontSize: '13px', 
+                background: 'transparent',
+                color: 'var(--admin-text)'
+              }}
+            />
+          </div>
+          <button type="button" className="admin-secondary-btn" onClick={() => fetchUsers(searchTerm)} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <BiRefresh size={18} /> Refresh
           </button>
           <button type="button" className="admin-secondary-btn" onClick={handleExport}>
@@ -184,14 +235,14 @@ const AdminUsers = () => {
         ) : (
           <div className="admin-table">
             <div className="admin-table-head admin-table-head--users">
-              <span>User</span>
-              <span>Phone</span>
-              <span>Followers</span>
-              <span>Following</span>
-              <span>Likes</span>
-              <span>Status</span>
-              <span>Verified</span>
-              <span>Actions</span>
+              <div>User</div>
+              <div>Phone</div>
+              <div style={{ textAlign: 'center' }}>Followers</div>
+              <div style={{ textAlign: 'center' }}>Following</div>
+              <div style={{ textAlign: 'center' }}>Likes</div>
+              <div style={{ textAlign: 'center' }}>Status</div>
+              <div style={{ textAlign: 'center' }}>Verified</div>
+              <div style={{ textAlign: 'center' }}>Actions</div>
             </div>
             {users.length === 0 ? (
               <div style={{ padding: '40px', textAlign: 'center', color: '#6b7280' }}>No users found in database</div>
@@ -211,23 +262,33 @@ const AdminUsers = () => {
                       <p className="admin-user-handle">@{user.username}</p>
                     </div>
                   </div>
-                  <span style={{ fontSize: '13px', color: '#6b7280', whiteSpace: 'nowrap' }}>
+                  <div style={{ fontSize: '13px', color: '#6b7280', whiteSpace: 'nowrap' }}>
                     {user.phoneNumber ? `${user.countryCode || '+91'} ${user.phoneNumber}` : '-'}
-                  </span>
-                  <span style={{ fontSize: '13px' }}>{user.stats?.followersCount || 0}</span>
-                  <span style={{ fontSize: '13px' }}>{user.stats?.followingCount || 0}</span>
-                  <span style={{ fontSize: '13px' }}>{user.stats?.likesCount || 0}</span>
-                  <span className="admin-status" style={{ color: user.isBanned ? '#ef4444' : '#10b981' }}>
-                    {user.isBanned ? <BiBlock size={14} /> : <BiCheckCircle size={14} />}
-                    {user.isBanned ? 'Banned' : 'Active'}
-                  </span>
-                  <span 
-                    onClick={() => handleToggleVerify(user._id)}
-                    style={{ cursor: 'pointer', color: user.isVerified ? '#3b82f6' : '#9ca3af' }}
+                  </div>
+                  <div style={{ fontSize: '13px', textAlign: 'center' }}>{user.stats?.followersCount || 0}</div>
+                  <div style={{ fontSize: '13px', textAlign: 'center' }}>{user.stats?.followingCount || 0}</div>
+                  <div style={{ fontSize: '13px', textAlign: 'center' }}>{user.stats?.likesCount || 0}</div>
+                  <div className="admin-status" style={{ 
+                    color: !user.isActive ? '#9ca3af' : user.isBanned ? '#ef4444' : '#10b981',
+                    display: 'flex',
+                    justifyContent: 'center'
+                  }}>
+                    {!user.isActive ? <BiXCircle size={14} /> : user.isBanned ? <BiBlock size={14} /> : <BiCheckCircle size={14} />}
+                    {!user.isActive ? 'Inactive' : user.isBanned ? 'Banned' : 'Active'}
+                  </div>
+                  <div 
+                    onClick={() => user.isActive && handleToggleVerify(user._id)}
+                    style={{ 
+                      cursor: user.isActive ? 'pointer' : 'default', 
+                      color: !user.isActive ? 'rgba(255,255,255,0.1)' : user.isVerified ? '#3b82f6' : '#9ca3af',
+                      display: 'flex',
+                      justifyContent: 'center',
+                      alignItems: 'center'
+                    }}
                   >
                     <BiCheckCircle size={18} />
-                  </span>
-                  <div style={{ display: 'flex', gap: '8px' }}>
+                  </div>
+                  <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
                     <button 
                       type="button" 
                       onClick={() => navigate(`/admin/users/${user._id}`)} 
@@ -240,15 +301,28 @@ const AdminUsers = () => {
                       type="button" 
                       onClick={() => handleToggleBan(user._id)} 
                       className="admin-icon-btn" 
-                      style={{ color: user.isBanned ? '#10b981' : '#f59e0b' }}
+                      style={{ color: user.isBanned ? '#10b981' : '#f59e0b', opacity: !user.isActive ? 0.4 : 1 }}
                       title={user.isBanned ? 'Unsuspend User' : 'Suspend User'}
+                      disabled={!user.isActive}
                     >
                       <BiBlock size={16} />
                     </button>
-                    <button type="button" onClick={() => openEditor(user)} className="admin-icon-btn">
+                    <button 
+                      type="button" 
+                      onClick={() => openEditor(user)} 
+                      className="admin-icon-btn"
+                      style={{ opacity: !user.isActive ? 0.4 : 1 }}
+                      disabled={!user.isActive}
+                    >
                       <BiEdit size={16} />
                     </button>
-                    <button type="button" onClick={() => handleDelete(user._id)} className="admin-icon-btn" style={{ color: '#ef4444' }}>
+                    <button 
+                      type="button" 
+                      onClick={() => handleDelete(user._id)} 
+                      className="admin-icon-btn" 
+                      style={{ color: '#ef4444', opacity: !user.isActive ? 0.4 : 1 }}
+                      disabled={!user.isActive}
+                    >
                       <BiTrash size={16} />
                     </button>
                   </div>
@@ -304,18 +378,60 @@ const AdminUsers = () => {
                   onChange={(event) => setDraft((prev) => ({ ...prev, bio: event.target.value }))}
                 />
               </label>
-              <label className="admin-form-textarea">
-                Interests (comma separated)
-                <textarea
-                  rows={2}
-                  value={draft.interests && Array.isArray(draft.interests) ? draft.interests.join(', ') : ''}
-                  onChange={(event) => setDraft((prev) => ({ 
-                    ...prev, 
-                    interests: event.target.value.split(',').map(i => i.trim()).filter(i => i !== '') 
-                  }))}
-                  placeholder="e.g. Comedy, Music, Travel"
-                />
-              </label>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '14px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <label style={{ fontSize: '13px', fontWeight: 'bold', color: '#6b7280', textTransform: 'uppercase' }}>Interests</label>
+                  <button
+                    type="button"
+                    onClick={() => setShowInterestsSelector(true)}
+                    className="admin-secondary-btn"
+                    style={{ padding: '4px 10px', fontSize: '12px', borderRadius: '8px' }}
+                  >
+                    Select from Categories
+                  </button>
+                </div>
+                <div style={{ 
+                  display: 'flex', 
+                  flexWrap: 'wrap', 
+                  gap: '8px', 
+                  padding: '12px', 
+                  background: 'var(--admin-surface)', 
+                  border: '1px solid var(--admin-border)', 
+                  borderRadius: '12px',
+                  minHeight: '48px'
+                }}>
+                  {draft.interests && draft.interests.length > 0 ? (
+                    draft.interests.map((interest) => (
+                      <span 
+                        key={interest} 
+                        style={{ 
+                          background: 'rgba(254, 44, 85, 0.08)', 
+                          color: 'var(--admin-primary)', 
+                          padding: '4px 10px', 
+                          borderRadius: '999px', 
+                          fontSize: '12px', 
+                          fontWeight: '600',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px'
+                        }}
+                      >
+                        {interest}
+                        <BiX 
+                          size={14} 
+                          style={{ cursor: 'pointer' }} 
+                          onClick={() => setDraft(prev => ({
+                            ...prev,
+                            interests: prev.interests.filter(i => i !== interest)
+                          }))}
+                        />
+                      </span>
+                    ))
+                  ) : (
+                    <span style={{ fontSize: '13px', color: '#9ca3af', fontStyle: 'italic' }}>No interests selected. Click button to add.</span>
+                  )}
+                </div>
+              </div>
               {error && <p className="admin-error">{error}</p>}
             </div>
             <div className="admin-modal-footer">
@@ -329,10 +445,102 @@ const AdminUsers = () => {
           </div>
         </div>
       )}
+
+      {/* Interests Checklist Selector Modal */}
+      {showInterestsSelector && (
+        <div className="admin-modal-overlay" style={{ zIndex: 3000 }}>
+          <div className="admin-modal" style={{ maxWidth: '600px', width: '90%', maxHeight: '80vh', display: 'flex', flexDirection: 'column' }}>
+            <div className="admin-modal-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--admin-border)', paddingBottom: '12px' }}>
+              <h2 className="admin-modal-title" style={{ fontSize: '18px', fontWeight: 'bold' }}>Select Interests</h2>
+              <button 
+                type="button" 
+                onClick={() => setShowInterestsSelector(false)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer' }}
+              >
+                <BiX size={24} className="text-gray-400 hover:text-gray-600" />
+              </button>
+            </div>
+            
+            <div className="admin-modal-body" style={{ flex: 1, overflowY: 'auto', padding: '20px 0' }}>
+              {availableCategories.length === 0 ? (
+                <div style={{ textAlign: 'center', color: '#9ca3af', padding: '20px' }}>
+                  No interest categories found in database. Create them in Interests tab first.
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                  {availableCategories.map((category) => (
+                    <div key={category._id} style={{ borderBottom: '1px solid rgba(254, 44, 85, 0.05)', paddingBottom: '16px' }}>
+                      <h4 style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 'bold', fontSize: '14px', marginBottom: '10px', color: 'var(--admin-primary)' }}>
+                        <span>{category.icon}</span>
+                        <span>{category.category}</span>
+                      </h4>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
+                        {category.items.map((item) => {
+                          const isChecked = draft.interests && draft.interests.includes(item);
+                          return (
+                            <label 
+                              key={item} 
+                              style={{ 
+                                display: 'flex', 
+                                alignItems: 'center', 
+                                gap: '6px', 
+                                background: isChecked ? 'rgba(254, 44, 85, 0.08)' : '#f9fafb', 
+                                border: isChecked ? '1px solid var(--admin-primary)' : '1px solid #e5e7eb',
+                                borderRadius: '8px', 
+                                padding: '6px 12px', 
+                                fontSize: '13px', 
+                                cursor: 'pointer',
+                                transition: 'all 0.15s ease'
+                              }}
+                            >
+                              <input 
+                                type="checkbox" 
+                                checked={isChecked || false}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setDraft(prev => ({
+                                      ...prev,
+                                      interests: [...(prev.interests || []), item]
+                                    }));
+                                  } else {
+                                    setDraft(prev => ({
+                                      ...prev,
+                                      interests: (prev.interests || []).filter(i => i !== item)
+                                    }));
+                                  }
+                                }}
+                                style={{ accentColor: 'var(--admin-primary)' }}
+                              />
+                              <span style={{ color: isChecked ? 'var(--admin-primary)' : 'var(--admin-text)', fontWeight: isChecked ? '600' : 'normal' }}>
+                                {item}
+                              </span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            
+            <div className="admin-modal-footer" style={{ borderTop: '1px solid var(--admin-border)', paddingTop: '12px', display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+              <button 
+                type="button" 
+                className="admin-primary-btn" 
+                onClick={() => setShowInterestsSelector(false)}
+                style={{ padding: '8px 20px', borderRadius: '10px' }}
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       
       <style dangerouslySetInnerHTML={{ __html: `
         .admin-table-head--users, .admin-table-row--users {
-          grid-template-columns: 2fr 1fr 0.8fr 0.8fr 0.8fr 1fr 0.8fr 1fr;
+          grid-template-columns: 2fr 1fr 0.8fr 0.8fr 0.8fr 1fr 0.8fr 1fr !important;
           align-items: center;
         }
         .admin-user-cell {

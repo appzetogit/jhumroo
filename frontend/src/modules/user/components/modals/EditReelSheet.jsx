@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { BiX, BiChevronDown, BiCheck } from 'react-icons/bi';
 import { useTheme } from '../../../../context/ThemeContext';
 import reelService from '../../../../services/reelService';
@@ -30,14 +30,11 @@ const EditReelSheet = ({ isOpen, onClose, reelData, onUpdate }) => {
   const [loading, setLoading] = useState(false);
   const [thumbnailFile, setThumbnailFile] = useState(null);
   const [thumbnailPreview, setThumbnailPreview] = useState(null);
-  const prevReelIdRef = React.useRef(null);
   const fileInputRef = React.useRef(null);
 
-  // Sync state when reelData is available or changes (render-phase update check)
-  const currentReelId = reelData?._id || reelData?.id || null;
-  if (currentReelId !== prevReelIdRef.current && isOpen) {
-    prevReelIdRef.current = currentReelId;
-    if (reelData) {
+  // Sync state when sheet opens or reelData changes
+  useEffect(() => {
+    if (isOpen && reelData) {
       setCaption(reelData.caption || '');
       setAllowComments(reelData.allowComments !== false);
       setAllowDownload(reelData.allowDownload !== false);
@@ -46,7 +43,7 @@ const EditReelSheet = ({ isOpen, onClose, reelData, onUpdate }) => {
       setThumbnailPreview(reelData.video?.thumbnail || reelData.poster);
       setThumbnailFile(null);
     }
-  }
+  }, [isOpen, reelData]);
 
   const handleThumbnailSelect = (e) => {
     const file = e.target.files[0];

@@ -11,9 +11,6 @@ const AdInspectorModal = ({ ad, onClose }) => {
       <div className="admin-modal ad-inspector-modal">
         <div className="admin-modal-header">
           <h2>Inspect Campaign Details</h2>
-          <button className="modal-close-x" onClick={onClose}>
-            <BiX size={24} />
-          </button>
         </div>
         
         <div className="admin-modal-body ad-inspector-body">
@@ -121,7 +118,7 @@ const AdInspectorModal = ({ ad, onClose }) => {
 const PaymentRecordsTable = ({ ads, onInspect }) => {
   return (
     <div className="admin-card table-responsive" style={{ padding: 0, overflow: 'hidden' }}>
-      <table className="admin-table">
+      <table className="payment-records-table">
         <thead>
           <tr>
             <th>Date & Time</th>
@@ -269,17 +266,17 @@ const AdminAdsPaymentRecords = () => {
 };
 
 const STYLES_CSS = `
-  .admin-table {
+  .payment-records-table {
     width: 100%;
     border-collapse: collapse;
   }
-  .admin-table th, .admin-table td {
+  .payment-records-table th, .payment-records-table td {
     padding: 14px 18px;
     text-align: left;
     border-bottom: 1px solid rgba(0,0,0,0.06);
     font-size: 14px;
   }
-  .admin-table th {
+  .payment-records-table th {
     background: #f8f9fa;
     font-weight: 700;
     color: var(--admin-text);
@@ -287,7 +284,7 @@ const STYLES_CSS = `
     text-transform: uppercase;
     letter-spacing: 0.5px;
   }
-  .admin-table tr:hover td {
+  .payment-records-table tr:hover td {
     background: rgba(0,0,0,0.01);
   }
   .table-date-cell {
@@ -375,10 +372,12 @@ const STYLES_CSS = `
     width: 850px;
     max-width: 95%;
     max-height: 85vh;
+    display: flex;
+    flex-direction: column;
   }
   .ad-inspector-body {
     overflow-y: auto;
-    max-height: calc(85vh - 120px);
+    flex: 1;
   }
   .inspector-layout {
     display: grid;

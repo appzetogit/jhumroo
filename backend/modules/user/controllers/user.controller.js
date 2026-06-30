@@ -4,6 +4,7 @@ import Follow from '../../../models/Follow.model.js';
 import Like from '../../../models/Like.model.js';
 import SavedReel from '../../../models/SavedReel.model.js';
 import Report from '../../../models/Report.model.js';
+import { createAdminAlert } from '../../../utils/adminAlertService.js';
 import { asyncHandler } from '../../../middleware/errorHandler.js';
 import { uploadImage, deleteFile } from '../../../config/cloudinary.js';
 import { getFileUrl } from '../../../utils/s3.js';
@@ -21,7 +22,7 @@ export const getUserProfile = asyncHandler(async (req, res) => {
   const user = await User.findOne({ username: username.toLowerCase() })
     .select('-otp -deviceTokens');
 
-  if (!user) {
+  if (!user || !user.isActive) {
     return res.status(404).json({
       success: false,
       message: 'User not found'
@@ -851,13 +852,20 @@ export const reportUser = asyncHandler(async (req, res) => {
     });
   }
 
-  await Report.create({
+  const report = await Report.create({
     reportedBy: req.user._id,
     reportType: 'User',
     reportedItem: targetUserId,
     reason,
     description
   });
+
+  createAdminAlert({
+    type: 'new_report',
+    title: 'New Account Report',
+    message: `@${req.user.username} reported user account: "${reason || 'no reason'}"`,
+    link: '/admin/reports'
+  }).catch(err => console.error('[reportUser] admin alert failed:', err));
 
   res.status(201).json({
     success: true,
@@ -934,8 +942,9 @@ export const deleteAccount = asyncHandler(async (req, res) => {
   await Message.deleteMany({ sender: userId });
   await Conversation.deleteMany({ participants: userId });
 
-  // 10. Finally, delete the User record itself
-  await req.user.deleteOne();
+  // 10. Instead of hard deleting, soft delete the user by setting isActive to false
+  req.user.isActive = false;
+  await req.user.save({ validateBeforeSave: false });
 
   res.status(200).json({
     success: true,

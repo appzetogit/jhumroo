@@ -841,12 +841,14 @@
   padding: 20px 24px 24px;
   overflow-y: auto;
   min-width: 0;
+  flex: 1;
 }
 
 .admin-page {
   display: flex;
   flex-direction: column;
   gap: 20px;
+  padding-bottom: 48px;
 }
 
 .admin-page-header {
@@ -1048,7 +1050,7 @@
 
 .admin-table-head--users,
 .admin-table-row--users {
-  grid-template-columns: 2fr repeat(3, 1fr) 1fr auto;
+  grid-template-columns: 2fr 1fr 0.8fr 0.8fr 0.8fr 1fr 0.8fr 1fr;
 }
 
 .admin-table-head--reports,

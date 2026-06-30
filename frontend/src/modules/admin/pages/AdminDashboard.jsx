@@ -1,4 +1,5 @@
 import React, { useState, useEffect, Suspense, useReducer } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { 
   BiUser, 
   BiVideo, 
@@ -43,8 +44,8 @@ const integerTickFormatter = (v) => Number.isInteger(v) ? v : '';
 const usersTooltipFormatter = (value) => [value.toLocaleString(), 'New Users'];
 const newSignupsLegendFormatter = () => 'New Signups';
 
-const StatCard = ({ label, value, icon, accent, subValue }) => (
-  <div className="admin-card admin-stat-card">
+const StatCard = ({ label, value, icon, accent, subValue, onClick }) => (
+  <div className="admin-card admin-stat-card" onClick={onClick}>
     <div className="admin-stat-icon" style={{ backgroundColor: `${accent}20`, color: accent }}>
       {icon}
     </div>
@@ -509,85 +510,100 @@ const DashboardHeader = () => (
 );
 
 // 7. Stat Cards Grid sub-component for optimal lines count
-const OverviewCardsGrid = ({ stats }) => (
-  <div className="admin-grid admin-stats-grid-8" style={{ marginBottom: '0' }}>
-    <StatCard
-      label="Total Users"
-      value={stats?.overview?.totalUsers?.toLocaleString() || '0'}
-      icon={<BiUser size={24} />}
-      accent="#6366f1"
-      subValue={stats?.today?.newUsers ? `+${stats.today.newUsers} today` : null}
-    />
-    <StatCard
-      label="Total Reels"
-      value={stats?.overview?.totalReels?.toLocaleString() || '0'}
-      icon={<BiVideo size={24} />}
-      accent="#f59e0b"
-      subValue={stats?.today?.newReels ? `+${stats.today.newReels} today` : null}
-    />
-    <StatCard
-      label="Today's Uploads"
-      value={stats?.today?.newReels?.toLocaleString() || '0'}
-      icon={<BiCloudUpload size={24} />}
-      accent="#3b82f6"
-    />
-    <StatCard
-      label="Total Audio"
-      value={stats?.overview?.totalAudio?.toLocaleString() || '0'}
-      icon={<BiMusic size={24} />}
-      accent="#10b981"
-    />
-    <StatCard
-      label="Total User Ads"
-      value={stats?.overview?.totalUserAds?.toLocaleString() || '0'}
-      icon={<BiSolidMegaphone size={24} />}
-      accent="#ec4899"
-    />
-    <StatCard
-      label="Total Admin Ads"
-      value={stats?.overview?.totalAdminAds?.toLocaleString() || '0'}
-      icon={<BiShieldQuarter size={24} />}
-      accent="#8b5cf6"
-    />
-    <StatCard
-      label="Total Blocked Users"
-      value={stats?.overview?.totalBlockedUsers?.toLocaleString() || '0'}
-      icon={<BiBlock size={24} />}
-      accent="#ef4444"
-    />
-    <StatCard
-      label="Support Requests Pending"
-      value={stats?.overview?.totalSupportPending?.toLocaleString() || '0'}
-      icon={<BiSupport size={24} />}
-      accent="#14b8a6"
-    />
-    <StatCard
-      label="Total Views"
-      value={stats?.overview?.totalViews?.toLocaleString() || '0'}
-      icon={<BiShow size={24} />}
-      accent="#06b6d4"
-    />
-    <StatCard
-      label="Total Likes"
-      value={stats?.overview?.totalLikes?.toLocaleString() || '0'}
-      icon={<BiHeart size={24} />}
-      accent="#f43f5e"
-    />
-    <StatCard
-      label="Total Comments"
-      value={stats?.overview?.totalComments?.toLocaleString() || '0'}
-      icon={<BiMessageRounded size={24} />}
-      accent="#a855f7"
-      subValue={stats?.today?.newComments ? `+${stats.today.newComments} today` : null}
-    />
-    <StatCard
-      label="Total Share"
-      value={stats?.overview?.totalShares?.toLocaleString() || '0'}
-      icon={<BiShareAlt size={24} />}
-      accent="#0ea5e9"
-    />
-  </div>
-);
+const OverviewCardsGrid = ({ stats }) => {
+  const navigate = useNavigate();
+  return (
+    <div className="admin-grid admin-stats-grid-8" style={{ marginBottom: '0' }}>
+      <StatCard
+        label="Total Users"
+        value={stats?.overview?.totalUsers?.toLocaleString() || '0'}
+        icon={<BiUser size={24} />}
+        accent="#6366f1"
+        subValue={stats?.today?.newUsers ? `+${stats.today.newUsers} today` : null}
+        onClick={() => navigate('/admin/users')}
+      />
+      <StatCard
+        label="Total Reels"
+        value={stats?.overview?.totalReels?.toLocaleString() || '0'}
+        icon={<BiVideo size={24} />}
+        accent="#f59e0b"
+        subValue={stats?.today?.newReels ? `+${stats.today.newReels} today` : null}
+        onClick={() => navigate('/admin/reels')}
+      />
+      <StatCard
+        label="Today's Uploads"
+        value={stats?.today?.newReels?.toLocaleString() || '0'}
+        icon={<BiCloudUpload size={24} />}
+        accent="#3b82f6"
+        onClick={() => navigate('/admin/reels')}
+      />
+      <StatCard
+        label="Total Audio"
+        value={stats?.overview?.totalAudio?.toLocaleString() || '0'}
+        icon={<BiMusic size={24} />}
+        accent="#10b981"
+        onClick={() => navigate('/admin/audio')}
+      />
+      <StatCard
+        label="Total User Ads"
+        value={stats?.overview?.totalUserAds?.toLocaleString() || '0'}
+        icon={<BiSolidMegaphone size={24} />}
+        accent="#ec4899"
+        onClick={() => navigate('/admin/user-ads')}
+      />
+      <StatCard
+        label="Total Admin Ads"
+        value={stats?.overview?.totalAdminAds?.toLocaleString() || '0'}
+        icon={<BiShieldQuarter size={24} />}
+        accent="#8b5cf6"
+        onClick={() => navigate('/admin/ads')}
+      />
+      <StatCard
+        label="Total Blocked Users"
+        value={stats?.overview?.totalBlockedUsers?.toLocaleString() || '0'}
+        icon={<BiBlock size={24} />}
+        accent="#ef4444"
+        onClick={() => navigate('/admin/users')}
+      />
+      <StatCard
+        label="Support Requests Pending"
+        value={stats?.overview?.totalSupportPending?.toLocaleString() || '0'}
+        icon={<BiSupport size={24} />}
+        accent="#14b8a6"
+        onClick={() => navigate('/admin/support-requests')}
+      />
+      <StatCard
+        label="Total Views"
+        value={stats?.overview?.totalViews?.toLocaleString() || '0'}
+        icon={<BiShow size={24} />}
+        accent="#06b6d4"
+        onClick={() => navigate('/admin/analytics')}
+      />
+      <StatCard
+        label="Total Likes"
+        value={stats?.overview?.totalLikes?.toLocaleString() || '0'}
+        icon={<BiHeart size={24} />}
+        accent="#f43f5e"
+        onClick={() => navigate('/admin/analytics')}
+      />
+      <StatCard
+        label="Total Comments"
+        value={stats?.overview?.totalComments?.toLocaleString() || '0'}
+        icon={<BiMessageRounded size={24} />}
+        accent="#a855f7"
+        subValue={stats?.today?.newComments ? `+${stats.today.newComments} today` : null}
+        onClick={() => navigate('/admin/analytics')}
+      />
+      <StatCard
+        label="Total Share"
+        value={stats?.overview?.totalShares?.toLocaleString() || '0'}
+        icon={<BiShareAlt size={24} />}
+        accent="#0ea5e9"
+        onClick={() => navigate('/admin/analytics')}
+      />
+    </div>
+  );
+};
 
 const dashboardReducer = (state, action) => {
   if (action.type === 'SET_DATA') {
@@ -734,6 +750,7 @@ const AdminDashboard = () => {
           gap: 1.25rem;
           padding: 1.5rem;
           transition: transform 0.2s;
+          cursor: pointer;
         }
         .admin-stat-card:hover {
           transform: translateY(-4px);

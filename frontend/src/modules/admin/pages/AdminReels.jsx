@@ -62,7 +62,7 @@ const AdminReels = () => {
   const fetchReels = async () => {
     setLoading(true);
     try {
-      const response = await adminContentService.getAllReels({ page, limit: 15 });
+      const response = await adminContentService.getAllReels({ page, limit: 10 });
       if (response.success) {
         setReels(response.reels);
         setPagination(response.pagination || { pages: response.pages, page: response.page });
@@ -380,7 +380,7 @@ const AdminReels = () => {
               <button
                 key={i}
                 className={`w-10 h-10 rounded-xl flex items-center justify-center text-sm font-bold transition-all ${
-                  page === i + 1 ? 'bg-admin-primary text-white shadow-lg shadow-admin-primary/20' : 'bg-white text-gray-600 border border-admin-border hover:bg-gray-50'
+                  page === i + 1 ? 'bg-[#FE2C55] text-white shadow-lg shadow-[#FE2C55]/20' : 'bg-white text-gray-600 border border-admin-border hover:bg-gray-50'
                 }`}
                 onClick={() => setPage(i + 1)}
               >

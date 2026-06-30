@@ -131,7 +131,7 @@ const ReelGeoTab = () => {
             options={[{ value: '7', label: '7 days' }, { value: '30', label: '30 days' }, { value: '90', label: '90 days' }]}
             placeholder="30 days" />
           <button className="anl-refresh-btn" onClick={fetchData} disabled={loading}>
-            <BiRefresh size={16} style={{ animation: loading ? 'anl-spin 1s linear infinite' : 'none' }} />
+            <BiRefresh size={16} className={loading ? 'animate-spin' : ''} />
           </button>
         </div>
       </div>
@@ -314,7 +314,7 @@ const AdsAnalyticsTab = () => {
             options={[{ value: '7', label: '7 days' }, { value: '30', label: '30 days' }, { value: '90', label: '90 days' }]}
             placeholder="30 days" />
           <button className="anl-refresh-btn" onClick={fetchData} disabled={loading}>
-            <BiRefresh size={16} style={{ animation: loading ? 'anl-spin 1s linear infinite' : 'none' }} />
+            <BiRefresh size={16} className={loading ? 'animate-spin' : ''} />
           </button>
         </div>
       </div>

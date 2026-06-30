@@ -12,6 +12,7 @@ const AdminReports = () => {
   const [selectedReport, setSelectedReport] = useState(null);
   const [showVideoModal, setShowVideoModal] = useState(false);
   const [activeTab, setActiveTab] = useState('All'); // 'All', 'Reel', or 'User'
+  const [actionModal, setActionModal] = useState({ isOpen: false, reportId: null });
 
   useEffect(() => {
     fetchReports();
@@ -54,6 +55,16 @@ const AdminReports = () => {
       } catch (error) {
         alert(error.response?.data?.message || 'Error banning user');
       }
+    }
+  };
+
+  const handleApproveReport = async (reportId) => {
+    try {
+      await adminReportService.updateReportStatus(reportId, { status: 'resolved', actionTaken: 'none' });
+      alert('Report marked as Approved/Resolved');
+      fetchReports();
+    } catch (error) {
+      alert('Error approving report');
     }
   };
 
@@ -298,26 +309,25 @@ const AdminReports = () => {
                 <div className="flex items-center justify-end gap-2">
                   {report.status === 'pending' ? (
                     <>
+                      <button 
+                        className="admin-icon-btn success" 
+                        style={{ color: '#10b981' }}
+                        title="Resolve / Dismiss"
+                        onClick={() => setActionModal({ isOpen: true, reportId: report._id })}
+                      >
+                        <BiCheckCircle size={16} />
+                      </button>
+
                       {report.reportType === 'Reel' && (
-                        <>
-                          <button 
-                            className="admin-icon-btn success" 
-                            style={{ color: '#10b981' }}
-                            title="Resolve / Dismiss"
-                            onClick={() => handleDismissReport(report._id)}
-                          >
-                            <BiCheckCircle size={16} />
-                          </button>
-                          <button 
-                            className="admin-icon-btn" 
-                            style={{ color: '#ef4444' }}
-                            title="Remove Reel"
-                            disabled={!report.reportedItem}
-                            onClick={() => handleRemoveReel(report.reportedItem?._id, report._id)}
-                          >
-                            <BiTrash size={16} />
-                          </button>
-                        </>
+                        <button 
+                          className="admin-icon-btn" 
+                          style={{ color: '#ef4444' }}
+                          title="Remove Reel"
+                          disabled={!report.reportedItem}
+                          onClick={() => handleRemoveReel(report.reportedItem?._id, report._id)}
+                        >
+                          <BiTrash size={16} />
+                        </button>
                       )}
                       
                       <button 
@@ -358,7 +368,7 @@ const AdminReports = () => {
               <button
                 key={i}
                 className={`w-10 h-10 rounded-xl flex items-center justify-center text-sm font-bold transition-all ${
-                  page === i + 1 ? 'bg-admin-primary text-white shadow-lg shadow-admin-primary/20' : 'bg-white text-gray-600 border border-admin-border hover:bg-gray-50'
+                  page === i + 1 ? 'bg-[#FE2C55] text-white shadow-lg shadow-[#FE2C55]/20' : 'bg-white text-gray-600 border border-admin-border hover:bg-gray-50'
                 }`}
                 onClick={() => setPage(i + 1)}
               >
@@ -428,6 +438,61 @@ const AdminReports = () => {
                 }}
               >
                 Ban Creator Account
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Action Choice Modal */}
+      {actionModal.isOpen && (
+        <div className="admin-modal-overlay">
+          <div className="admin-modal" style={{ maxWidth: '400px' }}>
+            <div className="admin-modal-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--admin-border)', paddingBottom: '12px' }}>
+              <h2 className="admin-modal-title" style={{ fontSize: '18px', fontWeight: 'bold' }}>Resolve Report</h2>
+              <button 
+                type="button" 
+                onClick={() => setActionModal({ isOpen: false, reportId: null })}
+                style={{ background: 'none', border: 'none', cursor: 'pointer' }}
+              >
+                <BiX size={20} className="text-gray-400 hover:text-gray-600" />
+              </button>
+            </div>
+            <div className="admin-modal-body" style={{ padding: '20px 0' }}>
+              <p className="text-[14px] text-gray-600 dark:text-gray-300">
+                Please select how you want to resolve this report:
+              </p>
+              <div className="mt-4 flex flex-col gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleApproveReport(actionModal.reportId);
+                    setActionModal({ isOpen: false, reportId: null });
+                  }}
+                  className="w-full bg-[#10b981] hover:bg-[#059669] text-white py-2.5 rounded-xl text-[14px] font-bold transition-all"
+                >
+                  Approve Report (Mark as Resolved)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleDismissReport(actionModal.reportId);
+                    setActionModal({ isOpen: false, reportId: null });
+                  }}
+                  className="w-full bg-gray-500 hover:bg-gray-600 text-white py-2.5 rounded-xl text-[14px] font-bold transition-all"
+                >
+                  Dismiss Report (Mark as False/Invalid)
+                </button>
+              </div>
+            </div>
+            <div className="admin-modal-footer" style={{ borderTop: '1px solid var(--admin-border)', paddingTop: '12px', display: 'flex', justifyContent: 'flex-end' }}>
+              <button 
+                type="button" 
+                className="admin-secondary-btn" 
+                onClick={() => setActionModal({ isOpen: false, reportId: null })}
+                style={{ padding: '8px 16px', borderRadius: '10px' }}
+              >
+                Cancel
               </button>
             </div>
           </div>

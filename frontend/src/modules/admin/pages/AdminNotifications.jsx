@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { 
   BiBell, 
   BiPlus, 
@@ -15,11 +16,76 @@ import api from '../../../services/api';
 import { INDIAN_STATES, STATE_DISTRICTS } from '../../../utils/indiaLocations';
 
 const AdminNotifications = () => {
+  const navigate = useNavigate();
+  const [activeTab, setActiveTab] = useState('alerts');
+  const [alerts, setAlerts] = useState([]);
+  const [alertsLoading, setAlertsLoading] = useState(true);
+
   // Page states
   const [notifications, setNotifications] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isComposerOpen, setIsComposerOpen] = useState(false);
   const [alert, setAlert] = useState({ type: null, message: '' });
+
+  // Fetch inbound admin alerts
+  const fetchAlerts = async () => {
+    try {
+      setAlertsLoading(true);
+      const res = await api.get('/admin/notifications/alerts');
+      if (res.success) {
+        setAlerts(res.alerts || []);
+      }
+    } catch (err) {
+      console.error('Failed to fetch alerts:', err);
+    } finally {
+      setAlertsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchAlerts();
+  }, []);
+
+  const handleMarkAllRead = async () => {
+    try {
+      const res = await api.put('/admin/notifications/alerts/read-all');
+      if (res.success) {
+        setAlerts(prev => prev.map(a => ({ ...a, isRead: true })));
+        showAlert('success', 'All alerts marked as read');
+      }
+    } catch (err) {
+      showAlert('error', err.message || 'Failed to mark alerts as read');
+    }
+  };
+
+  const handleAlertClick = async (alertItem) => {
+    // Navigate immediately if it has a link
+    if (alertItem.link) {
+      navigate(alertItem.link);
+    }
+    // Mark as read in backend
+    if (!alertItem.isRead) {
+      try {
+        await api.put(`/admin/notifications/alerts/${alertItem._id}/read`);
+        setAlerts(prev => prev.map(a => a._id === alertItem._id ? { ...a, isRead: true } : a));
+      } catch (err) {
+        console.error('Failed to mark alert as read:', err);
+      }
+    }
+  };
+
+  const handleClearAlerts = async () => {
+    if (!window.confirm('Are you sure you want to clear all notifications from your inbox?')) return;
+    try {
+      const res = await api.delete('/admin/notifications/alerts/clear');
+      if (res.success) {
+        setAlerts([]);
+        showAlert('success', 'Inbox cleared successfully');
+      }
+    } catch (err) {
+      showAlert('error', err.message || 'Failed to clear inbox');
+    }
+  };
 
   // Composer Form States
   const [formData, setFormData] = useState({
@@ -164,128 +230,277 @@ const AdminNotifications = () => {
       <div className="admin-page-header">
         <div>
           <h1>Notifications Center</h1>
-          <p>Compose, target, and dispatch platform-wide push and in-app communication.</p>
+          <p>Configure inbound system logs and campaign push announcements.</p>
         </div>
-        <button 
-          type="button" 
-          className="admin-primary-btn compose-btn"
-          onClick={() => setIsComposerOpen(true)}
+        {activeTab === 'dispatches' && (
+          <button 
+            type="button" 
+            className="admin-primary-btn compose-btn"
+            onClick={() => setIsComposerOpen(true)}
+          >
+            <BiPlus size={20} />
+            Compose Notification
+          </button>
+        )}
+      </div>
+
+      {/* Tabs bar */}
+      <div className="admin-tabs" style={{ display: 'flex', gap: '20px', borderBottom: '1px solid var(--admin-border)', marginBottom: '24px' }}>
+        <button
+          type="button"
+          onClick={() => setActiveTab('alerts')}
+          style={{
+            padding: '12px 16px',
+            fontSize: '14px',
+            fontWeight: '600',
+            background: 'none',
+            border: 'none',
+            borderBottom: activeTab === 'alerts' ? '2px solid var(--admin-primary)' : '2px solid transparent',
+            color: activeTab === 'alerts' ? 'var(--admin-primary)' : 'var(--admin-muted)',
+            cursor: 'pointer',
+            transition: 'all 0.15s ease'
+          }}
         >
-          <BiPlus size={20} />
-          Compose Notification
+          Admin Alerts & Inbox
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab('dispatches')}
+          style={{
+            padding: '12px 16px',
+            fontSize: '14px',
+            fontWeight: '600',
+            background: 'none',
+            border: 'none',
+            borderBottom: activeTab === 'dispatches' ? '2px solid var(--admin-primary)' : '2px solid transparent',
+            color: activeTab === 'dispatches' ? 'var(--admin-primary)' : 'var(--admin-muted)',
+            cursor: 'pointer',
+            transition: 'all 0.15s ease'
+          }}
+        >
+          Push Announcements
         </button>
       </div>
 
-      {/* Quick Stats Grid */}
-      <div className="stats-strip">
-        <div className="stat-pill">
-          <BiGlobe size={20} className="globe-icon" />
-          <div>
-            <span className="stat-label">Total Dispatches</span>
-            <span className="stat-val">{notifications.length}</span>
-          </div>
-        </div>
-        <div className="stat-pill">
-          <BiUserVoice size={20} className="audience-icon" />
-          <div>
-            <span className="stat-label">Total Recipients</span>
-            <span className="stat-val">
-              {notifications.reduce((acc, curr) => acc + (curr.sentCount || 0), 0).toLocaleString()}
-            </span>
-          </div>
-        </div>
-
-      </div>
-
-      {/* Recent Dispatches Section */}
-      <div className="admin-card table-card">
-        <div className="admin-card-header">
-          <div>
-            <h2>Recent Dispatches</h2>
-            <p className="card-subtitle">List of platform announcements and system notifications.</p>
-          </div>
-          <span className="admin-chip pulse-chip">Live Dispatch Tracker</span>
-        </div>
-
-        {isLoading ? (
-          <div className="table-loader">
-            <div className="spinner"></div>
-            <span>Fetching dispatches...</span>
-          </div>
-        ) : notifications.length === 0 ? (
-          <div className="empty-state">
-            <BiBell size={48} className="empty-icon" />
-            <h3>No dispatches sent yet</h3>
-            <p>Dispatched notifications will appear here with dynamic engagement tracking.</p>
-          </div>
-        ) : (
-          <div className="admin-table-container">
-            <div className="admin-table">
-              <div className="admin-table-head notification-table-grid">
-                <span>Audience</span>
-                <span>Subject & Message</span>
-                <span>Target Region</span>
-                <span>Recipients</span>
-                <span>Sent Date</span>
-              </div>
-              
-              {notifications.map((dispatch) => (
-                <div className="admin-table-row notification-table-grid" key={dispatch._id}>
-                  {/* Type/Audience Tag */}
-                  <div>
-                    {dispatch.targetType === 'all' ? (
-                      <span className="type-tag all">Broadcast</span>
-                    ) : (
-                      <span className="type-tag targeted">Targeted</span>
-                    )}
-                  </div>
-                  
-                  {/* Subject and Preview */}
-                  <div className="subject-col">
-                    {dispatch.imageUrl && (
-                      <div className="thumbnail-wrapper">
-                        <img src={dispatch.imageUrl} alt="Notification attachment" />
-                      </div>
-                    )}
-                    <div className="subject-text">
-                      <span className="dispatch-title">{dispatch.title}</span>
-                      <p className="dispatch-desc">{dispatch.message}</p>
-                    </div>
-                  </div>
-                  
-                  {/* Target Region */}
-                  <div className="target-region">
-                    {dispatch.targetType === 'all' ? (
-                      <span className="all-users-label">All Active Users</span>
-                    ) : (
-                      <div className="region-meta">
-                        <BiMap size={14} />
-                        <span>
-                          {dispatch.targetLocation.district || 'All Districts'}, {dispatch.targetLocation.state || 'All States'}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                  
-                  {/* Sent Count */}
-                  <span className="stat-count">{dispatch.sentCount?.toLocaleString() || 0}</span>
-                  
-
-                  
-                  {/* Sent Date */}
-                  <span className="date-field">
-                    {new Date(dispatch.createdAt).toLocaleDateString('en-IN', {
-                      day: 'numeric',
-                      month: 'short',
-                      year: 'numeric'
-                    })}
-                  </span>
-                </div>
-              ))}
+      {activeTab === 'alerts' ? (
+        <div className="admin-card table-card animate-fade-in">
+          <div className="admin-card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+            <div>
+              <h2>System Alerts Inbox</h2>
+              <p className="card-subtitle">Real-time alerts for reels uploads, reports, support requests, and user ads.</p>
+            </div>
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button type="button" className="admin-secondary-btn" onClick={fetchAlerts} style={{ padding: '6px 12px', fontSize: '13px' }}>
+                Refresh
+              </button>
+              <button type="button" className="admin-secondary-btn" onClick={handleMarkAllRead} style={{ padding: '6px 12px', fontSize: '13px' }}>
+                Mark all read
+              </button>
+              <button type="button" className="admin-secondary-btn" onClick={handleClearAlerts} style={{ padding: '6px 12px', fontSize: '13px', color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.2)' }}>
+                Clear Inbox
+              </button>
             </div>
           </div>
-        )}
-      </div>
+
+          {alertsLoading ? (
+            <div className="table-loader" style={{ padding: '60px 0' }}>
+              <div className="spinner"></div>
+              <span>Fetching system alerts...</span>
+            </div>
+          ) : alerts.length === 0 ? (
+            <div className="empty-state" style={{ padding: '60px 20px' }}>
+              <BiBell size={48} className="empty-icon" style={{ color: 'var(--admin-primary)', opacity: 0.7 }} />
+              <h3>All clear! No new alerts</h3>
+              <p>Important events like user uploads, reports, or support tickets will show up here.</p>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', padding: '16px' }}>
+              {alerts.map((alertItem) => {
+                let iconStyle = { background: 'rgba(99,102,241,0.1)', color: '#6366f1' };
+                if (alertItem.type === 'new_report') {
+                  iconStyle = { background: 'rgba(239,68,68,0.1)', color: '#ef4444' };
+                } else if (alertItem.type === 'new_support') {
+                  iconStyle = { background: 'rgba(20,184,166,0.1)', color: '#14b8a6' };
+                } else if (alertItem.type === 'new_ad') {
+                  iconStyle = { background: 'rgba(236,72,153,0.1)', color: '#ec4899' };
+                }
+
+                return (
+                  <div 
+                    key={alertItem._id} 
+                    onClick={() => handleAlertClick(alertItem)}
+                    style={{ 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      gap: '16px', 
+                      padding: '14px 20px', 
+                      background: alertItem.isRead ? 'var(--admin-surface)' : 'rgba(254, 44, 85, 0.03)', 
+                      border: '1px solid var(--admin-border)',
+                      borderLeft: alertItem.isRead ? '3px solid var(--admin-border)' : '3px solid var(--admin-primary)',
+                      borderRadius: '12px',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease',
+                      boxShadow: alertItem.isRead ? 'none' : '0 4px 12px rgba(254, 44, 85, 0.02)'
+                    }}
+                    className="alert-item-card"
+                  >
+                    <div style={{ 
+                      width: '40px', 
+                      height: '40px', 
+                      borderRadius: '10px', 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      justifyContent: 'center',
+                      ...iconStyle
+                    }}>
+                      <BiBell size={20} />
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <h4 style={{ 
+                          fontSize: '14px', 
+                          margin: 0, 
+                          fontWeight: alertItem.isRead ? '600' : '700',
+                          color: 'var(--admin-text)'
+                        }}>
+                          {alertItem.title}
+                        </h4>
+                        <span style={{ fontSize: '11px', color: '#9ca3af' }}>
+                          {new Date(alertItem.createdAt).toLocaleDateString('en-IN', {
+                            day: 'numeric',
+                            month: 'short',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                          })}
+                        </span>
+                      </div>
+                      <p style={{ 
+                        fontSize: '13px', 
+                        margin: '4px 0 0 0', 
+                        color: 'var(--admin-muted)',
+                        fontWeight: alertItem.isRead ? 'normal' : '500'
+                      }}>
+                        {alertItem.message}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      ) : (
+        <>
+          {/* Quick Stats Grid */}
+          <div className="stats-strip">
+            <div className="stat-pill">
+              <BiGlobe size={20} className="globe-icon" />
+              <div>
+                <span className="stat-label">Total Dispatches</span>
+                <span className="stat-val">{notifications.length}</span>
+              </div>
+            </div>
+            <div className="stat-pill">
+              <BiUserVoice size={20} className="audience-icon" />
+              <div>
+                <span className="stat-label">Total Recipients</span>
+                <span className="stat-val">
+                  {notifications.reduce((acc, curr) => acc + (curr.sentCount || 0), 0).toLocaleString()}
+                </span>
+              </div>
+            </div>
+
+          </div>
+
+          {/* Recent Dispatches Section */}
+          <div className="admin-card table-card">
+            <div className="admin-card-header">
+              <div>
+                <h2>Recent Dispatches</h2>
+                <p className="card-subtitle">List of platform announcements and system notifications.</p>
+              </div>
+              <span className="admin-chip pulse-chip">Live Dispatch Tracker</span>
+            </div>
+
+            {isLoading ? (
+              <div className="table-loader">
+                <div className="spinner"></div>
+                <span>Fetching dispatches...</span>
+              </div>
+            ) : notifications.length === 0 ? (
+              <div className="empty-state">
+                <BiBell size={48} className="empty-icon" />
+                <h3>No dispatches sent yet</h3>
+                <p>Dispatched notifications will appear here with dynamic engagement tracking.</p>
+              </div>
+            ) : (
+              <div className="admin-table-container">
+                <div className="admin-table">
+                  <div className="admin-table-head notification-table-grid">
+                    <span>Audience</span>
+                    <span>Subject & Message</span>
+                    <span>Target Region</span>
+                    <span>Recipients</span>
+                    <span>Sent Date</span>
+                  </div>
+                  
+                  {notifications.map((dispatch) => (
+                    <div className="admin-table-row notification-table-grid" key={dispatch._id}>
+                      {/* Type/Audience Tag */}
+                      <div>
+                        {dispatch.targetType === 'all' ? (
+                          <span className="type-tag all">Broadcast</span>
+                        ) : (
+                          <span className="type-tag targeted">Targeted</span>
+                        )}
+                      </div>
+                      
+                      {/* Subject and Preview */}
+                      <div className="subject-col">
+                        {dispatch.imageUrl && (
+                          <div className="thumbnail-wrapper">
+                            <img src={dispatch.imageUrl} alt="Notification attachment" />
+                          </div>
+                        )}
+                        <div className="subject-text">
+                          <span className="dispatch-title">{dispatch.title}</span>
+                          <p className="dispatch-desc">{dispatch.message}</p>
+                        </div>
+                      </div>
+                      
+                      {/* Target Region */}
+                      <div className="target-region">
+                        {dispatch.targetType === 'all' ? (
+                          <span className="all-users-label">All Active Users</span>
+                        ) : (
+                          <div className="region-meta">
+                            <BiMap size={14} />
+                            <span>
+                              {dispatch.targetLocation.district || 'All Districts'}, {dispatch.targetLocation.state || 'All States'}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                      
+                      {/* Sent Count */}
+                      <span className="stat-count">{dispatch.sentCount?.toLocaleString() || 0}</span>
+                      
+                      {/* Sent Date */}
+                      <span className="date-field">
+                        {new Date(dispatch.createdAt).toLocaleDateString('en-IN', {
+                          day: 'numeric',
+                          month: 'short',
+                          year: 'numeric'
+                        })}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </>
+      )}
 
       {/* Composer Modal Overlay */}
       {isComposerOpen && (

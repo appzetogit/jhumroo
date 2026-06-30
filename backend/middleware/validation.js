@@ -47,7 +47,7 @@ export const registerValidation = [
   body('fullName')
     .optional()
     .isLength({ min: 2, max: 50 }).withMessage('Full name must be between 2 and 50 characters')
-    .matches(/^[a-zA-Z]+(?:\s+[a-zA-Z]+)*$/).withMessage('Full name can only contain letters and spaces'),
+    .matches(/^[a-zA-Z\s.'\-]+$/).withMessage('Full name can only contain letters, spaces, dots, hyphens, and apostrophes'),
   body('dateOfBirth')
     .optional()
     .isISO8601().withMessage('Invalid date format')
@@ -104,7 +104,7 @@ export const profileUpdateValidation = [
   body('fullName')
     .optional()
     .isLength({ min: 2, max: 50 }).withMessage('Full name must be between 2 and 50 characters')
-    .matches(/^[a-zA-Z]+(?:\s+[a-zA-Z]+)*$/).withMessage('Full name can only contain letters and spaces'),
+    .matches(/^[a-zA-Z\s.'\-]+$/).withMessage('Full name can only contain letters, spaces, dots, hyphens, and apostrophes'),
   body('bio')
     .optional()
     .isLength({ max: 150 }).withMessage('Bio cannot exceed 150 characters'),
