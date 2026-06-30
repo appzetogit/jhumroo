@@ -1610,6 +1610,13 @@
 
 /* Enable native document scrolling on mobile screens when document-scrollable class is active */
 @media (max-width: 599px) {
+  html {
+    overflow-y: auto;
+  }
+  body {
+    overflow-y: auto;
+  }
+
   html.document-scrollable {
     overflow-y: auto;
     height: auto;
@@ -1635,14 +1642,18 @@
   }
   
   body.document-scrollable:not([data-reel-overlay-open="true"]) .page-container {
+    display: block !important;
     height: auto !important;
     min-height: 100vh !important;
     min-height: 100svh !important;
   }
   
-  body.document-scrollable:not([data-reel-overlay-open="true"]) .scrollable {
+  body.document-scrollable:not([data-reel-overlay-open="true"]) .page-container > .scrollable,
+  body.document-scrollable:not([data-reel-overlay-open="true"]) .page-container > .overflow-y-auto {
+    display: block !important;
     overflow-y: visible !important;
     height: auto !important;
+    flex: none !important;
   }
 }
 
