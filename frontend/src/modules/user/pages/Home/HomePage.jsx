@@ -223,21 +223,22 @@ const HomePage = () => {
       {/* Top Navigation */}
       <div className="absolute top-[var(--safe-area-top)] left-0 w-full flex justify-between items-center px-4 py-3 z-[50] pointer-events-none">
         <div className="w-8" />
-        <div className="flex gap-6 pointer-events-auto">
+        <div className="flex items-center gap-4 pointer-events-auto">
           {reelId ? (
             <div className="flex items-center gap-1 text-white font-bold cursor-pointer" onClick={() => navigate('/')}>
               <BiChevronLeft size={28} /> <span>Back</span>
             </div>
           ) : (
-            reelSections.map((section) => (
-              <span
-                key={section.id}
-                className={`text-[17px] font-semibold cursor-pointer transition-colors ${currentTab === section.id ? 'text-white' : 'text-white/60'}`}
-                onClick={() => handleTabChange(section.id)}
-              >
-                {section.label}
-                {currentTab === section.id && <div className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-6 h-0.5 bg-white rounded-full" />}
-              </span>
+            reelSections.map((section, idx) => (
+              <React.Fragment key={section.id}>
+                {idx > 0 && <span className="text-white text-[14px] font-bold pointer-events-none">|</span>}
+                <span
+                  className={`text-[17px] font-semibold cursor-pointer transition-colors relative ${currentTab === section.id ? 'text-white font-black' : 'text-white/60'}`}
+                  onClick={() => handleTabChange(section.id)}
+                >
+                  {section.label}
+                </span>
+              </React.Fragment>
             ))
           )}
         </div>
