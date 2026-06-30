@@ -69,7 +69,7 @@
 
   html {
     height: 100%;
-    overflow: hidden !important;
+    overflow: hidden;
   }
 
   html, body, #root {
@@ -79,7 +79,7 @@
   body {
     background-color: var(--theme-app-shell-bg);
     color: var(--theme-text-primary);
-    overflow: hidden !important;
+    overflow: hidden;
     width: 100vw;
     min-height: 100vh;
     min-height: 100svh;
@@ -96,7 +96,7 @@
     min-height: 100%;
     height: 100%;
     position: relative;
-    overflow: hidden !important;
+    overflow: hidden;
     background-color: var(--theme-app-shell-bg);
   }
 
@@ -1605,6 +1605,44 @@
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
+  }
+}
+
+/* Enable native document scrolling on mobile screens when document-scrollable class is active */
+@media (max-width: 599px) {
+  html.document-scrollable {
+    overflow-y: auto;
+    height: auto;
+  }
+  
+  body.document-scrollable:not([data-reel-overlay-open="true"]) {
+    overflow-y: auto;
+    height: auto;
+    min-height: 100%;
+    align-items: stretch;
+  }
+  
+  body.document-scrollable:not([data-reel-overlay-open="true"]) #root {
+    overflow: visible !important;
+    height: auto !important;
+    min-height: 100% !important;
+  }
+  
+  body.document-scrollable:not([data-reel-overlay-open="true"]) .theme-app-shell {
+    overflow: visible !important;
+    height: auto !important;
+    min-height: 100% !important;
+  }
+  
+  body.document-scrollable:not([data-reel-overlay-open="true"]) .page-container {
+    height: auto !important;
+    min-height: 100vh !important;
+    min-height: 100svh !important;
+  }
+  
+  body.document-scrollable:not([data-reel-overlay-open="true"]) .scrollable {
+    overflow-y: visible !important;
+    height: auto !important;
   }
 }
 

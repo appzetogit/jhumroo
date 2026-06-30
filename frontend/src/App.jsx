@@ -175,6 +175,29 @@ const AppContent = () => {
         };
     }, [pathname]);
 
+    useEffect(() => {
+        const isFullScreenRoute = 
+            pathname === '/' || 
+            pathname === '/login' ||
+            pathname === '/signup' ||
+            pathname.startsWith('/reel/') ||
+            pathname.startsWith('/inbox/chat/') || 
+            pathname === '/create' ||
+            pathname === '/settings/interests' ||
+            appState === 'onboarding' ||
+            pathname.startsWith('/admin');
+            
+        const isScrollable = !isFullScreenRoute;
+
+        document.body.classList.toggle('document-scrollable', isScrollable);
+        document.documentElement.classList.toggle('document-scrollable', isScrollable);
+
+        return () => {
+          document.body.classList.remove('document-scrollable');
+          document.documentElement.classList.remove('document-scrollable');
+        };
+    }, [pathname, appState]);
+
     // Sync FCM Token and set up foreground listener when authenticated
     // We use a ref to ensure only one listener is active at a time
     const fcmUnsubscribeRef = useRef(null);
