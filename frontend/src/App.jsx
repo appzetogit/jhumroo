@@ -193,13 +193,20 @@ const AppContent = () => {
             cleanPath.startsWith('/admin');
             
         const isScrollable = !isFullScreenRoute;
+        const allowPullToRefresh = 
+            cleanPath === '' ||
+            cleanPath === '/' ||
+            cleanPath.startsWith('/reel/') ||
+            isScrollable;
 
         document.body.classList.toggle('document-scrollable', isScrollable);
         document.documentElement.classList.toggle('document-scrollable', isScrollable);
+        document.body.classList.toggle('allow-pull-to-refresh', allowPullToRefresh);
+        document.documentElement.classList.toggle('allow-pull-to-refresh', allowPullToRefresh);
 
         return () => {
-          document.body.classList.remove('document-scrollable');
-          document.documentElement.classList.remove('document-scrollable');
+          document.body.classList.remove('document-scrollable', 'allow-pull-to-refresh');
+          document.documentElement.classList.remove('document-scrollable', 'allow-pull-to-refresh');
         };
     }, [pathname, appState]);
 

@@ -1620,16 +1620,42 @@ body {
   overscroll-behavior-y: auto;
 }
 
-/* --- Fullscreen routes (Home reels, Chat, Create): lock root  */
-body:not(.document-scrollable) #root {
+
+/* ============================================================ */
+/* Native Pull-to-Refresh: Document Scrolling Architecture      */
+/* Applied when .allow-pull-to-refresh or .document-scrollable  */
+/* is active on the HTML/Body element                           */
+/* ============================================================ */
+
+/* --- Base overscroll behavior for browser/WebView viewports  */
+html {
+  overscroll-behavior-y: auto;
+}
+
+body {
+  overscroll-behavior-y: auto;
+}
+
+/* --- Fullscreen routes with refresh blocked (Chat screen,     */
+/* --- Create/Camera screen): Lock root to prevent pull gesture */
+body:not(.allow-pull-to-refresh) #root {
   height: 100vh !important;
   height: 100svh !important;
   overflow: hidden !important;
 }
-body:not(.document-scrollable) .theme-app-shell {
+body:not(.allow-pull-to-refresh) .theme-app-shell {
   height: 100vh !important;
   height: 100svh !important;
   overflow: hidden !important;
+}
+
+/* --- Fullscreen routes with refresh allowed (Home/Feed screen): */
+/* --- Remove overflow: hidden to let the overscroll gesture propagate */
+body.allow-pull-to-refresh #root {
+  overflow: visible !important;
+}
+body.allow-pull-to-refresh .theme-app-shell {
+  overflow: visible !important;
 }
 
 /* ------------------------------------------------------------ */
@@ -1640,13 +1666,19 @@ body:not(.document-scrollable) .theme-app-shell {
 html.document-scrollable {
   overflow-y: auto !important;
   height: auto !important;
+  /* GUARANTEE: Force 1px overflow so SwipeRefreshLayout works   */
+  /* even if the list is short (e.g. Inbox with only 1-2 chats)   */
+  min-height: calc(100vh + 1px) !important;
+  min-height: calc(100svh + 1px) !important;
   overscroll-behavior-y: auto !important;
 }
 
 body.document-scrollable:not([data-reel-overlay-open="true"]) {
   overflow-y: auto !important;
   height: auto !important;
-  min-height: 100% !important;
+  /* GUARANTEE: Force 1px overflow to activate pull-to-refresh   */
+  min-height: calc(100vh + 1px) !important;
+  min-height: calc(100svh + 1px) !important;
   flex-direction: column !important;
   align-items: stretch !important;
   overscroll-behavior-y: auto !important;
@@ -1709,6 +1741,7 @@ body.document-scrollable:not([data-reel-overlay-open="true"]) .absolute .overflo
   overflow-y: auto !important;
   height: auto !important;
 }
+
 
 
 

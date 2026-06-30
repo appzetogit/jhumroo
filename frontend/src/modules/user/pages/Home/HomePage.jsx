@@ -209,7 +209,7 @@ const HomePage = () => {
 
   return (
     <div 
-      className="relative w-full h-full bg-black overflow-hidden"
+      className="relative w-full h-full bg-black overflow-y-visible"
       onClick={onboardingStep === 2 ? handleFinishOnboarding : undefined}
       onWheel={onboardingStep === 2 ? handleFinishOnboarding : undefined}
       onTouchStart={onboardingStep === 2 ? handleFinishOnboarding : undefined}
