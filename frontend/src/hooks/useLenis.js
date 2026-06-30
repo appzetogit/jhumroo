@@ -87,9 +87,10 @@ export const useInitializeLenis = (customConfig = {}) => {
         ...customConfig,
       };
 
-      // Respect mobile touch fallback
+      // Respect mobile touch fallback and screen size constraints
       const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-      if (isTouchDevice && !mergedConfig.smoothTouch) {
+      const isMobileViewport = window.innerWidth < 600;
+      if ((isTouchDevice && !mergedConfig.smoothTouch) || isMobileViewport) {
         return;
       }
 

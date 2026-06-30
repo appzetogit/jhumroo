@@ -1612,9 +1612,25 @@
 @media (max-width: 599px) {
   html {
     overflow-y: auto;
+    height: auto;
   }
   body {
     overflow-y: auto;
+    height: auto;
+    min-height: 100%;
+    align-items: stretch;
+  }
+
+  /* Fullscreen routes (Home, Chat, Create) - lock root to viewport */
+  body:not(.document-scrollable) #root {
+    height: 100vh !important;
+    height: 100svh !important;
+    overflow: hidden !important;
+  }
+  body:not(.document-scrollable) .theme-app-shell {
+    height: 100vh !important;
+    height: 100svh !important;
+    overflow: hidden !important;
   }
 
   html.document-scrollable {
@@ -1649,12 +1665,23 @@
     min-height: 100svh !important;
   }
   
-  body.document-scrollable:not([data-reel-overlay-open="true"]) .scrollable:not(.fixed *):not(.absolute *),
-  body.document-scrollable:not([data-reel-overlay-open="true"]) .overflow-y-auto:not(.fixed *):not(.absolute *) {
+  body.document-scrollable:not([data-reel-overlay-open="true"]) .scrollable,
+  body.document-scrollable:not([data-reel-overlay-open="true"]) .overflow-y-auto {
     display: block !important;
     overflow-y: visible !important;
     height: auto !important;
     flex: none !important;
+  }
+
+  /* Restore internal scrolling inside fixed or absolute elements (like comment/likes sheets or modals) */
+  body.document-scrollable:not([data-reel-overlay-open="true"]) .fixed .scrollable,
+  body.document-scrollable:not([data-reel-overlay-open="true"]) .fixed .overflow-y-auto,
+  body.document-scrollable:not([data-reel-overlay-open="true"]) .absolute .scrollable,
+  body.document-scrollable:not([data-reel-overlay-open="true"]) .absolute .overflow-y-auto {
+    display: block !important;
+    overflow-y: auto !important;
+    height: auto !important;
+    flex: 1 1 0% !important;
   }
 }
 
