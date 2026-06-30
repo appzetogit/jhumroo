@@ -1651,6 +1651,14 @@ body:not(.allow-pull-to-refresh) .theme-app-shell {
 
 /* --- Fullscreen routes with refresh allowed (Home/Feed screen): */
 /* --- Remove overflow: hidden to let the overscroll gesture propagate */
+html.allow-pull-to-refresh {
+  overflow-y: auto !important;
+  overscroll-behavior-y: auto !important;
+}
+body.allow-pull-to-refresh {
+  overflow-y: auto !important;
+  overscroll-behavior-y: auto !important;
+}
 body.allow-pull-to-refresh #root {
   overflow: visible !important;
 }
