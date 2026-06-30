@@ -1608,90 +1608,112 @@
   }
 }
 
-/* Enable native document scrolling on mobile screens when document-scrollable class is active */
-@media (max-width: 599px) {
-  html {
-    overflow-y: auto;
-    height: auto;
-  }
-  body {
-    overflow-y: auto;
-    height: auto;
-    min-height: 100%;
-    align-items: stretch;
-  }
 
-  /* Fullscreen routes (Home, Chat, Create) - lock root to viewport */
-  body:not(.document-scrollable) #root {
-    height: 100vh !important;
-    height: 100svh !important;
-    overflow: hidden !important;
-  }
-  body:not(.document-scrollable) .theme-app-shell {
-    height: 100vh !important;
-    height: 100svh !important;
-    overflow: hidden !important;
-  }
+/* ============================================================ */
+/* Native Pull-to-Refresh: Document Scrolling Architecture      */
+/* Applied on ALL screen sizes when .document-scrollable active */
+/* ============================================================ */
 
-  html.document-scrollable {
-    overflow-y: auto;
-    height: auto;
-  }
-  
-  body.document-scrollable:not([data-reel-overlay-open="true"]) {
-    overflow-y: auto;
-    height: auto;
-    min-height: 100%;
-    align-items: stretch;
-  }
-  
-  body.document-scrollable:not([data-reel-overlay-open="true"]) #root {
-    overflow: visible !important;
-    height: auto !important;
-    min-height: 100% !important;
-  }
-  
-  /* KEY FIX: Break the flex chain so window scrolls instead of inner container */
-  body.document-scrollable:not([data-reel-overlay-open="true"]) .theme-app-shell {
-    display: block !important;
-    overflow: visible !important;
-    height: auto !important;
-    min-height: 100svh !important;
-  }
-  
-  body.document-scrollable:not([data-reel-overlay-open="true"]) .page-container {
-    display: block !important;
-    overflow: visible !important;
-    height: auto !important;
-    min-height: 100svh !important;
-  }
-  
-  body.document-scrollable:not([data-reel-overlay-open="true"]) .scrollable,
-  body.document-scrollable:not([data-reel-overlay-open="true"]) .overflow-y-auto {
-    display: block !important;
-    overflow-y: visible !important;
-    height: auto !important;
-    flex: none !important;
-    max-height: none !important;
-  }
-
-  /* Restore scrolling inside modals/sheets (fixed or absolute positioned) */
-  body.document-scrollable:not([data-reel-overlay-open="true"]) .fixed .scrollable,
-  body.document-scrollable:not([data-reel-overlay-open="true"]) .fixed .overflow-y-auto {
-    display: block !important;
-    overflow-y: auto !important;
-    height: 100% !important;
-    flex: 1 1 0% !important;
-    max-height: 100% !important;
-  }
-
-  body.document-scrollable:not([data-reel-overlay-open="true"]) .absolute .scrollable,
-  body.document-scrollable:not([data-reel-overlay-open="true"]) .absolute .overflow-y-auto {
-    display: block !important;
-    overflow-y: auto !important;
-    height: auto !important;
-  }
+/* --- Always allow overscroll on html/body so Flutter WebView  */
+/* --- can detect the gesture even before class is added        */
+html {
+  overscroll-behavior-y: auto;
 }
+
+body {
+  overscroll-behavior-y: auto;
+}
+
+/* --- Fullscreen routes (Home reels, Chat, Create): lock root  */
+body:not(.document-scrollable) #root {
+  height: 100vh !important;
+  height: 100svh !important;
+  overflow: hidden !important;
+}
+body:not(.document-scrollable) .theme-app-shell {
+  height: 100vh !important;
+  height: 100svh !important;
+  overflow: hidden !important;
+}
+
+/* ------------------------------------------------------------ */
+/* When .document-scrollable is active (Profile, Inbox,         */
+/* Settings, Search, etc.) — make document itself scroll        */
+/* ------------------------------------------------------------ */
+
+html.document-scrollable {
+  overflow-y: auto !important;
+  height: auto !important;
+  overscroll-behavior-y: auto !important;
+}
+
+body.document-scrollable:not([data-reel-overlay-open="true"]) {
+  overflow-y: auto !important;
+  height: auto !important;
+  min-height: 100% !important;
+  align-items: stretch !important;
+  overscroll-behavior-y: auto !important;
+}
+
+/* Root expands to fit content */
+body.document-scrollable:not([data-reel-overlay-open="true"]) #root {
+  overflow: visible !important;
+  height: auto !important;
+  min-height: 100% !important;
+}
+
+/* KEY FIX: Break the flex chain — app shell must not clip scroll */
+body.document-scrollable:not([data-reel-overlay-open="true"]) .theme-app-shell {
+  display: block !important;
+  overflow: visible !important;
+  height: auto !important;
+  min-height: 100svh !important;
+}
+
+/* Page containers must expand, not lock to viewport height      */
+body.document-scrollable:not([data-reel-overlay-open="true"]) .page-container {
+  display: block !important;
+  overflow: visible !important;
+  height: auto !important;
+  min-height: 100svh !important;
+  /* Override h-screen / min-h-screen Tailwind utilities */
+  max-height: none !important;
+}
+
+/* Inner scroll containers become block so content flows out     */
+body.document-scrollable:not([data-reel-overlay-open="true"]) .scrollable,
+body.document-scrollable:not([data-reel-overlay-open="true"]) .overflow-y-auto {
+  display: block !important;
+  overflow-y: visible !important;
+  height: auto !important;
+  flex: none !important;
+  max-height: none !important;
+}
+
+/* ------------------------------------------------------------ */
+/* Restore internal scroll for modals / sheets / drawers        */
+/* (elements inside .fixed or .absolute positioned parents)     */
+/* ------------------------------------------------------------ */
+
+body.document-scrollable:not([data-reel-overlay-open="true"]) .fixed .scrollable,
+body.document-scrollable:not([data-reel-overlay-open="true"]) .fixed .overflow-y-auto,
+body.document-scrollable:not([data-reel-overlay-open="true"]) [style*="position: fixed"] .scrollable,
+body.document-scrollable:not([data-reel-overlay-open="true"]) [style*="position: fixed"] .overflow-y-auto {
+  display: flex !important;
+  overflow-y: auto !important;
+  height: 100% !important;
+  flex: 1 1 0% !important;
+  max-height: 100% !important;
+}
+
+body.document-scrollable:not([data-reel-overlay-open="true"]) .absolute .scrollable,
+body.document-scrollable:not([data-reel-overlay-open="true"]) .absolute .overflow-y-auto {
+  display: block !important;
+  overflow-y: auto !important;
+  height: auto !important;
+}
+
+
 
 
 

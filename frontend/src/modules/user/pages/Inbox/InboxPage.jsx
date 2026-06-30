@@ -312,7 +312,7 @@ const InboxPage = () => {
   };
 
   return (
-    <div className="page-container theme-surface-page flex flex-col overflow-hidden h-screen relative">
+    <div className="page-container theme-surface-page flex flex-col relative">
       {/* Action Menu Overlay */}
       {menuConfig && (
         <div 
