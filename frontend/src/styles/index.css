@@ -1651,17 +1651,18 @@
     min-height: 100% !important;
   }
   
+  /* KEY FIX: Break the flex chain so window scrolls instead of inner container */
   body.document-scrollable:not([data-reel-overlay-open="true"]) .theme-app-shell {
+    display: block !important;
     overflow: visible !important;
     height: auto !important;
-    min-height: 100% !important;
+    min-height: 100svh !important;
   }
   
   body.document-scrollable:not([data-reel-overlay-open="true"]) .page-container {
     display: block !important;
     overflow: visible !important;
     height: auto !important;
-    min-height: 100vh !important;
     min-height: 100svh !important;
   }
   
@@ -1671,17 +1672,24 @@
     overflow-y: visible !important;
     height: auto !important;
     flex: none !important;
+    max-height: none !important;
   }
 
-  /* Restore internal scrolling inside fixed or absolute elements (like comment/likes sheets or modals) */
+  /* Restore scrolling inside modals/sheets (fixed or absolute positioned) */
   body.document-scrollable:not([data-reel-overlay-open="true"]) .fixed .scrollable,
-  body.document-scrollable:not([data-reel-overlay-open="true"]) .fixed .overflow-y-auto,
+  body.document-scrollable:not([data-reel-overlay-open="true"]) .fixed .overflow-y-auto {
+    display: block !important;
+    overflow-y: auto !important;
+    height: 100% !important;
+    flex: 1 1 0% !important;
+    max-height: 100% !important;
+  }
+
   body.document-scrollable:not([data-reel-overlay-open="true"]) .absolute .scrollable,
   body.document-scrollable:not([data-reel-overlay-open="true"]) .absolute .overflow-y-auto {
     display: block !important;
     overflow-y: auto !important;
     height: auto !important;
-    flex: 1 1 0% !important;
   }
 }
 
