@@ -1656,10 +1656,16 @@ body:not(.allow-pull-to-refresh) .theme-app-shell {
 /* --- Remove overflow: hidden to let the overscroll gesture propagate */
 html.allow-pull-to-refresh {
   overflow-y: auto !important;
+  height: auto !important;
+  min-height: calc(100vh + 1px) !important;
+  min-height: calc(100svh + 1px) !important;
   overscroll-behavior-y: auto !important;
 }
 body.allow-pull-to-refresh {
   overflow-y: auto !important;
+  height: auto !important;
+  min-height: calc(100vh + 1px) !important;
+  min-height: calc(100svh + 1px) !important;
   overscroll-behavior-y: auto !important;
 }
 body.allow-pull-to-refresh #root {
