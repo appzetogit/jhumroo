@@ -30,14 +30,11 @@ const PhoneInput = ({ onNext, onBack, onSwitchMode, mode = 'signup', isThemed = 
     
     try {
       // Call backend API to send OTP
-      const response = await sendOTP(phoneNumber, '+91', mode);
-      console.log('📱 OTP sent successfully:', response);
-      
-      // Default OTP for testing
-      const otp = '123456';
+      await sendOTP(phoneNumber, '+91', mode);
+      console.log('📱 OTP sent successfully');
       
       setLoading(false);
-      onNext(phoneNumber, otp);
+      onNext(phoneNumber);
     } catch (err) {
       if (!err?.requireSignup) {
         console.error('❌ Failed to send OTP:', err);

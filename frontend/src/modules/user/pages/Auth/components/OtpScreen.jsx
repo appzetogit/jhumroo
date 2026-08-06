@@ -5,7 +5,7 @@ import { useAuth } from '../../../../../context/AuthContext';
 const OTP_LENGTH = 6;
 const EXPIRY_TIME = 120; // 2 minutes
 
-const OtpScreen = ({ phoneNumber, generatedOtp, onVerifySuccess, onBack, onEditPhone, onRegenerateOtp, isThemed = false }) => {
+const OtpScreen = ({ phoneNumber, onVerifySuccess, onBack, onEditPhone, isThemed = false }) => {
   const { verifyOTP, sendOTP } = useAuth();
   const [otp, setOtp] = useState('');
   const [timer, setTimer] = useState(EXPIRY_TIME);
@@ -81,12 +81,8 @@ const OtpScreen = ({ phoneNumber, generatedOtp, onVerifySuccess, onBack, onEditP
     
     try {
       // Call backend API to resend OTP
-      const response = await sendOTP(phoneNumber, '+91');
-      console.log('📱 OTP resent successfully:', response);
-      
-      // In development, the OTP is returned in the response for testing
-      const newOtp = response.otp || '0000'; // Fallback for production
-      onRegenerateOtp(newOtp);
+      await sendOTP(phoneNumber, '+91');
+      console.log('📱 OTP resent successfully');
       
       setTimer(EXPIRY_TIME);
       setOtp('');

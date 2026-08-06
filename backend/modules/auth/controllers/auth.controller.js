@@ -60,11 +60,7 @@ export const sendOTP = asyncHandler(async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: smsResult.message || 'OTP sent successfully',
-      ...(process.env.NODE_ENV === 'development' && { 
-        otp,
-        expiresIn: `${process.env.OTP_EXPIRY_MINUTES || 10} minutes`
-      }) // Send OTP in response for development/testing
+      message: smsResult.message || 'OTP sent successfully'
     });
   } catch (error) {
     // Clear OTP if SMS sending fails

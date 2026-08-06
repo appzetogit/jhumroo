@@ -151,6 +151,7 @@ const ProfilePage = () => {
   const isOwnProfile = !profileUsername || 
     (profileUsername && currentUser?.username && profileUsername.toLowerCase() === currentUser.username.toLowerCase()) ||
     (profile?._id && currentUser?._id && profile._id === currentUser._id);
+  const activeProfile = profile || (isOwnProfile ? currentUser : null);
   const isPrivateAndLocked = !isOwnProfile && profile?.isPrivate && !isFollowing;
 
   useEffect(() => {
@@ -316,6 +317,13 @@ const ProfilePage = () => {
         setIncomingFollowStatus(profileRes.user.incomingFollowStatus);
         setIsBlocked(currentUser?.blockedUsers?.includes(profileRes.user._id));
         setIsBlockedByThem(profileRes.user.isBlockedByThem || false);
+
+        if (isOwnProfile && updateUser) {
+          updateUser({
+            ...currentUser,
+            ...profileRes.user
+          });
+        }
 
         if (!profileRes.user.isBlockedByThem && reelsRes.success) {
           setUserVideos(reelsRes.reels);
@@ -525,7 +533,7 @@ const ProfilePage = () => {
 
   const handleShareProfile = async () => {
     const shareData = {
-      title: `${profile?.fullName || displayUsername}'s Profile`,
+      title: `${activeProfile?.fullName || displayUsername}'s Profile`,
       text: `Check out ${displayUsername}'s profile on Jhumroo!`,
       url: window.location.href,
     };
@@ -646,7 +654,7 @@ const ProfilePage = () => {
             <BiArrowBack size={26} />
           </button>
         )}
-        <h2 className="text-[17px] font-bold text-white">{profile?.fullName || displayUsername}</h2>
+        <h2 className="text-[17px] font-bold text-white">{activeProfile?.fullName || displayUsername}</h2>
         <div className="flex items-center gap-3">
           <button 
             onClick={handleShareProfile}
@@ -683,7 +691,7 @@ const ProfilePage = () => {
             <div className="w-full h-full rounded-full p-[2px] bg-gradient-to-tr from-yellow-400 to-pink-600">
               <div className="w-full h-full rounded-full p-[3px] bg-[#161616]">
                 <img 
-                  src={profile?.profilePicture?.url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${displayUsername}`} 
+                  src={activeProfile?.profilePicture?.url || (typeof activeProfile?.profilePicture === 'string' ? activeProfile?.profilePicture : null) || `https://api.dicebear.com/7.x/avataaars/svg?seed=${displayUsername}`} 
                   alt="avatar" 
                   className="w-full h-full rounded-full object-cover bg-[#242424]" 
                 />
@@ -703,23 +711,23 @@ const ProfilePage = () => {
             )}
           </div>
           
-          <h1 className="text-[18px] font-bold text-white mb-0.5">{profile?.fullName || displayUsername}</h1>
+          <h1 className="text-[18px] font-bold text-white mb-0.5">{activeProfile?.fullName || displayUsername}</h1>
           <p className="text-[13px] font-medium text-white/50 mb-5">@{displayUsername}</p>
 
           {/* Stats Section with Dividers */}
           <div className="flex items-center justify-center w-full mb-6">
             <div className="flex flex-col items-center px-6 cursor-pointer active:opacity-70" onClick={() => navigate(`/user/${displayUsername}/followers`, { state: { activeTab: 'following' } })}>
-              <span className="text-[17px] font-bold text-white">{profile?.stats?.followingCount || 0}</span>
+              <span className="text-[17px] font-bold text-white">{activeProfile?.stats?.followingCount ?? activeProfile?.followingCount ?? 0}</span>
               <span className="text-[12px] text-white/40">Following</span>
             </div>
             <div className="w-[1px] h-3 bg-white/10" />
             <div className="flex flex-col items-center px-6 cursor-pointer active:opacity-70" onClick={() => navigate(`/user/${displayUsername}/followers`, { state: { activeTab: 'followers' } })}>
-              <span className="text-[17px] font-bold text-white">{profile?.stats?.followersCount || 0}</span>
+              <span className="text-[17px] font-bold text-white">{activeProfile?.stats?.followersCount ?? activeProfile?.followersCount ?? 0}</span>
               <span className="text-[12px] text-white/40">Followers</span>
             </div>
             <div className="w-[1px] h-3 bg-white/10" />
             <div className="flex flex-col items-center px-6">
-              <span className="text-[17px] font-bold text-white">{profile?.stats?.likesCount || 0}</span>
+              <span className="text-[17px] font-bold text-white">{activeProfile?.stats?.likesCount ?? activeProfile?.likesCount ?? 0}</span>
               <span className="text-[12px] text-white/40">Likes</span>
             </div>
           </div>
@@ -796,7 +804,7 @@ const ProfilePage = () => {
           {!showSuggested && (
             <div className="px-6">
                <p className="text-[14px] text-white/80 text-center leading-relaxed whitespace-pre-line">
-                {profile?.bio || 'No bio yet'}
+                {activeProfile?.bio || 'No bio yet'}
               </p>
             </div>
           )}

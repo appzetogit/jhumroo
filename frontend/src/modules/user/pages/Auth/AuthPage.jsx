@@ -240,7 +240,6 @@ const AuthPage = ({ onComplete, initialMode = 'signup' }) => {
 
   // Auth state
   const [phoneNumber, setPhoneNumber] = useState('');
-  const [generatedOtp, setGeneratedOtp] = useState('');
   const [birthdaySelected, setBirthdaySelected] = useState(() => {
     return sessionStorage.getItem('signup_birthday_selected') === 'true';
   });
@@ -760,9 +759,8 @@ const AuthPage = ({ onComplete, initialMode = 'signup' }) => {
                 {step === 4 ? (
                   <PhoneInput
                     mode={mode}
-                    onNext={(phone, otp) => {
+                    onNext={(phone) => {
                       setPhoneNumber(phone);
-                      setGeneratedOtp(otp);
                       setStep(5);
                     }}
                     onBack={() => {
@@ -778,11 +776,9 @@ const AuthPage = ({ onComplete, initialMode = 'signup' }) => {
                 ) : (
                   <OtpScreen
                     phoneNumber={phoneNumber}
-                    generatedOtp={generatedOtp}
                     onVerifySuccess={handleAuthSuccess}
                     onBack={() => setStep(4)}
                     onEditPhone={() => setStep(4)}
-                    onRegenerateOtp={(newOtp) => setGeneratedOtp(newOtp)}
                     isThemed={true}
                   />
                 )}
