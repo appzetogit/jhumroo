@@ -573,6 +573,7 @@ const ProfilePage = () => {
           setIsFollowing(false);
           setFollowStatus(null);
           setIsFollower(false);
+          window.dispatchEvent(new CustomEvent('user-blocked', { detail: { userId: profile._id } }));
         }
         setShowOptions(false);
       }
@@ -619,7 +620,7 @@ const ProfilePage = () => {
   return (
     <div className={`page-container ${isOwnProfile ? '' : 'pb-0'} theme-surface-page flex flex-col`}>
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 shrink-0">
+      <div className="flex items-center justify-between px-4 py-3 shrink-0 sticky top-0 z-[60] bg-[color:var(--theme-page-bg)]/90 backdrop-blur-md">
         {isOwnProfile ? (
           <button onClick={() => navigate('/user/requests')} className="text-white active:opacity-60 relative">
             <svg 

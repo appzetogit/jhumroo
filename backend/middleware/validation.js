@@ -30,7 +30,7 @@ export const registerValidation = [
     .isLength({ min: 3, max: 30 }).withMessage('Username must be between 3 and 30 characters')
     .matches(/^[a-z0-9_]+$/).withMessage('Username can only contain lowercase letters, numbers, and underscores'),
   body('email')
-    .optional()
+    .optional({ checkFalsy: true })
     .isEmail().withMessage('Invalid email address')
     .custom((value) => {
       const email = value.trim();
@@ -45,11 +45,11 @@ export const registerValidation = [
       return true;
     }),
   body('fullName')
-    .optional()
+    .optional({ checkFalsy: true })
     .isLength({ min: 2, max: 50 }).withMessage('Full name must be between 2 and 50 characters')
     .matches(/^[a-zA-Z\s.'\-]+$/).withMessage('Full name can only contain letters, spaces, dots, hyphens, and apostrophes'),
   body('dateOfBirth')
-    .optional()
+    .optional({ checkFalsy: true })
     .isISO8601().withMessage('Invalid date format')
 ];
 
@@ -83,11 +83,11 @@ export const otpVerifyValidation = [
  */
 export const profileUpdateValidation = [
   body('username')
-    .optional()
+    .optional({ checkFalsy: true })
     .isLength({ min: 3, max: 30 }).withMessage('Username must be between 3 and 30 characters')
     .matches(/^[a-z0-9_]+$/).withMessage('Username can only contain lowercase letters, numbers, and underscores'),
   body('email')
-    .optional()
+    .optional({ checkFalsy: true })
     .isEmail().withMessage('Invalid email address')
     .custom((value) => {
       const email = value.trim();
@@ -102,11 +102,11 @@ export const profileUpdateValidation = [
       return true;
     }),
   body('fullName')
-    .optional()
+    .optional({ checkFalsy: true })
     .isLength({ min: 2, max: 50 }).withMessage('Full name must be between 2 and 50 characters')
     .matches(/^[a-zA-Z\s.'\-]+$/).withMessage('Full name can only contain letters, spaces, dots, hyphens, and apostrophes'),
   body('bio')
-    .optional()
+    .optional({ checkFalsy: true })
     .isLength({ max: 150 }).withMessage('Bio cannot exceed 150 characters'),
   body('notificationSettings')
     .optional()

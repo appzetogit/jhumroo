@@ -26,6 +26,7 @@ const ReportUserSheet = ({ isOpen, onClose, userId }) => {
     try {
       setError(null);
       await userService.reportUser(userId, reason);
+      window.dispatchEvent(new CustomEvent('user-reported', { detail: { userId } }));
       setStep(2);
     } catch (err) {
       setError(err.response?.data?.message || err.message || "Failed to submit report");

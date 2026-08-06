@@ -24,8 +24,18 @@ export const useReelsAPI = () => {
       const { reelId } = e.detail;
       setReels(prev => prev.filter(r => r.id !== reelId));
     };
+    const handleUserHidden = (e) => {
+      const { userId } = e.detail;
+      setReels(prev => prev.filter(r => r.user?._id !== userId));
+    };
     window.addEventListener('reel-reported', handleReelReported);
-    return () => window.removeEventListener('reel-reported', handleReelReported);
+    window.addEventListener('user-blocked', handleUserHidden);
+    window.addEventListener('user-reported', handleUserHidden);
+    return () => {
+      window.removeEventListener('reel-reported', handleReelReported);
+      window.removeEventListener('user-blocked', handleUserHidden);
+      window.removeEventListener('user-reported', handleUserHidden);
+    };
   }, []);
 
   const fetchFeed = useCallback(async (feedType = 'foryou', isInitial = false, limit = 10) => {

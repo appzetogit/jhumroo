@@ -76,7 +76,7 @@ const DEFAULT_SETTINGS_SECTIONS = [
   {
     title: 'Content & Display',
     items: [
-      { icon: 'bell', label: 'Push notifications', route: '/settings/push-notifications' },
+      { icon: 'bell', label: 'Notifications', route: '/settings/push-notifications' },
       { icon: 'globe', label: 'Ads Manager', route: '/settings/ads-manager' },
       { icon: 'moon', label: 'Dark mode', isToggle: true },
       { icon: 'helpCircle', label: 'Help Center', route: '/settings/help-center' },

@@ -1,9 +1,16 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { BiChevronLeft } from 'react-icons/bi';
 
 const SettingsSubPageLayout = ({ title, children, backTo }) => {
   const navigate = useNavigate();
+
+  // These pages scroll at the document level (see App.jsx document-scrollable mode), which
+  // doesn't reset on SPA navigation - without this a page can open already scrolled partway
+  // down if the previous page was scrolled when the user navigated away from it.
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
 
   return (
     <div className="page-container pb-0 theme-surface-page flex flex-col min-h-screen">

@@ -1,7 +1,9 @@
 import React from 'react';
-import { BiBlock, BiErrorCircle } from 'react-icons/bi';
+import { BiBlock, BiErrorCircle, BiChevronRight } from 'react-icons/bi';
+import { useNavigate } from 'react-router-dom';
 
 const SuspendedScreen = ({ reason }) => {
+  const navigate = useNavigate();
   return (
     <div className="suspended-screen">
       <div className="suspended-content">
@@ -20,10 +22,11 @@ const SuspendedScreen = ({ reason }) => {
           </div>
         )}
 
-        <div className="contact-support">
+        <button type="button" className="contact-support" onClick={() => navigate('/settings/support')}>
           <BiErrorCircle size={18} />
-          <span>If you think this is a mistake, please contact support.</span>
-        </div>
+          <span>If you think this is a mistake, contact support</span>
+          <BiChevronRight size={16} />
+        </button>
       </div>
 
       <style dangerouslySetInnerHTML={{ __html: `
@@ -84,9 +87,15 @@ const SuspendedScreen = ({ reason }) => {
           display: flex;
           align-items: center;
           justify-content: center;
-          gap: 8px;
-          font-size: 13px;
-          color: #9ca3af;
+          gap: 6px;
+          font-size: 14px;
+          font-weight: 700;
+          color: #2563eb;
+          background: none;
+          border: none;
+          padding: 8px;
+          cursor: pointer;
+          text-decoration: underline;
         }
       `}} />
     </div>

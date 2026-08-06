@@ -9,7 +9,8 @@ import {
   acceptFollowRequest,
   rejectFollowRequest,
   checkFollowStatus,
-  getFollowRequestsCount
+  getFollowRequestsCount,
+  getMutualFollowers
 } from '../controllers/follow.controller.js';
 import { protect, optionalAuth } from '../../../middleware/auth.js';
 
@@ -24,6 +25,7 @@ router.get('/check/:userId', protect, checkFollowStatus);
 // Get followers/following (public with optional auth)
 router.get('/:userId/followers', optionalAuth, getFollowers);
 router.get('/:userId/following', optionalAuth, getFollowing);
+router.get('/:userId/mutual', protect, getMutualFollowers);
 
 // Follow requests (private accounts)
 router.get('/requests/count', protect, getFollowRequestsCount);

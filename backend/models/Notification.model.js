@@ -10,12 +10,12 @@ const notificationSchema = new mongoose.Schema(
     },
     sender: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'User',
-      required: true
+      ref: 'User'
+      // Not required - system notifications (e.g. report status updates) have no user sender.
     },
     type: {
       type: String,
-      enum: ['like', 'comment', 'follow', 'follow_request', 'follow_accept', 'follow_back', 'mention', 'remix', 'sequence', 'message'],
+      enum: ['like', 'comment', 'follow', 'follow_request', 'follow_accept', 'follow_back', 'mention', 'remix', 'sequence', 'message', 'report_status'],
       required: true
     },
     reel: {

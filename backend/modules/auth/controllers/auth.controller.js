@@ -23,6 +23,14 @@ export const sendOTP = asyncHandler(async (req, res) => {
   // Check if user exists
   let user = await User.findOne({ phoneNumber });
 
+  if (mode === 'signup' && user) {
+    return res.status(400).json({
+      success: false,
+      message: 'User already registered with this phone number, please login.',
+      requireLogin: true
+    });
+  }
+
   if (mode === 'login' && !user) {
     return res.status(404).json({
       success: false,
@@ -144,8 +152,13 @@ export const refreshToken = asyncHandler(async (req, res) => {
     });
   }
 
-  // Find user with this refresh token
-  const user = await User.findOne({ refreshToken: token });
+  // Find user with this refresh token (either in singular field or in array)
+  const user = await User.findOne({
+    $or: [
+      { refreshToken: token },
+      { 'refreshTokens.token': token }
+    ]
+  });
 
   if (!user) {
     return res.status(401).json({
@@ -158,7 +171,39 @@ export const refreshToken = asyncHandler(async (req, res) => {
   try {
     jwt.verify(token, process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET);
     
-    // Issue new tokens
+    // Check database-level expiration for multi-session tokens
+    if (user.refreshTokens && user.refreshTokens.length > 0) {
+      const tokenRecord = user.refreshTokens.find(t => t.token === token);
+      if (tokenRecord) {
+        // If grace period exists and is expired, return 401
+        if (tokenRecord.graceExpiresAt && tokenRecord.graceExpiresAt < new Date()) {
+          return res.status(401).json({
+            success: false,
+            message: 'Refresh token grace period expired'
+          });
+        }
+        // If normal expiration is passed (and no active grace period), return 401
+        if (!tokenRecord.graceExpiresAt && tokenRecord.expiresAt < new Date()) {
+          return res.status(401).json({
+            success: false,
+            message: 'Refresh token expired'
+          });
+        }
+      }
+    }
+
+    // Set grace period (e.g. 1 minute) on the old token instead of deleting it immediately,
+    // to prevent concurrent request race conditions from failing
+    if (user.refreshTokens) {
+      user.refreshTokens = user.refreshTokens.map(t => {
+        if (t.token === token && !t.graceExpiresAt) {
+          t.graceExpiresAt = new Date(Date.now() + 60 * 1000); // 1-minute grace period
+        }
+        return t;
+      });
+    }
+
+    // Issue new tokens (this will append the new token and save the user)
     await sendTokenResponse(user, 200, res, 'Token refreshed');
   } catch (error) {
     return res.status(401).json({
@@ -215,10 +260,23 @@ export const completeProfile = asyncHandler(async (req, res) => {
     }
   }
 
-  // Check if username is already taken
+  // Validate Username format and check if already taken
   if (username) {
+    const cleanUsername = username.trim().toLowerCase();
+    if (cleanUsername.length < 3) {
+      return res.status(400).json({
+        success: false,
+        message: 'Username must be at least 3 characters'
+      });
+    }
+    if (!/[0-9_]/.test(cleanUsername)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Username must contain at least one number or special character (e.g. _)'
+      });
+    }
     const existingUser = await User.findOne({ 
-      username: username.toLowerCase(),
+      username: cleanUsername,
       _id: { $ne: req.user._id }
     });
 
@@ -228,7 +286,16 @@ export const completeProfile = asyncHandler(async (req, res) => {
         message: 'Username already taken'
       });
     }
-    req.user.username = username.toLowerCase();
+    req.user.username = cleanUsername;
+  }
+
+  // Validate State (mandatory, especially if country is India)
+  const targetCountry = country || req.user.country || 'India';
+  if (targetCountry === 'India' && (!state || state.trim() === '')) {
+    return res.status(400).json({
+      success: false,
+      message: 'State is a mandatory field'
+    });
   }
 
   // Update user profile fields
@@ -265,8 +332,20 @@ export const getMe = asyncHandler(async (req, res) => {
  * @access  Private
  */
 export const logout = asyncHandler(async (req, res) => {
+  const token = req.cookies.refreshToken || req.body.refreshToken || req.headers['x-refresh-token'];
+
   // Clear refresh token in database
+  if (token) {
+    if (req.user.refreshTokens) {
+      req.user.refreshTokens = req.user.refreshTokens.filter(t => t.token !== token);
+    }
+  } else {
+    req.user.refreshTokens = [];
+  }
   req.user.refreshToken = undefined;
+  // Fallback in case the client's own FCM token removal request lost the race with logout
+  req.user.fcmToken = undefined;
+  req.user.fcmTokenMobile = undefined;
   await req.user.save({ validateBeforeSave: false });
 
   // Clear refresh token cookie

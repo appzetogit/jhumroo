@@ -305,22 +305,10 @@ const CreateAdPage = () => {
           </button>
           <h2 className="theme-text-primary text-[17px] font-bold">Create Advertisement</h2>
         </div>
-        <button 
-          onClick={handleSubmit}
-          disabled={loading || !media}
-          className={`text-[15px] font-bold ${loading || !media ? 'text-gray-400' : 'text-[#FE2C55]'}`}
-        >
-          {loading ? 'Processing...' : (
-            pricePerDay > 0 && durationDays > 0
-              ? `Pay ₹${totalAmount}`
-              : pricePerDay > 0
-              ? `₹${pricePerDay}/day`
-              : 'Create'
-          )}
-        </button>
+        <span className="w-10 h-10" aria-hidden="true" />
       </div>
 
-      <div className="scrollable flex-1 px-4 pb-10">
+      <div className="scrollable flex-1 px-4 pb-28">
         <div className="flex flex-col gap-6 mt-6">
           {/* Media Upload */}
           <div 
@@ -419,7 +407,7 @@ const CreateAdPage = () => {
             </div>
 
             <div className="theme-panel-card p-4 rounded-[20px]">
-              <label className="theme-text-muted text-[11px] font-bold uppercase tracking-wider mb-1 block">
+              <label className="theme-text-primary text-[11px] font-bold uppercase tracking-wider mb-1 block">
                 Caption <span className="text-red-500">*</span>
               </label>
               <textarea 
@@ -438,7 +426,7 @@ const CreateAdPage = () => {
               </div>
               <div className="flex flex-col gap-4">
                 <div>
-                  <label className="theme-text-muted text-[11px] font-bold uppercase tracking-wider mb-1 block">Music Name</label>
+                  <label className="theme-text-primary text-[11px] font-bold uppercase tracking-wider mb-1 block">Music Name</label>
                   <input 
                     type="text"
                     value={musicName}
@@ -448,7 +436,7 @@ const CreateAdPage = () => {
                   />
                 </div>
                 <div>
-                  <label className="theme-text-muted text-[11px] font-bold uppercase tracking-wider mb-1 block">Audio File</label>
+                  <label className="theme-text-primary text-[11px] font-bold uppercase tracking-wider mb-1 block">Audio File</label>
                   <div className="flex items-center gap-3">
                     <input 
                       type="file"
@@ -477,7 +465,7 @@ const CreateAdPage = () => {
               <div className="theme-panel-card p-4 rounded-[20px] flex items-center gap-3 animate-slide-in">
                 <BiLink size={20} className="theme-text-muted" />
                 <div className="flex-1">
-                  <label className="theme-text-muted text-[11px] font-bold uppercase tracking-wider mb-0.5 block">
+                  <label className="theme-text-primary text-[11px] font-bold uppercase tracking-wider mb-0.5 block">
                     Shop Link (URL) <span className="text-red-500">*</span>
                   </label>
                   <input 
@@ -498,7 +486,7 @@ const CreateAdPage = () => {
                     </svg>
                   </div>
                   <div className="flex-1">
-                    <label className="theme-text-muted text-[11px] font-bold uppercase tracking-wider mb-0.5 block">
+                    <label className="theme-text-primary text-[11px] font-bold uppercase tracking-wider mb-0.5 block">
                       WhatsApp Number <span className="text-red-500">*</span>
                     </label>
                     <input 
@@ -517,7 +505,7 @@ const CreateAdPage = () => {
                   </div>
                 </div>
                 <div className="theme-panel-card p-4 rounded-[20px]">
-                  <label className="theme-text-muted text-[11px] font-bold uppercase tracking-wider mb-1 block">
+                  <label className="theme-text-primary text-[11px] font-bold uppercase tracking-wider mb-1 block">
                     Pre-filled Welcome Message <span className="text-red-500">*</span>
                   </label>
                   <textarea 
@@ -542,7 +530,7 @@ const CreateAdPage = () => {
 
               <div className="flex flex-col gap-4">
                 <div>
-                  <label className="theme-text-muted text-[11px] font-bold uppercase tracking-wider mb-1 block">
+                  <label className="theme-text-primary text-[11px] font-bold uppercase tracking-wider mb-1 block">
                     Country <span className="text-red-500">*</span>
                   </label>
                   <select 
@@ -561,7 +549,7 @@ const CreateAdPage = () => {
                 </div>
                 
                 <div>
-                  <label className="theme-text-muted text-[11px] font-bold uppercase tracking-wider mb-1 block">
+                  <label className="theme-text-primary text-[11px] font-bold uppercase tracking-wider mb-1 block">
                     States (Optional)
                   </label>
                   
@@ -627,7 +615,7 @@ const CreateAdPage = () => {
                 </div>
 
                 <div>
-                  <label className="theme-text-muted text-[11px] font-bold uppercase tracking-wider mb-1 block">
+                  <label className="theme-text-primary text-[11px] font-bold uppercase tracking-wider mb-1 block">
                     Districts / Cities (Optional)
                   </label>
                   
@@ -716,6 +704,25 @@ const CreateAdPage = () => {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Fixed footer Pay/Create button */}
+      <div className="fixed bottom-0 left-0 right-0 px-4 pt-3 theme-panel-card border-t theme-panel-divider" style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}>
+        <button
+          onClick={handleSubmit}
+          disabled={loading || !media}
+          className={`w-full h-[52px] rounded-full font-bold text-[16px] transition-all active:scale-[0.98] ${
+            loading || !media ? 'bg-gray-300 text-gray-500' : 'bg-[#FE2C55] text-white'
+          }`}
+        >
+          {loading ? 'Processing...' : (
+            pricePerDay > 0 && durationDays > 0
+              ? `Pay ₹${totalAmount}`
+              : pricePerDay > 0
+              ? `₹${pricePerDay}/day`
+              : 'Create'
+          )}
+        </button>
       </div>
     </div>
   );

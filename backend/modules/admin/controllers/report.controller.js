@@ -2,6 +2,7 @@ import Report from '../../../models/Report.model.js';
 import Reel from '../../../models/Reel.model.js';
 import User from '../../../models/User.model.js';
 import { asyncHandler } from '../../../middleware/errorHandler.js';
+import { createNotification } from '../../../utils/notificationService.js';
 
 /**
  * @desc    Get all reports with populated data
@@ -69,6 +70,12 @@ export const updateReportStatus = asyncHandler(async (req, res) => {
 
   await report.save();
 
+  createNotification({
+    recipient: report.reportedBy,
+    type: 'report_status',
+    text: `Your report has been ${report.status}`
+  });
+
   res.status(200).json({
     success: true,
     message: 'Report updated successfully',
@@ -83,7 +90,6 @@ export const updateReportStatus = asyncHandler(async (req, res) => {
  */
 export const removeReelFromFeed = asyncHandler(async (req, res) => {
   const { reelId } = req.params;
-  const { reportId } = req.body;
 
   const reel = await Reel.findById(reelId);
   if (!reel) {
@@ -93,16 +99,32 @@ export const removeReelFromFeed = asyncHandler(async (req, res) => {
   reel.isActive = false;
   await reel.save();
 
-  // If reportId is provided, update report status
-  if (reportId) {
-    await Report.findByIdAndUpdate(reportId, {
+  // Resolve every pending report against this reel, not just the one the admin acted from -
+  // the reel is gone from the feed either way, so sibling reports shouldn't stay "pending".
+  const siblingReports = await Report.find({
+    reportType: 'Reel',
+    reportedItem: reelId,
+    status: { $ne: 'resolved' }
+  });
+
+  await Report.updateMany(
+    { _id: { $in: siblingReports.map(r => r._id) } },
+    {
       status: 'resolved',
       actionTaken: 'content_removed',
       reviewedBy: req.admin._id,
       reviewedAt: new Date(),
       adminNotes: 'Reel removed from feed by admin'
+    }
+  );
+
+  siblingReports.forEach((report) => {
+    createNotification({
+      recipient: report.reportedBy,
+      type: 'report_status',
+      text: 'Your report has been resolved'
     });
-  }
+  });
 
   res.status(200).json({
     success: true,
@@ -130,13 +152,21 @@ export const banUser = asyncHandler(async (req, res) => {
 
   // If reportId is provided, update report status
   if (reportId) {
-    await Report.findByIdAndUpdate(reportId, {
+    const updatedReport = await Report.findByIdAndUpdate(reportId, {
       status: 'resolved',
       actionTaken: 'user_banned',
       reviewedBy: req.admin._id,
       reviewedAt: new Date(),
       adminNotes: `User banned by admin. Reason: ${reason}`
-    });
+    }, { new: true });
+
+    if (updatedReport) {
+      createNotification({
+        recipient: updatedReport.reportedBy,
+        type: 'report_status',
+        text: 'Your report has been resolved'
+      });
+    }
   }
 
   res.status(200).json({

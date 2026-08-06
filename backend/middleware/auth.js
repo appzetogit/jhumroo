@@ -128,6 +128,23 @@ export const sendTokenResponse = async (user, statusCode, res, message = 'Succes
 
   // Save refresh token to user
   user.refreshToken = refreshToken;
+
+  const expiryDays = parseInt(process.env.JWT_REFRESH_EXPIRY) || 7;
+  const expiresAt = new Date(Date.now() + expiryDays * 24 * 60 * 60 * 1000);
+
+  // Initialize refreshTokens array if it doesn't exist
+  if (!user.refreshTokens) {
+    user.refreshTokens = [];
+  }
+
+  // Clean up expired tokens (and old grace-expired tokens)
+  user.refreshTokens = user.refreshTokens.filter(
+    t => t.expiresAt > new Date() && (!t.graceExpiresAt || t.graceExpiresAt > new Date())
+  );
+
+  // Add new token
+  user.refreshTokens.push({ token: refreshToken, expiresAt });
+
   await user.save({ validateBeforeSave: false });
 
   // Cookie options

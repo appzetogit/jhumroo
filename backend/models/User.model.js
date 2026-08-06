@@ -140,6 +140,19 @@ const userSchema = new mongoose.Schema(
     refreshToken: {
       type: String
     },
+    refreshTokens: [{
+      token: {
+        type: String,
+        required: true
+      },
+      expiresAt: {
+        type: Date,
+        required: true
+      },
+      graceExpiresAt: {
+        type: Date
+      }
+    }],
     country: {
       type: String,
       default: 'India'

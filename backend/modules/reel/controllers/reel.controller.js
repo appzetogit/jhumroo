@@ -109,6 +109,13 @@ export const completeUpload = asyncHandler(async (req, res) => {
     originalReel
   } = req.body;
 
+  if ((isRemix === 'true' || isRemix === true) && originalReel) {
+    const sourceReel = await Reel.findById(originalReel).select('allowDuet');
+    if (sourceReel && sourceReel.allowDuet === false) {
+      return res.status(403).json({ success: false, message: 'The creator of this reel has disabled duet/remix' });
+    }
+  }
+
   // Get raw video URL
   const rawUrl = await getFileUrl(key);
 
@@ -218,6 +225,13 @@ export const createReel = asyncHandler(async (req, res) => {
     isRemix,
     originalReel
   } = req.body;
+
+  if ((isRemix === 'true' || isRemix === true) && originalReel) {
+    const sourceReel = await Reel.findById(originalReel).select('allowDuet');
+    if (sourceReel && sourceReel.allowDuet === false) {
+      return res.status(403).json({ success: false, message: 'The creator of this reel has disabled duet/remix' });
+    }
+  }
 
   // Upload video to AWS S3
   const s3Result = await uploadToS3(req.file.path, 'reels', req.file.mimetype);

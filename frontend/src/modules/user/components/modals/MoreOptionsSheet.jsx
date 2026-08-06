@@ -109,6 +109,14 @@ const MoreOptionsSheet = ({
   const [isDownloading, setIsDownloading] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    window.history.pushState({ moreOptionsOpen: true }, '');
+    const handlePopState = () => onClose();
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [isOpen]);
+
   if (!isOpen && !isClosing) return null;
   if (!reelData && isOpen) return null;
 
@@ -163,6 +171,9 @@ const MoreOptionsSheet = ({
       onClose();
       setIsClosing(false);
       setCurrentY(0);
+      if (window.history.state?.moreOptionsOpen) {
+        window.history.back();
+      }
     }, 300);
   };
 
@@ -249,16 +260,18 @@ const MoreOptionsSheet = ({
 
           {/* Combined Vertical List for Equal Spacing */}
           <ActionRow>
-            <OptionItem 
-              icon={BiRepeat} 
-              label="Remix" 
-              subLabel="Create Side-by-side"
-              isDarkMode={isDarkMode}
-              onClick={() => {
-                handleClose();
-                navigate(`/create?duet=${reelData._id}`, { state: { duetVideo: reelData } });
-              }}
-            />
+            {reelData?.allowDuet !== false && (
+              <OptionItem
+                icon={BiRepeat}
+                label="Remix"
+                subLabel="Create Side-by-side"
+                isDarkMode={isDarkMode}
+                onClick={() => {
+                  handleClose();
+                  navigate(`/create?duet=${reelData._id}`, { state: { duetVideo: reelData } });
+                }}
+              />
+            )}
             {!isOwner && (
               <>
                 <OptionItem 

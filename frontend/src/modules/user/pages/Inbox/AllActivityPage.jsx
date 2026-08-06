@@ -11,6 +11,8 @@ const ActivityItem = ({ item }) => {
       navigate(`/reel/${item.reel._id}`);
     } else if (item.sender) {
       navigate(`/user/${item.sender.username}`);
+    } else if (item.type === 'report_status') {
+      navigate('/settings/help-center/report-problem');
     }
   };
 
@@ -23,12 +25,16 @@ const ActivityItem = ({ item }) => {
       case 'follow': return 'started following you';
       case 'follow_back': return item.sender?.isFollower ? 'followed you back' : 'started following you';
       case 'follow_accept': return 'accepted your follow request';
-      default: return null;
+      case 'remix': return 'created a remix of your video';
+      case 'sequence': return 'added your video to a sequence';
+      case 'report_status': return item.text || 'Your reported problem status was updated';
+      default: return item.text || null;
     }
   };
 
   const actionText = getActionText();
   if (!actionText) return null;
+  const isSystem = item.type === 'report_status';
 
   const getTimeAgo = (date) => {
     const seconds = Math.floor((new Date() - new Date(date)) / 1000);
@@ -45,19 +51,23 @@ const ActivityItem = ({ item }) => {
   return (
     <div className="flex items-start gap-3 px-4 py-3 active:bg-white/5 cursor-pointer transition-colors" onClick={handleClick}>
       {/* Avatar */}
-      <div className="w-11 h-11 rounded-full bg-white/10 overflow-hidden shrink-0 border border-white/5">
-        <img 
-          src={item.sender?.profilePicture?.url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${item.sender?.username}`} 
-          alt={item.sender?.username} 
-          className="w-full h-full object-cover rounded-full" 
-        />
+      <div className="w-11 h-11 rounded-full bg-white/10 overflow-hidden shrink-0 border border-white/5 flex items-center justify-center">
+        {isSystem ? (
+          <span className="text-[18px]">📋</span>
+        ) : (
+          <img
+            src={item.sender?.profilePicture?.url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${item.sender?.username}`}
+            alt={item.sender?.username}
+            className="w-full h-full object-cover rounded-full"
+          />
+        )}
       </div>
 
       {/* Text */}
       <div className="flex-1 min-w-0">
         <p className="text-[13px] text-white leading-snug">
-          <span className="font-bold text-white">{item.sender?.username || 'Someone'}</span>
-          {' '}<span className="text-white/80">{actionText}</span>{' '}
+          {!isSystem && <span className="font-bold text-white">{item.sender?.username || 'Someone'}{' '}</span>}
+          <span className="text-white/80">{actionText}</span>{' '}
           <span className="text-white/40 text-[11px] font-medium">{getTimeAgo(item.createdAt)}</span>
         </p>
       </div>

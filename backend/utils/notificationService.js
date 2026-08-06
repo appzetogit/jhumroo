@@ -17,7 +17,7 @@ import { messaging } from '../config/firebase.js';
 export const createNotification = async ({ recipient, sender, type, reel, comment, text, skipPush = false }) => {
   try {
     // Avoid self-notifications
-    if (recipient.toString() === sender.toString()) {
+    if (sender && recipient.toString() === sender.toString()) {
       return null;
     }
 
@@ -69,7 +69,7 @@ export const createNotification = async ({ recipient, sender, type, reel, commen
       try {
         // Fetch recipient's FCM tokens and notification preferences
         const user = await User.findById(recipient).select('fcmToken fcmTokenMobile username fullName notificationSettings');
-        const senderUser = await User.findById(sender).select('username fullName');
+        const senderUser = sender ? await User.findById(sender).select('username fullName') : null;
         
         if (user) {
           const settings = user.notificationSettings || {};
@@ -96,12 +96,16 @@ export const createNotification = async ({ recipient, sender, type, reel, commen
           const tokens = [...new Set(rawTokens)];
           
           if (tokens.length > 0) {
-            const senderName = senderUser.fullName || senderUser.username || 'Someone';
+            const senderName = senderUser?.fullName || senderUser?.username || 'Someone';
             let title = 'Jhumroo';
             let body = text || '';
 
             // Customize notification content based on type
             switch (type) {
+              case 'report_status':
+                title = 'Report Update';
+                body = text || 'Your reported problem status has been updated';
+                break;
               case 'like':
                 title = 'New Like';
                 body = `${senderName} liked your video`;
@@ -146,7 +150,7 @@ export const createNotification = async ({ recipient, sender, type, reel, commen
                 type,
                 title,
                 body: body.length > 100 ? body.substring(0, 97) + '...' : body,
-                senderId: sender.toString(),
+                senderId: sender ? sender.toString() : '',
                 reelId: reel ? reel.toString() : '',
                 commentId: comment ? comment.toString() : '',
                 click_action: 'FLUTTER_NOTIFICATION_CLICK',

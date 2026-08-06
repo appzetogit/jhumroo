@@ -391,7 +391,6 @@ const CommentsSheet = ({ isOpen, onClose, commentCount = 0, reelId, reelOwnerId,
         isDarkMode ? 'bg-black/50' : 'bg-black/30 backdrop-blur-[2px]'
       }`}
       data-modal-open="true"
-      onClick={onClose}
     >
       <div 
         className={`w-full h-[70%] rounded-t-[12px] flex flex-col animate-slide-up touch-auto ${
@@ -549,33 +548,35 @@ const CommentsSheet = ({ isOpen, onClose, commentCount = 0, reelId, reelOwnerId,
             }`}
           >
             {/* Mention Suggestions List */}
-            {showSuggestions && (
-              <div className={`mb-3 w-fit min-w-[180px] max-w-[260px] rounded-[16px] overflow-hidden border shadow-2xl animate-scale-in ${isDarkMode ? 'bg-[#1e202f] border-white/10' : 'bg-white border-black/10'}`}>
-                {mentionSuggestions.map((suggestion) => (
-                  <div 
-                    key={suggestion._id}
-                    className={`flex items-center gap-3 p-2.5 cursor-pointer transition-colors ${isDarkMode ? 'hover:bg-white/5' : 'hover:bg-black/5'}`}
-                    onClick={() => handleSelectMention(suggestion.username)}
-                  >
-                    <div className="w-7 h-7 rounded-full overflow-hidden shrink-0 border border-black/5">
-                      <img 
-                        src={suggestion.profilePicture?.url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${suggestion.username}`} 
-                        alt={suggestion.username} 
-                        className="w-full h-full object-cover" 
-                      />
+            <div className={`overflow-hidden transition-all duration-200 ease-out ${showSuggestions ? 'max-h-[220px] mb-3' : 'max-h-0 mb-0'}`}>
+              {showSuggestions && (
+                <div className={`w-fit min-w-[180px] max-w-[260px] rounded-[16px] overflow-hidden border shadow-2xl ${isDarkMode ? 'bg-[#1e202f] border-white/10' : 'bg-white border-black/10'}`}>
+                  {mentionSuggestions.map((suggestion) => (
+                    <div
+                      key={suggestion._id}
+                      className={`flex items-center gap-3 p-2.5 cursor-pointer transition-colors ${isDarkMode ? 'hover:bg-white/5' : 'hover:bg-black/5'}`}
+                      onClick={() => handleSelectMention(suggestion.username)}
+                    >
+                      <div className="w-7 h-7 rounded-full overflow-hidden shrink-0 border border-black/5">
+                        <img
+                          src={suggestion.profilePicture?.url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${suggestion.username}`}
+                          alt={suggestion.username}
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                      <div className="flex-1 min-w-0 pr-2">
+                        <p className={`text-[13px] font-bold truncate ${isDarkMode ? 'text-white' : 'text-black'}`}>
+                          {suggestion.fullName}
+                        </p>
+                        <p className={`text-[11px] truncate ${isDarkMode ? 'text-white/40' : 'text-black/40'}`}>
+                          @{suggestion.username}
+                        </p>
+                      </div>
                     </div>
-                    <div className="flex-1 min-w-0 pr-2">
-                      <p className={`text-[13px] font-bold truncate ${isDarkMode ? 'text-white' : 'text-black'}`}>
-                        {suggestion.fullName}
-                      </p>
-                      <p className={`text-[11px] truncate ${isDarkMode ? 'text-white/40' : 'text-black/40'}`}>
-                        @{suggestion.username}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+                  ))}
+                </div>
+              )}
+            </div>
  
             {/* Comment Error Message */}
             {commentError && (

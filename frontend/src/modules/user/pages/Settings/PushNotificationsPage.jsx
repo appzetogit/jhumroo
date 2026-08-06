@@ -78,7 +78,7 @@ const PushNotificationsPage = () => {
                 >
                     <BiChevronLeft size={24} className="theme-text-primary" />
                 </div>
-                <h2 className="theme-text-primary text-[17px] font-bold absolute left-0 right-0 text-center tracking-wide">Push notifications</h2>
+                <h2 className="theme-text-primary text-[17px] font-bold absolute left-0 right-0 text-center tracking-wide">Notifications</h2>
                 <div className="w-10"></div>
             </div>
 

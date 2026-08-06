@@ -194,6 +194,8 @@ const CreatePage = () => {
   const overlayInputRef = useRef(null);
   const canvasRef = useRef(null);
   const instacamRef = useRef(null);
+  const zoomCanvasRef = useRef(null);
+  const zoomRafRef = useRef(null);
   const pressStartTimeRef = useRef(0);
   const isPressingRef = useRef(false);
   const lastTouchTimeRef = useRef(0);
@@ -329,6 +331,8 @@ const CreatePage = () => {
   const [facingMode, setFacingMode] = useState('environment');
   const [activeFilterGroup, setActiveFilterGroup] = useState('instacam');
   const [selectedFilter, setSelectedFilter] = useState('Normal');
+  const [filterPreviewFrame, setFilterPreviewFrame] = useState(null);
+  const filterSnapshotCanvasRef = useRef(null);
   const [selectedSounds, setSelectedSounds] = useState(() => {
     const saved = localStorage.getItem('create_selectedSounds');
     return saved ? JSON.parse(saved) : [];
@@ -423,6 +427,7 @@ const CreatePage = () => {
   const [addedVolume, setAddedVolume] = useState(100);
   const [voiceRecordingSeconds, setVoiceRecordingSeconds] = useState(0);
   const [voiceMaxDuration, setVoiceMaxDuration] = useState(0);
+  const [voiceClipStart, setVoiceClipStart] = useState(0);
   const voiceTimerIntervalRef = useRef(null);
   const [mergedVideoBlob, setMergedVideoBlob] = useState(null);
   const [imageAdjustments, setImageAdjustments] = useState({
@@ -1338,6 +1343,48 @@ const CreatePage = () => {
         canvasRef.current.style.transformOrigin = 'center';
       }
     }
+
+    // Without hardware zoom, the CSS transform above only zooms the on-screen preview -
+    // the recorded stream still comes from the raw, un-zoomed camera track. Bake the zoom
+    // into a second canvas (cropped + scaled from the preview canvas) and record from that
+    // instead, so the exported video actually matches what was previewed.
+    if (zoomRafRef.current) {
+      cancelAnimationFrame(zoomRafRef.current);
+      zoomRafRef.current = null;
+    }
+
+    if (instacamRef.current?.v && streamRef.current) {
+      const rawVideoTrack = instacamRef.current.v.getVideoTracks()[0];
+      const audioTracks = streamRef.current.getAudioTracks();
+
+      if (hardwareApplied || zoomNumber === 1 || !rawVideoTrack) {
+        if (rawVideoTrack) {
+          streamRef.current = new MediaStream([rawVideoTrack, ...audioTracks]);
+        }
+      } else if (canvasRef.current) {
+        const srcCanvas = canvasRef.current;
+        if (!zoomCanvasRef.current) {
+          zoomCanvasRef.current = document.createElement('canvas');
+        }
+        const zoomCanvas = zoomCanvasRef.current;
+        zoomCanvas.width = srcCanvas.width;
+        zoomCanvas.height = srcCanvas.height;
+        const ctx = zoomCanvas.getContext('2d');
+
+        const drawZoomedFrame = () => {
+          const cropW = srcCanvas.width / zoomNumber;
+          const cropH = srcCanvas.height / zoomNumber;
+          const cropX = (srcCanvas.width - cropW) / 2;
+          const cropY = (srcCanvas.height - cropH) / 2;
+          ctx.drawImage(srcCanvas, cropX, cropY, cropW, cropH, 0, 0, zoomCanvas.width, zoomCanvas.height);
+          zoomRafRef.current = requestAnimationFrame(drawZoomedFrame);
+        };
+        drawZoomedFrame();
+
+        const zoomedVideoTrack = zoomCanvas.captureStream(30).getVideoTracks()[0];
+        streamRef.current = new MediaStream([zoomedVideoTrack, ...audioTracks]);
+      }
+    }
   }, []);
 
   useEffect(() => {
@@ -1345,6 +1392,40 @@ const CreatePage = () => {
       applyZoom(selectedZoom);
     }
   }, [selectedZoom, stage, applyZoom]);
+
+  // Filter swatches should preview real footage, not a remote placeholder photo - snapshot
+  // whatever's actually on screen (camera canvas, or the editor's playing clip) periodically.
+  useEffect(() => {
+    if (!(isFiltersTrayOpen && stage === 'camera')) return undefined;
+    const snapshot = () => {
+      if (!canvasRef.current) return;
+      try {
+        setFilterPreviewFrame(canvasRef.current.toDataURL('image/jpeg', 0.4));
+      } catch (e) { /* canvas not ready yet */ }
+    };
+    snapshot();
+    const id = setInterval(snapshot, 500);
+    return () => clearInterval(id);
+  }, [isFiltersTrayOpen, stage]);
+
+  useEffect(() => {
+    if (!(activeSheet === 'filters-preview' && editorVideoRef.current)) return undefined;
+    const snapshot = () => {
+      const video = editorVideoRef.current;
+      if (!video || video.readyState < 2) return;
+      if (!filterSnapshotCanvasRef.current) filterSnapshotCanvasRef.current = document.createElement('canvas');
+      const snapCanvas = filterSnapshotCanvasRef.current;
+      snapCanvas.width = 100;
+      snapCanvas.height = 100;
+      try {
+        snapCanvas.getContext('2d').drawImage(video, 0, 0, 100, 100);
+        setFilterPreviewFrame(snapCanvas.toDataURL('image/jpeg', 0.5));
+      } catch (e) { /* video not ready yet */ }
+    };
+    snapshot();
+    const id = setInterval(snapshot, 500);
+    return () => clearInterval(id);
+  }, [activeSheet]);
 
   const handleCanvasDoubleClick = () => {
     setSelectedZoom((prevZoom) => {
@@ -1476,6 +1557,10 @@ const CreatePage = () => {
   };
 
   const stopCamera = () => {
+    if (zoomRafRef.current) {
+      cancelAnimationFrame(zoomRafRef.current);
+      zoomRafRef.current = null;
+    }
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(track => {
         try { track.stop(); } catch (e) { }
@@ -1985,8 +2070,13 @@ const CreatePage = () => {
       return;
     }
 
-    // If in editor or preview, show confirmation to discard entire video
+    // If in editor or preview, pop back one sub-step first (matches the browser-back handler);
+    // only offer to discard the whole video once there's nowhere left to step back to.
     if (stage === 'editor' || stage === 'preview') {
+      if (stageStack.length > 1) {
+        popStage();
+        return;
+      }
       if (videoFile || recordedSeconds > 0) {
         setActiveSheet('exit-flow-confirmation');
         return;
@@ -2379,7 +2469,10 @@ const CreatePage = () => {
 
       const recorder = new MediaRecorder(combinedStream, {
         mimeType: 'video/webm;codecs=vp9',
-        videoBitsPerSecond: 8000000
+        // 4Mbps is still high quality at 720x1280 and roughly halves the exported file size vs
+        // the previous 8Mbps, which is most of what made upload/export feel slow (smaller file
+        // to upload to S3, less data for the backend to download and re-encode to mp4).
+        videoBitsPerSecond: 4000000
       });
 
       const recordedChunks = [];
@@ -2491,16 +2584,33 @@ const CreatePage = () => {
 
           const clipStartTimeInGlobalTimeline = clipSequence.slice(0, i).reduce((acc, c) => acc + (c.duration || 5), 0);
 
+          // Letterbox instead of stretching - landscape/non-9:16 source clips keep their own
+          // aspect ratio and get centered with black bars, rather than being squashed to fill.
+          const srcW = renderVideo.videoWidth || canvas.width;
+          const srcH = renderVideo.videoHeight || canvas.height;
+          const srcRatio = srcW / srcH;
+          const canvasRatio = canvas.width / canvas.height;
+          let drawWidth, drawHeight;
+          if (srcRatio > canvasRatio) {
+            drawWidth = canvas.width;
+            drawHeight = canvas.width / srcRatio;
+          } else {
+            drawHeight = canvas.height;
+            drawWidth = canvas.height * srcRatio;
+          }
+
           while (renderVideo.currentTime < endTime && !renderVideo.ended) {
             const elapsedInClip = (renderVideo.currentTime - startOffset) / speed;
             const globalTime = clipStartTimeInGlobalTimeline + elapsedInClip;
 
             ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = '#000000';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
             ctx.save();
             ctx.translate(canvas.width / 2, canvas.height / 2);
             ctx.rotate((editorSettings.rotation * Math.PI) / 180);
             ctx.filter = getCombinedFilter();
-            ctx.drawImage(renderVideo, -canvas.width / 2, -canvas.height / 2, canvas.width, canvas.height);
+            ctx.drawImage(renderVideo, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight);
             ctx.restore();
 
             textList.forEach(item => {
@@ -3723,10 +3833,10 @@ const CreatePage = () => {
                 }`}
             >
               <div
-                className="w-full h-full"
+                className="w-full h-full bg-[#2c2c2e]"
                 style={{
                   filter: FILTER_PRESETS[filterName] || 'none',
-                  background: `url(https://picsum.photos/seed/filter-${filterName}/100/100) center/cover`
+                  background: filterPreviewFrame ? `url(${filterPreviewFrame}) center/cover` : undefined
                 }}
               />
             </span>
@@ -4772,7 +4882,10 @@ const CreatePage = () => {
                                 }
                                 targetHandle.style.cssText = 'top:-4px;bottom:-4px;left:-4px;width:18px;background:#ffcc00;border-radius:8px 0 0 8px;opacity:1;';
 
+                                // Pause playback so the playhead-follow scroll loop doesn't fight the drag
+                                setIsEditorPlaying(false);
                                 if (editorVideoRef.current) {
+                                  editorVideoRef.current.pause();
                                   editorVideoRef.current.currentTime = initialStartOffset;
                                 }
 
@@ -4904,7 +5017,10 @@ const CreatePage = () => {
                                 }
                                 targetHandle.style.cssText = 'top:-4px;bottom:-4px;right:-4px;width:18px;background:#ffcc00;border-radius:0 8px 8px 0;opacity:1;';
 
+                                // Pause playback so the playhead-follow scroll loop doesn't fight the drag
+                                setIsEditorPlaying(false);
                                 if (editorVideoRef.current) {
+                                  editorVideoRef.current.pause();
                                   editorVideoRef.current.currentTime = startOffset + initialOriginalDuration;
                                 }
 
@@ -7616,12 +7732,16 @@ const CreatePage = () => {
                         : 'ring-1 ring-white/20 opacity-70 group-hover:opacity-100 group-hover:scale-105'
                       }`}
                   >
-                    <img
-                      src="https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=200&h=200"
-                      className="h-full w-full object-cover"
-                      style={{ filter: FILTER_PRESETS[filter] }}
-                      alt={filter}
-                    />
+                    {filterPreviewFrame ? (
+                      <img
+                        src={filterPreviewFrame}
+                        className="h-full w-full object-cover"
+                        style={{ filter: FILTER_PRESETS[filter] }}
+                        alt={filter}
+                      />
+                    ) : (
+                      <div className="h-full w-full bg-[#2c2c2e]" style={{ filter: FILTER_PRESETS[filter] }} />
+                    )}
                     {selectedFilter === filter && (
                       <div className="absolute inset-0 bg-[#fe2c55]/10 flex items-center justify-center">
                         <div className="w-6 h-6 rounded-full bg-white flex items-center justify-center shadow-lg">
@@ -7803,8 +7923,30 @@ const CreatePage = () => {
                       };
                       setVoiceRecordingSeconds(0);
                       setVoiceMaxDuration(0);
+                      setVoiceClipStart(0);
+                      // Voiceover can't outlast the reel itself - reuse the same max-duration rule as the camera recorder
+                      let reelMaxDuration = 15;
+                      if (isTimerRecording) {
+                        reelMaxDuration = countdownLength;
+                      } else if (selectedDuration.includes('m')) {
+                        reelMaxDuration = parseFloat(selectedDuration) * 60;
+                      } else if (selectedDuration.includes('s')) {
+                        reelMaxDuration = parseFloat(selectedDuration);
+                      }
                       voiceTimerIntervalRef.current = setInterval(() => {
-                        setVoiceRecordingSeconds(prev => prev + 0.1);
+                        setVoiceRecordingSeconds(prev => {
+                          const next = prev + 0.1;
+                          if (next >= reelMaxDuration) {
+                            clearInterval(voiceTimerIntervalRef.current);
+                            voiceTimerIntervalRef.current = null;
+                            recorder.stop();
+                            setIsRecordingVoice(false);
+                            setVoiceMaxDuration(reelMaxDuration);
+                            showToast('Recording finished');
+                            return reelMaxDuration;
+                          }
+                          return next;
+                        });
                       }, 100);
                       recorder.start();
                       setVoiceRecorder(recorder);
@@ -7825,15 +7967,37 @@ const CreatePage = () => {
             {recordedVoiceBlob && voiceMaxDuration > 0 && (
               <div className="w-full space-y-3 px-4 border-t border-white/5 pt-4">
                 <div className="flex items-center justify-between text-[14px]">
+                  <span className="font-bold text-white">Trim Start</span>
+                  <span className="font-black text-[#00f2ea]">{voiceClipStart.toFixed(1)}s</span>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max={Math.max(0, voiceMaxDuration - 0.5)}
+                  step="0.1"
+                  value={voiceClipStart}
+                  onChange={(e) => {
+                    const val = Number(e.target.value);
+                    setVoiceClipStart(val);
+                    setVoiceRecordingSeconds(prev => Math.min(prev, voiceMaxDuration - val));
+                    if (voicePreviewAudioRef.current) {
+                      voicePreviewAudioRef.current.pause();
+                      setIsVoicePreviewPlaying(false);
+                    }
+                  }}
+                  className="w-full accent-[#00f2ea] h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer"
+                />
+
+                <div className="flex items-center justify-between text-[14px]">
                   <span className="font-bold text-white">Clip Duration</span>
                   <span className="font-black text-[#00f2ea]">
-                    {voiceRecordingSeconds.toFixed(1)}s <span className="text-white/40 text-[12px]">/ {voiceMaxDuration.toFixed(1)}s</span>
+                    {voiceRecordingSeconds.toFixed(1)}s <span className="text-white/40 text-[12px]">/ {(voiceMaxDuration - voiceClipStart).toFixed(1)}s</span>
                   </span>
                 </div>
                 <input
                   type="range"
                   min="0.5"
-                  max={voiceMaxDuration}
+                  max={Math.max(0.5, voiceMaxDuration - voiceClipStart)}
                   step="0.1"
                   value={voiceRecordingSeconds}
                   onChange={(e) => {
@@ -7847,7 +8011,7 @@ const CreatePage = () => {
                   className="w-full accent-[#00f2ea] h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer"
                 />
                 <p className="text-[11px] text-white/40 text-center font-medium">
-                  Drag to trim or adjust the duration of your voiceover clip
+                  Drag to trim the start point or the duration of your voiceover clip
                 </p>
               </div>
             )}
@@ -7859,7 +8023,7 @@ const CreatePage = () => {
                     if (isVoicePreviewPlaying) {
                       if (voicePreviewAudioRef.current) {
                         voicePreviewAudioRef.current.pause();
-                        voicePreviewAudioRef.current.currentTime = 0;
+                        voicePreviewAudioRef.current.currentTime = voiceClipStart;
                       }
                       setIsVoicePreviewPlaying(false);
                     } else {
@@ -7868,12 +8032,13 @@ const CreatePage = () => {
                       }
                       const audio = new Audio(voicePreviewUrl);
                       voicePreviewAudioRef.current = audio;
-                      
-                      // Stop playing once it reaches the edited duration
+                      audio.currentTime = voiceClipStart;
+
+                      // Stop playing once it reaches the edited end point
                       audio.addEventListener('timeupdate', () => {
-                        if (audio.currentTime >= voiceRecordingSeconds) {
+                        if (audio.currentTime >= voiceClipStart + voiceRecordingSeconds) {
                           audio.pause();
-                          audio.currentTime = 0;
+                          audio.currentTime = voiceClipStart;
                           setIsVoicePreviewPlaying(false);
                         }
                       });
@@ -7918,8 +8083,8 @@ const CreatePage = () => {
                       title: 'Voiceover',
                       url: url,
                       clipDuration: voiceRecordingSeconds,
-                      clipStart: 0,
-                      duration: voiceRecordingSeconds
+                      clipStart: voiceClipStart,
+                      duration: voiceMaxDuration
                     }]);
                     setActiveSheet(null);
                     showToast('Voiceover added');

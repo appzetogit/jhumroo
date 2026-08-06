@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../../../../context/AuthContext';
 import adminInterestService from '../../../../../services/adminInterestService';
 
-const OnboardingPage = ({ onComplete }) => {
+const OnboardingPage = ({ onComplete, onBack }) => {
   const { updateInterests, user } = useAuth();
   const [interests, setInterests] = useState([]);
   const [selected, setSelected] = useState(user?.interests || []);
@@ -51,7 +51,13 @@ const OnboardingPage = ({ onComplete }) => {
       <div className="pt-12 px-6 pb-6 flex flex-col gap-4">
         <div 
           className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center cursor-pointer active:scale-95 transition-transform"
-          onClick={() => onComplete?.()}
+          onClick={() => {
+            if (onBack) {
+              onBack();
+            } else {
+              onComplete?.();
+            }
+          }}
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="text-white"><path d="M15 18l-6-6 6-6"/></svg>
         </div>

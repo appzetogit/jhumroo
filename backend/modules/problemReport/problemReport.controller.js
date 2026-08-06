@@ -1,5 +1,6 @@
 import ProblemReport from '../../models/ProblemReport.model.js';
 import { uploadImage as uploadImageToCloudinary, uploadVideo as uploadVideoToCloudinary } from '../../config/cloudinary.js';
+import { createNotification } from '../../utils/notificationService.js';
 import fs from 'fs';
 
 /**
@@ -122,6 +123,12 @@ export const updateProblemReportStatus = async (req, res) => {
     if (!report) {
       return res.status(404).json({ success: false, message: 'Problem report not found' });
     }
+
+    createNotification({
+      recipient: report.userId,
+      type: 'report_status',
+      text: `Your reported problem is now "${status}"`
+    });
 
     res.status(200).json({
       success: true,

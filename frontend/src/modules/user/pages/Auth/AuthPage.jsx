@@ -94,6 +94,7 @@ const ITEM_H = 36;
 const PickerColumn = ({ items, selectedIndex, onChange }) => {
   const ref = useRef(null);
   const isScrolling = useRef(false);
+  const timeoutRef = useRef(null);
 
   useEffect(() => {
     if (ref.current && !isScrolling.current) {
@@ -101,11 +102,18 @@ const PickerColumn = ({ items, selectedIndex, onChange }) => {
     }
   }, [selectedIndex, items.length]);
 
+  // Cancel any pending scroll-snap timeout on unmount - otherwise it fires
+  // after the component (and its ref) is gone, crashing on ref.current.scrollTop.
+  useEffect(() => {
+    return () => clearTimeout(timeoutRef.current);
+  }, []);
+
   const handleScroll = useCallback(() => {
     if (!ref.current) return;
     isScrolling.current = true;
-    clearTimeout(ref.current._t);
-    ref.current._t = setTimeout(() => {
+    clearTimeout(timeoutRef.current);
+    timeoutRef.current = setTimeout(() => {
+      if (!ref.current) return;
       const idx = Math.round(ref.current.scrollTop / ITEM_H);
       const clamped = Math.max(0, Math.min(idx, items.length - 1));
       ref.current.scrollTop = clamped * ITEM_H;
@@ -193,8 +201,12 @@ const AuthPage = ({ onComplete, initialMode = 'signup' }) => {
 
     // Explicitly set step based on route
     if (p === '/signup') {
-      const savedStep = sessionStorage.getItem('signup_step');
-      setStep(savedStep !== null ? parseInt(savedStep, 10) : 3);
+      if (authUser) {
+        setStep(6);
+      } else {
+        const savedStep = sessionStorage.getItem('signup_step');
+        setStep(savedStep !== null ? parseInt(savedStep, 10) : 3);
+      }
     } else if (p === '/login') {
       setStep(4);
     } else if (p === '/' || p === '' || p === '/welcome' || p.includes('index.html')) {
@@ -321,6 +333,7 @@ const AuthPage = ({ onComplete, initialMode = 'signup' }) => {
   const [usernameError, setUsernameError] = useState('');
   const [fullNameError, setFullNameError] = useState('');
   const [emailError, setEmailError] = useState('');
+  const [stateError, setStateError] = useState('');
 
   const INDIAN_STATES = [
     'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh', 
@@ -336,6 +349,7 @@ const AuthPage = ({ onComplete, initialMode = 'signup' }) => {
     setUsernameError('');
     setFullNameError('');
     setEmailError('');
+    setStateError('');
 
     let hasError = false;
 
@@ -355,6 +369,15 @@ const AuthPage = ({ onComplete, initialMode = 'signup' }) => {
     // Validate Username
     if (!username || username.trim().length < 3) {
       setUsernameError('Username must be at least 3 characters');
+      hasError = true;
+    } else if (!/[0-9_]/.test(username)) {
+      setUsernameError('Username must contain at least one number or special character (e.g. _)');
+      hasError = true;
+    }
+
+    // Validate State
+    if (country === 'India' && (!state || state.trim() === '')) {
+      setStateError('State is a mandatory field');
       hasError = true;
     }
 
@@ -474,15 +497,21 @@ const AuthPage = ({ onComplete, initialMode = 'signup' }) => {
                   <label className="text-xs font-bold text-gray-400 ml-1">STATE</label>
                   <select
                     value={state}
-                    onChange={(e) => setState(e.target.value)}
+                    onChange={(e) => {
+                      setState(e.target.value);
+                      setStateError('');
+                    }}
                     disabled={country !== 'India'}
-                    className={`w-full h-[54px] bg-white/5 border border-white/10 rounded-2xl px-4 text-white outline-none focus:border-[#fe2c55] transition-all appearance-none ${country !== 'India' ? 'opacity-50' : ''}`}
+                    className={`w-full h-[54px] bg-white/5 border ${stateError ? 'border-[#fe2c55]' : 'border-white/10'} rounded-2xl px-4 text-white outline-none focus:border-[#fe2c55] transition-all appearance-none ${country !== 'India' ? 'opacity-50' : ''}`}
                   >
                     <option value="" disabled className="bg-[#1a1a1a]">Select State</option>
                     {INDIAN_STATES.map(s => (
                       <option key={s} value={s} className="bg-[#1a1a1a]">{s}</option>
                     ))}
                   </select>
+                  {stateError && (
+                    <p className="text-[#fe2c55] text-xs font-semibold ml-1 mt-1">{stateError}</p>
+                  )}
                 </div>
               </div>
             </div>
@@ -743,6 +772,7 @@ const AuthPage = ({ onComplete, initialMode = 'signup' }) => {
                         navigate('/');
                       }
                     }}
+                    onSwitchMode={() => navigate(mode === 'signup' ? '/login' : '/signup')}
                     isThemed={true}
                   />
                 ) : (

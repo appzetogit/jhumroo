@@ -260,6 +260,33 @@ export const getFollowing = asyncHandler(async (req, res) => {
 });
 
 /**
+ * @desc    Get a user's mutual followers (accounts that follow them and that they follow back)
+ * @route   GET /api/follows/:userId/mutual
+ * @access  Private
+ */
+export const getMutualFollowers = asyncHandler(async (req, res) => {
+  const { userId } = req.params;
+
+  const [following, followers] = await Promise.all([
+    Follow.find({ follower: userId, status: 'accepted' }).select('following'),
+    Follow.find({ following: userId, status: 'accepted' }).select('follower')
+  ]);
+
+  const followingIds = new Set(following.map((f) => f.following.toString()));
+  const mutualIds = followers
+    .map((f) => f.follower.toString())
+    .filter((id) => followingIds.has(id));
+
+  const users = await User.find({ _id: { $in: mutualIds } })
+    .select('username fullName profilePicture isVerified');
+
+  res.status(200).json({
+    success: true,
+    users
+  });
+});
+
+/**
  * @desc    Remove a follower
  * @route   DELETE /api/follows/followers/:userId
  * @access  Private

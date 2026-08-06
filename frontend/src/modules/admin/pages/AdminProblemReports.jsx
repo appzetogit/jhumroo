@@ -211,16 +211,18 @@ const AdminProblemReports = () => {
                 </div>
                 <div>
                   <label className="text-xs font-bold text-gray-400 uppercase">Update Status</label>
-                  <select 
-                    className="admin-input mt-1"
-                    value={statusToUpdate}
-                    onChange={(e) => setStatusToUpdate(e.target.value)}
-                  >
-                    <option value="pending">Pending</option>
-                    <option value="in_progress">In Progress</option>
-                    <option value="resolved">Resolved</option>
-                    <option value="closed">Closed</option>
-                  </select>
+                  <div className="mt-1 p-4 bg-gray-50 rounded-xl border border-gray-100">
+                    <select
+                      className="admin-input w-full"
+                      value={statusToUpdate}
+                      onChange={(e) => setStatusToUpdate(e.target.value)}
+                    >
+                      <option value="pending">Pending</option>
+                      <option value="in_progress">In Progress</option>
+                      <option value="resolved">Resolved</option>
+                      <option value="closed">Closed</option>
+                    </select>
+                  </div>
                 </div>
               </div>
             </div>

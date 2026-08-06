@@ -3,7 +3,7 @@ import { BiChevronLeft } from 'react-icons/bi';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../../../context/AuthContext';
 
-const PhoneInput = ({ onNext, onBack, mode = 'signup', isThemed = false }) => {
+const PhoneInput = ({ onNext, onBack, onSwitchMode, mode = 'signup', isThemed = false }) => {
   const navigate = useNavigate();
   const { sendOTP } = useAuth();
   const [phoneNumber, setPhoneNumber] = useState(() => {
@@ -91,16 +91,27 @@ const PhoneInput = ({ onNext, onBack, mode = 'signup', isThemed = false }) => {
            <div className="mb-6 flex flex-col items-center">
              <p className="text-[#fe2c55] text-xs font-semibold animate-shake">{error}</p>
              {error.includes('sign up') && mode === 'login' && (
-               <button 
+               <button
                  type="button"
                  onClick={() => {
                    setError('');
-                   // Navigate back to auth methods screen where they can switch to signup
-                   onBack();
+                   (onSwitchMode || onBack)();
                  }}
                  className="mt-2 text-[13px] text-[#fe2c55] font-bold hover:underline"
                >
                  Switch to Sign up
+               </button>
+             )}
+             {error.includes('already registered') && mode === 'signup' && (
+               <button
+                 type="button"
+                 onClick={() => {
+                   setError('');
+                   (onSwitchMode || onBack)();
+                 }}
+                 className="mt-2 text-[13px] text-[#fe2c55] font-bold hover:underline"
+               >
+                 Switch to Log in
                </button>
              )}
            </div>

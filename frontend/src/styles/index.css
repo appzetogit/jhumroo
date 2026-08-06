@@ -67,6 +67,16 @@
     -webkit-tap-highlight-color: transparent;
   }
 
+  /* Prevent the browser's autofill highlight from overriding an input's own background/text color */
+  input:-webkit-autofill,
+  input:-webkit-autofill:hover,
+  input:-webkit-autofill:focus,
+  input:-webkit-autofill:active {
+    transition: background-color 600000s 0s, color 600000s 0s;
+    -webkit-text-fill-color: currentColor;
+    caret-color: currentColor;
+  }
+
   html {
     height: 100%;
     overflow: hidden;
@@ -188,6 +198,10 @@
 
   .theme-page-header {
     border-bottom: 1px solid var(--theme-border-soft);
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    background-color: var(--theme-page-bg);
   }
 
   .theme-icon-button {
@@ -428,6 +442,7 @@
 }
 
 [data-theme='light'] :is(.theme-surface-page, .theme-chat-page) .bg-\[\#242424\],
+[data-theme='light'] :is(.theme-surface-page, .theme-chat-page) .bg-\[\#161616\],
 [data-theme='light'] :is(.theme-surface-page, .theme-chat-page) .bg-\[\#1A1A1A\],
 [data-theme='light'] :is(.theme-surface-page, .theme-chat-page) .bg-\[\#22263B\],
 [data-theme='light'] :is(.theme-surface-page, .theme-chat-page) .bg-\[\#2B314E\],
@@ -751,6 +766,12 @@
   backdrop-filter: blur(8px);
 }
 
+.admin-topbar-title {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--admin-text, #2a1117);
+}
+
 .admin-search {
   flex: 1;
   max-width: 560px;
@@ -856,6 +877,11 @@
   justify-content: space-between;
   align-items: center;
   gap: 16px;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--admin-bg);
+  padding-block: 4px;
 }
 
 .admin-page-header h1 {

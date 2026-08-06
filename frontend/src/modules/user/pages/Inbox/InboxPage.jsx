@@ -357,15 +357,15 @@ const InboxPage = () => {
       )}
 
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-4 shrink-0 bg-[#161616]/80 backdrop-blur-md sticky top-0 z-[60] border-b border-white/5">
+      <div className="flex items-center justify-between px-4 py-4 shrink-0 theme-panel-card backdrop-blur-md sticky top-0 z-[60] border-b theme-panel-divider">
         <div className="w-10" />
-        <h2 className="text-[18px] font-black tracking-tight text-white">Inbox</h2>
+        <h2 className="text-[18px] font-black tracking-tight theme-text-primary">Inbox</h2>
         <div className="w-10" />
       </div>
 
       <div className="px-4 mb-4 shrink-0">
         <div className="relative group">
-          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-white/40 group-focus-within:text-[#FE2C55] transition-colors">
+          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none theme-text-muted group-focus-within:text-[#FE2C55] transition-colors">
             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
               <circle cx="11" cy="11" r="8" />
               <path d="M21 21l-4.35-4.35" />
@@ -376,7 +376,7 @@ const InboxPage = () => {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search messages"
-            className="w-full bg-[#242424] border border-white/5 focus:border-[#FE2C55] focus:bg-[#161616] rounded-2xl py-3 pl-10 pr-4 text-[15px] text-white outline-none transition-all placeholder:text-white/40 font-medium shadow-sm"
+            className="w-full theme-input-shell focus:border-[#FE2C55] rounded-2xl py-3 pl-10 pr-4 text-[15px] theme-text-primary outline-none transition-all placeholder:text-[var(--theme-text-faint)] font-medium shadow-sm"
           />
         </div>
       </div>

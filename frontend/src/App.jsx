@@ -165,6 +165,7 @@ const AppContent = () => {
     const { pathname } = useLocation();
     const { user, isAuthenticated, isLoading, logout } = useAuth();
     const [appState, setAppState] = useState('launch'); // launch, auth, onboarding, main
+    const hasLaunchedBeforeRef = useRef(sessionStorage.getItem('app_launched') === 'true');
 
     useEffect(() => {
         const isAdminRoute = pathname.startsWith('/admin');
@@ -254,13 +255,14 @@ const AppContent = () => {
     }, [isAuthenticated, appState]);
 
     useEffect(() => {
-        if (appState === 'launch') {
-            // Wait for auth to finish loading first
-            if (isLoading) return;
+        if (isLoading) return;
 
+        // If we are still in launch state, run the initial timer
+        if (appState === 'launch') {
             const timer = setTimeout(() => {
+                sessionStorage.setItem('app_launched', 'true');
                 const isAdminRoute = pathname.startsWith('/admin');
-                
+
                 if (isAdminRoute) {
                     setAppState('main');
                 } else if (isAuthenticated) {
@@ -270,8 +272,14 @@ const AppContent = () => {
 
                     if (user && !isProfileCompleted) {
                         setAppState('auth');
+                        if (pathname !== '/signup') {
+                            navigate('/signup', { replace: true });
+                        }
                     } else if (user && !user.isOnboarded) {
                         setAppState('onboarding');
+                        if (pathname !== '/signup/interests') {
+                            navigate('/signup/interests', { replace: true });
+                        }
                     } else {
                         setAppState('main');
                     }
@@ -282,14 +290,52 @@ const AppContent = () => {
                       navigate('/', { replace: true });
                     }
                 }
-            }, 400); // 400ms minimum splash delay for smooth transition
+            }, hasLaunchedBeforeRef.current ? 0 : 400); // splash delay skipped on refresh within the same session
             return () => clearTimeout(timer);
         }
-    }, [appState, navigate, pathname, isAuthenticated, isLoading, user]);
+
+        // Run this check on subsequent route/auth state changes
+        const isAdminRoute = pathname.startsWith('/admin');
+        if (isAdminRoute) {
+            setAppState('main');
+            return;
+        }
+
+        if (isAuthenticated && user) {
+            const isProfileCompleted = user.isProfileCompleted !== undefined
+                ? user.isProfileCompleted
+                : (user.username && !user.username.startsWith('user_') && user.fullName);
+
+            if (!isProfileCompleted) {
+                setAppState('auth');
+                if (pathname !== '/signup') {
+                    navigate('/signup', { replace: true });
+                }
+            } else if (!user.isOnboarded) {
+                if (pathname === '/signup') {
+                    // Allowed to go back to complete profile
+                    setAppState('auth');
+                } else {
+                    setAppState('onboarding');
+                    if (pathname !== '/signup/interests') {
+                        navigate('/signup/interests', { replace: true });
+                    }
+                }
+            } else {
+                setAppState('main');
+            }
+        } else {
+            setAppState('auth');
+        }
+    }, [pathname, isAuthenticated, isLoading, user, appState, navigate]);
 
     const handleAuthComplete = (needsOnboarding = false) => {
         if (needsOnboarding) {
             setAppState('onboarding');
+            // Must navigate here too (not just set appState) - otherwise pathname stays at
+            // '/signup' and the pathname-driven effect above, seeing '/signup' before this
+            // navigate ever happens, flips appState straight back to 'auth'.
+            navigate('/signup/interests', { replace: true });
         } else {
             setAppState('main');
             navigate('/', { replace: true });
@@ -301,19 +347,43 @@ const AppContent = () => {
         navigate('/', { replace: true });
     };
 
-    const handleLogout = () => {
-        removeFcmToken().catch(() => {});
+    const handleOnboardingBack = () => {
+        sessionStorage.setItem('signup_step', '6');
+        // Don't set appState here - if it flips to 'auth' before the router's pathname catches
+        // up to '/signup', the 'auth' branch's Routes won't have a case for the still-stale
+        // '/signup/interests' path and its catch-all (`*` -> Navigate to '/') kicks the user
+        // out to the welcome screen. Let the pathname-driven effect above set appState once
+        // navigate() has actually landed.
+        navigate('/signup');
+    };
+
+    const handleLogout = async () => {
+        await removeFcmToken().catch(() => {});
         logout();
         setAppState('auth');
         navigate('/', { replace: true });
     };
 
-    // Global suspended check for regular users
-    const isSuspended = isAuthenticated && user?.isBanned && !pathname.startsWith('/admin');
+    // Global suspended check for regular users (support page stays reachable so a banned user can still contact support)
+    const isSuspended = isAuthenticated && user?.isBanned && !pathname.startsWith('/admin') && pathname !== '/settings/support';
+
+    // Suspended users have no route to navigate back to - intercept back so it logs out to the login screen instead of exiting the app
+    useEffect(() => {
+        if (!isSuspended) return;
+        window.history.pushState({ suspended: true }, '');
+        const handlePopState = async () => {
+            await removeFcmToken().catch(() => {});
+            logout();
+            setAppState('auth');
+            navigate('/login', { replace: true });
+        };
+        window.addEventListener('popstate', handlePopState);
+        return () => window.removeEventListener('popstate', handlePopState);
+    }, [isSuspended]);
 
     return (
         <div className={`theme-app-shell relative w-full max-w-full h-full min-h-full mx-auto flex flex-col overflow-hidden shadow-2xl ${theme === 'light' ? 'theme-is-light' : 'theme-is-dark'}`}>
-            {appState === 'launch' && <Splash />}
+            {appState === 'launch' && !hasLaunchedBeforeRef.current && <Splash />}
             {appState !== 'launch' && (
                 <>
                   {isSuspended ? (
@@ -330,7 +400,7 @@ const AppContent = () => {
                                 <Route path="*" element={<Navigate to="/" replace />} />
                             </>
                         ) : appState === 'onboarding' ? (
-                            <Route path="/*" element={<OnboardingPage onComplete={handleOnboardingComplete} />} />
+                            <Route path="/*" element={<OnboardingPage onComplete={handleOnboardingComplete} onBack={handleOnboardingBack} />} />
                         ) : (
                             <>
                               <Route path="/admin/login" element={<AdminLogin />} />

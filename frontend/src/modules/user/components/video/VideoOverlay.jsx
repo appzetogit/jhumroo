@@ -193,10 +193,10 @@ const VideoOverlay = ({ reelId, username, caption, musicName, isLiked, likes, co
         try {
           await navigator.clipboard.writeText(shareUrl);
           showOverlayToast('Link copied to clipboard!');
+          shared = true;
         } catch {
           showOverlayToast('Could not copy link.');
         }
-        shared = true;
       } else if (platform === 'general') {
         if (navigator.share) {
           await navigator.share({ title: 'Jhumroo', text: shareText, url: shareUrl });
@@ -205,10 +205,10 @@ const VideoOverlay = ({ reelId, username, caption, musicName, isLiked, likes, co
           try {
             await navigator.clipboard.writeText(shareUrl);
             showOverlayToast('Link copied to clipboard!');
+            shared = true;
           } catch {
             showOverlayToast('Could not copy link.');
           }
-          shared = true;
         }
       } else if (platform === 'chat' && targetUserId) {
         await messageService.sendMessage({
@@ -431,29 +431,25 @@ const VideoOverlay = ({ reelId, username, caption, musicName, isLiked, likes, co
              </div>
 
              {/* Comment */}
-             <div 
-               className={`flex flex-col items-center text-white tap-effect ${
-                 videoData.allowComments === false ? 'opacity-40 cursor-not-allowed' : ''
-               }`} 
-               onClick={(e) => {
-                 e.stopPropagation();
-                 if (videoData.allowComments === false) {
-                   showOverlayToast('Comments are turned off');
-                   return;
-                 }
-                 setIsCommentsOpen(true);
-               }} 
-               style={{ pointerEvents: 'auto' }}
-             >
-                <svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="white" stroke="white" strokeWidth="0" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path>
-                </svg>
-                <span className="text-sm font-semibold mt-0.5">{comments}</span>
-             </div>
-             
+             {videoData.allowComments !== false && (
+               <div
+                 className="flex flex-col items-center text-white tap-effect"
+                 onClick={(e) => {
+                   e.stopPropagation();
+                   setIsCommentsOpen(true);
+                 }}
+                 style={{ pointerEvents: 'auto' }}
+               >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="white" stroke="white" strokeWidth="0" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path>
+                  </svg>
+                  <span className="text-sm font-semibold mt-0.5">{comments}</span>
+               </div>
+             )}
+
 
              {/* Share */}
-             <div className="flex flex-col items-center text-white tap-effect" onClick={(e) => { e.stopPropagation(); handleShare('general'); }} style={{ pointerEvents: 'auto' }}>
+             <div className="flex flex-col items-center text-white tap-effect" onClick={(e) => { e.stopPropagation(); setIsShareOpen(true); }} style={{ pointerEvents: 'auto' }}>
                 <svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="white" stroke="white" strokeWidth="0" strokeLinecap="round" strokeLinejoin="round">
                     <path d="m22 2-7 20-4-9-9-4Z"></path>
                     <path d="M22 2 11 13"></path>
@@ -556,7 +552,7 @@ const VideoOverlay = ({ reelId, username, caption, musicName, isLiked, likes, co
          onSaveClick={onSaveClick}
          onShareClick={() => {
            setIsMoreOpen(false);
-           handleShare('general');
+           setIsShareOpen(true);
          }}
          onReportClick={() => {
            setIsMoreOpen(false);
