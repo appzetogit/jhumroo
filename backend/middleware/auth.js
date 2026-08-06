@@ -53,7 +53,7 @@ export const protect = async (req, res, next) => {
         });
       }
 
-      if (!req.user.isActive || req.user.isBanned) {
+      if ((!req.user.isActive || req.user.isBanned) && !req.originalUrl.includes('/support-requests')) {
         return res.status(403).json({
           success: false,
           message: 'Account is inactive or banned'

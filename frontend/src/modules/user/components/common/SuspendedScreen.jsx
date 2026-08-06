@@ -1,103 +1,74 @@
 import React from 'react';
-import { BiBlock, BiErrorCircle, BiChevronRight } from 'react-icons/bi';
+import { BiBlock, BiChevronRight, BiShieldX, BiHeadphone } from 'react-icons/bi';
 import { useNavigate } from 'react-router-dom';
 
 const SuspendedScreen = ({ reason }) => {
   const navigate = useNavigate();
+
+  const handleGoToSupport = () => {
+    navigate('/settings/support');
+  };
+
   return (
-    <div className="suspended-screen">
-      <div className="suspended-content">
-        <div className="suspended-icon">
-          <BiBlock size={64} color="#ef4444" />
+    <div className="fixed inset-0 z-[9999] w-screen h-screen bg-[#0f0f12] text-white flex items-center justify-center p-4 font-sans select-none overflow-hidden">
+      {/* Background ambient red glow */}
+      <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-80 h-80 bg-red-600/10 rounded-full blur-[100px] pointer-events-none" />
+
+      <div className="relative w-full max-w-sm flex flex-col items-center text-center z-10 px-2 animate-fade-in">
+        {/* Icon Badge */}
+        <div className="relative mb-6">
+          <div className="w-20 h-20 rounded-full bg-red-500/10 border border-red-500/20 flex items-center justify-center shadow-lg shadow-red-500/5">
+            <BiShieldX size={44} className="text-[#fe2c55]" />
+          </div>
+          <div className="absolute -bottom-1 -right-1 w-7 h-7 bg-[#fe2c55] rounded-full flex items-center justify-center border-2 border-[#0f0f12]">
+            <BiBlock size={15} className="text-white" />
+          </div>
         </div>
-        <h1>Account Suspended</h1>
-        <p className="suspended-message">
-          Your account has been suspended for violating our community guidelines.
+
+        {/* Title */}
+        <h1 className="text-2xl font-extrabold text-white mb-2 tracking-tight">
+          Account Suspended
+        </h1>
+
+        {/* Message */}
+        <p className="text-sm text-gray-400 leading-relaxed mb-6 px-2">
+          Your account has been suspended for violating our community guidelines. If you believe this is a mistake, please reach out to <button type="button" onClick={handleGoToSupport} className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-md bg-[#fe2c55]/15 text-[#fe2c55] font-bold border border-[#fe2c55]/30 hover:bg-[#fe2c55]/25 transition-colors cursor-pointer">Support</button>.
         </p>
-        
+
+        {/* Reason Box */}
         {reason && (
-          <div className="reason-box">
-            <p className="reason-label">Reason:</p>
-            <p className="reason-text">{reason}</p>
+          <div className="w-full bg-red-500/10 border border-red-500/20 rounded-2xl p-4 mb-6 text-left shadow-inner">
+            <p className="text-xs font-bold text-red-400 uppercase tracking-wider mb-1">
+              Reason for Suspension
+            </p>
+            <p className="text-sm font-medium text-red-200 leading-snug">
+              {reason}
+            </p>
           </div>
         )}
 
-        <button type="button" className="contact-support" onClick={() => navigate('/settings/support')}>
-          <BiErrorCircle size={18} />
-          <span>If you think this is a mistake, contact support</span>
-          <BiChevronRight size={16} />
+        {/* Highlighted Primary Action Button */}
+        <button
+          type="button"
+          onClick={handleGoToSupport}
+          className="w-full group relative flex items-center justify-between bg-gradient-to-r from-[#fe2c55] to-[#e0244d] hover:from-[#e0244d] hover:to-[#c91c41] text-white font-bold py-3.5 px-5 rounded-2xl shadow-lg shadow-[#fe2c55]/25 active:scale-[0.98] transition-all duration-200 cursor-pointer overflow-hidden border border-white/10"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-white/15 flex items-center justify-center group-hover:scale-110 transition-transform">
+              <BiHeadphone size={22} className="text-white" />
+            </div>
+            <div className="text-left">
+              <div className="text-[10px] uppercase tracking-widest text-white/80 font-bold">Have Questions?</div>
+              <div className="text-base font-extrabold leading-tight">Contact Support</div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1 text-white/90 group-hover:translate-x-1 transition-transform">
+            <span className="text-xs font-bold bg-white/20 px-3 py-1 rounded-full backdrop-blur-sm shadow-sm">Help</span>
+            <BiChevronRight size={20} />
+          </div>
         </button>
       </div>
-
-      <style dangerouslySetInnerHTML={{ __html: `
-        .suspended-screen {
-          width: 100vw;
-          height: 100vh;
-          background: #ffffff;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          padding: 20px;
-          position: fixed;
-          top: 0;
-          left: 0;
-          z-index: 9999;
-          font-family: 'Manrope', sans-serif;
-        }
-        .suspended-content {
-          text-align: center;
-          max-width: 400px;
-        }
-        .suspended-icon {
-          margin-bottom: 24px;
-          display: flex;
-          justify-content: center;
-        }
-        .suspended-content h1 {
-          font-size: 24px;
-          font-weight: 800;
-          color: #111827;
-          margin-bottom: 12px;
-        }
-        .suspended-message {
-          font-size: 15px;
-          color: #6b7280;
-          line-height: 1.6;
-          margin-bottom: 24px;
-        }
-        .reason-box {
-          background: #fef2f2;
-          border: 1px solid #fee2e2;
-          border-radius: 12px;
-          padding: 16px;
-          margin-bottom: 32px;
-          text-align: left;
-        }
-        .reason-label {
-          font-size: 13px;
-          font-weight: 700;
-          color: #991b1b;
-          margin-bottom: 4px;
-        }
-        .reason-text {
-          font-size: 14px;
-          color: #b91c1c;
-        }
-        .contact-support {
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          gap: 6px;
-          font-size: 14px;
-          font-weight: 700;
-          color: #2563eb;
-          background: none;
-          border: none;
-          padding: 8px;
-          cursor: pointer;
-          text-decoration: underline;
-        }
-      `}} />
     </div>
   );
 };

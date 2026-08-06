@@ -144,6 +144,7 @@ const BottomNavBar = ({ isDarkTheme = true }) => {
   }, []);
 
   const fetchUnreadCount = async () => {
+    if (!user || user.isBanned) return;
     try {
       const res = await messageService.getConversations();
       if (res.success) {
@@ -151,18 +152,20 @@ const BottomNavBar = ({ isDarkTheme = true }) => {
         setUnreadCount(count);
       }
     } catch (err) {
-      console.error('Failed to fetch unread count:', err);
+      if (!user?.isBanned) {
+        console.error('Failed to fetch unread count:', err);
+      }
     }
   };
 
   useEffect(() => {
-    if (user) {
+    if (user && !user.isBanned) {
       fetchUnreadCount();
     }
   }, [user]);
 
   useEffect(() => {
-    if (socket) {
+    if (socket && user && !user.isBanned) {
       socket.on('new_message', () => {
         fetchUnreadCount();
       });
@@ -174,7 +177,7 @@ const BottomNavBar = ({ isDarkTheme = true }) => {
         socket.off('conversation_read');
       };
     }
-  }, [socket]);
+  }, [socket, user]);
 
   const navItems = useMemo(() => {
     const items = config?.navigation?.bottomNav || [];

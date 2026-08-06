@@ -4,11 +4,11 @@ import { useAuth } from '../context/AuthContext';
 
 const useLiveLocation = () => {
   const socket = useSocket();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
 
   useEffect(() => {
-    // Only track if authenticated and socket is connected
-    if (!isAuthenticated || !socket) return;
+    // Only track if authenticated, user not banned, and socket is connected
+    if (!isAuthenticated || !socket || user?.isBanned) return;
 
     let watchId;
 

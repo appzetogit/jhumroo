@@ -153,7 +153,9 @@ api.interceptors.response.use(
           if (
             data.message !== 'This account is private' && 
             !data.message?.includes('messages not allowed') && 
-            !data.message?.includes('mutual followers')
+            !data.message?.includes('mutual followers') &&
+            !data.message?.includes('banned') &&
+            !data.message?.includes('inactive')
           ) {
             console.error('Access denied:', data.message);
           }
