@@ -340,14 +340,14 @@ const CreateAdPage = () => {
             <input 
               ref={galleryInputRef}
               type="file" 
-              accept="video/*,image/*" 
+              accept="image/*,video/*" 
               className="hidden" 
               onChange={handleFileSelect} 
             />
             <input 
               ref={cameraInputRef}
               type="file" 
-              accept="video/*,image/*" 
+              accept="image/*,video/*" 
               capture="environment"
               className="hidden" 
               onChange={handleFileSelect} 
@@ -394,8 +394,8 @@ const CreateAdPage = () => {
                   {/* Camera Option */}
                   <button 
                     onClick={() => {
-                      setShowUploadOptions(false);
                       cameraInputRef.current?.click();
+                      setShowUploadOptions(false);
                     }}
                     className={`w-full flex items-center gap-4 p-4 rounded-[18px] transition-all cursor-pointer text-left active:scale-[0.98] ${
                       isDarkMode 
@@ -417,8 +417,8 @@ const CreateAdPage = () => {
                   {/* Gallery Option */}
                   <button 
                     onClick={() => {
-                      setShowUploadOptions(false);
                       galleryInputRef.current?.click();
+                      setShowUploadOptions(false);
                     }}
                     className={`w-full flex items-center gap-4 p-4 rounded-[18px] transition-all cursor-pointer text-left active:scale-[0.98] ${
                       isDarkMode 
