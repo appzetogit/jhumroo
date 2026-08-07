@@ -1006,16 +1006,22 @@ const CreatePage = () => {
     }
   }, [isRestoring, stage, previewUrl, videoFile]);
 
-  // Intercept browser back gesture/button to pop stage stack
+  // Intercept browser back gesture/button to pop stage stack or close active sheet
   useEffect(() => {
     const handlePopState = (e) => {
+      if (activeSheet) {
+        setActiveSheet(null);
+        window.history.pushState(null, '', window.location.pathname);
+        return;
+      }
       if (stageStack.length > 1) {
         popStage();
         window.history.pushState(null, '', window.location.pathname);
+        return;
       }
     };
 
-    if (stageStack.length > 1) {
+    if (stageStack.length > 1 || activeSheet !== null) {
       window.history.pushState(null, '', window.location.pathname);
       window.addEventListener('popstate', handlePopState);
     }
@@ -1023,7 +1029,7 @@ const CreatePage = () => {
     return () => {
       window.removeEventListener('popstate', handlePopState);
     };
-  }, [stageStack]);
+  }, [stageStack, activeSheet]);
 
   // Ensure preview video plays when entering stage
   useEffect(() => {
@@ -1186,7 +1192,7 @@ const CreatePage = () => {
     setActiveSheet(null);
   };
 
-  const popStage = () => {
+  const popStage = (skipSheet = false) => {
     if (stageStack.length <= 1) return;
 
     const currentStage = stageStack[stageStack.length - 1];
@@ -1199,7 +1205,11 @@ const CreatePage = () => {
     }
 
     setStageStack((currentStack) => currentStack.slice(0, -1));
-    setActiveSheet(null);
+    if (currentStage === 'sound-editor' && !skipSheet) {
+      setActiveSheet('music-library');
+    } else {
+      setActiveSheet(null);
+    }
   };
 
   const showToast = (message) => {
@@ -6818,7 +6828,7 @@ const CreatePage = () => {
                 }
 
                 setEditingSoundIndex(-1); // Reset
-                popStage();
+                popStage(true);
                 showToast('Sound applied');
               } catch (e) {
                 console.error('Error inside trimmer Done handler:', e);
