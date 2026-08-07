@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BiChevronLeft, BiCloudUpload, BiX, BiMap, BiLink, BiMusic } from 'react-icons/bi';
+import { BiChevronLeft, BiCloudUpload, BiX, BiMap, BiLink, BiMusic, BiCamera, BiImageAlt } from 'react-icons/bi';
 import AdCalendarPicker from '../../../../components/AdCalendarPicker';
 import { useTheme } from '../../../../context/ThemeContext';
 import { useAuth } from '../../../../context/AuthContext';
@@ -32,7 +32,9 @@ const CreateAdPage = () => {
   const navigate = useNavigate();
   const { isDarkMode } = useTheme();
   const { user: reqUser } = useAuth();
-  const fileInputRef = useRef(null);
+  const galleryInputRef = useRef(null);
+  const cameraInputRef = useRef(null);
+  const [showUploadOptions, setShowUploadOptions] = useState(false);
   
   const [pricing, setPricing] = useState({ shopPricePerDay: 0, chatPricePerDay: 0 });
   const [loading, setLoading] = useState(false);
@@ -128,6 +130,7 @@ const CreateAdPage = () => {
 
   const handleFileSelect = (e) => {
     const file = e.target.files[0];
+    if (e.target) e.target.value = '';
     if (file) {
       setMedia(file);
       const type = file.type.startsWith('video') ? 'video' : 'image';
@@ -312,7 +315,7 @@ const CreateAdPage = () => {
         <div className="flex flex-col gap-6 mt-6">
           {/* Media Upload */}
           <div 
-            onClick={() => fileInputRef.current.click()}
+            onClick={() => setShowUploadOptions(true)}
             className="relative aspect-[3/4] rounded-[24px] border-2 border-dashed theme-panel-divider bg-black/5 flex flex-col items-center justify-center cursor-pointer overflow-hidden group"
           >
             {mediaPreview ? (
@@ -333,14 +336,110 @@ const CreateAdPage = () => {
                 <p className="theme-text-muted text-[12px] mt-1">Recommended: 1080x1920 (9:16)</p>
               </>
             )}
+            {/* Hidden Inputs for Gallery and Camera */}
             <input 
-              ref={fileInputRef}
+              ref={galleryInputRef}
               type="file" 
               accept="video/*,image/*" 
               className="hidden" 
               onChange={handleFileSelect} 
             />
+            <input 
+              ref={cameraInputRef}
+              type="file" 
+              accept="video/*,image/*" 
+              capture="environment"
+              className="hidden" 
+              onChange={handleFileSelect} 
+            />
           </div>
+
+          {/* Media Source Options Modal */}
+          {showUploadOptions && (
+            <div 
+              className="fixed inset-0 z-[6000] flex flex-col justify-end bg-black/60 backdrop-blur-xs transition-opacity duration-300"
+              onClick={() => setShowUploadOptions(false)}
+              onTouchMove={(e) => {
+                if (e.target === e.currentTarget) e.preventDefault();
+              }}
+            >
+              <div 
+                className={`w-full rounded-t-[24px] pb-8 pt-3 px-4 shadow-2xl transition-transform duration-300 ${
+                  isDarkMode 
+                    ? 'bg-[#161823] text-white border-t border-white/10' 
+                    : 'bg-white text-gray-900 border-t border-gray-100'
+                }`}
+                onClick={(e) => e.stopPropagation()}
+              >
+                {/* Drag handle */}
+                <div className="flex flex-col items-center pt-1 pb-2">
+                  <div className={`w-10 h-1 rounded-full ${isDarkMode ? 'bg-white/20' : 'bg-black/15'}`} />
+                </div>
+
+                {/* Header */}
+                <div className="flex items-center justify-between pb-3 mb-2 border-b border-white/10">
+                  <h3 className="text-[17px] font-bold">Select Media Source</h3>
+                  <button 
+                    onClick={() => setShowUploadOptions(false)}
+                    className={`w-8 h-8 rounded-full flex items-center justify-center cursor-pointer ${
+                      isDarkMode ? 'bg-white/10 hover:bg-white/15' : 'bg-black/5 hover:bg-black/10'
+                    }`}
+                  >
+                    <BiX size={20} />
+                  </button>
+                </div>
+
+                {/* Options List */}
+                <div className="flex flex-col gap-3 py-2">
+                  {/* Camera Option */}
+                  <button 
+                    onClick={() => {
+                      setShowUploadOptions(false);
+                      cameraInputRef.current?.click();
+                    }}
+                    className={`w-full flex items-center gap-4 p-4 rounded-[18px] transition-all cursor-pointer text-left active:scale-[0.98] ${
+                      isDarkMode 
+                        ? 'bg-white/5 hover:bg-white/10 text-white' 
+                        : 'bg-black/5 hover:bg-black/10 text-gray-900'
+                    }`}
+                  >
+                    <div className="w-12 h-12 rounded-full bg-[#20D5EC]/15 text-[#20D5EC] flex items-center justify-center shrink-0">
+                      <BiCamera size={26} />
+                    </div>
+                    <div className="flex flex-col">
+                      <span className="text-[15px] font-bold">Camera</span>
+                      <span className={`text-[12px] ${isDarkMode ? 'text-white/50' : 'text-gray-500'}`}>
+                        Take a photo or record video
+                      </span>
+                    </div>
+                  </button>
+
+                  {/* Gallery Option */}
+                  <button 
+                    onClick={() => {
+                      setShowUploadOptions(false);
+                      galleryInputRef.current?.click();
+                    }}
+                    className={`w-full flex items-center gap-4 p-4 rounded-[18px] transition-all cursor-pointer text-left active:scale-[0.98] ${
+                      isDarkMode 
+                        ? 'bg-white/5 hover:bg-white/10 text-white' 
+                        : 'bg-black/5 hover:bg-black/10 text-gray-900'
+                    }`}
+                  >
+                    <div className="w-12 h-12 rounded-full bg-[#FE2C55]/15 text-[#FE2C55] flex items-center justify-center shrink-0">
+                      <BiImageAlt size={26} />
+                    </div>
+                    <div className="flex flex-col">
+                      <span className="text-[15px] font-bold">Gallery</span>
+                      <span className={`text-[12px] ${isDarkMode ? 'text-white/50' : 'text-gray-500'}`}>
+                        Choose photo or video from device gallery
+                      </span>
+                    </div>
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Form Fields */}
           <div className="flex flex-col gap-4">

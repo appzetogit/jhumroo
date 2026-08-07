@@ -68,14 +68,18 @@ const handleMentionNotifications = (reel, currentUserId) => {
 const getBlockedUserIds = async (user) => {
   if (!user || !user._id) return [];
 
-  const currentUser = await User.findById(user._id).select('blockedUsers');
+  const [currentUser, blockedMeUsers, reportedUsers] = await Promise.all([
+    User.findById(user._id).select('blockedUsers'),
+    User.find({ blockedUsers: user._id }).select('_id'),
+    Report.find({ reportedBy: user._id, reportType: 'User' }).select('reportedItem')
+  ]);
+
   const blockedByMe = (currentUser?.blockedUsers || []).map(id => id.toString());
+  const blockedMe = (blockedMeUsers || []).map(u => u._id.toString());
+  const reportedByUser = (reportedUsers || []).map(r => r.reportedItem ? r.reportedItem.toString() : null).filter(Boolean);
 
-  const blockedMeUsers = await User.find({ blockedUsers: user._id }).select('_id');
-  const blockedMe = blockedMeUsers.map(u => u._id.toString());
-
-  const allBlockedIds = [...new Set([...blockedByMe, ...blockedMe])];
-  return allBlockedIds.map(id => new mongoose.Types.ObjectId(id));
+  const allHiddenIds = [...new Set([...blockedByMe, ...blockedMe, ...reportedByUser])];
+  return allHiddenIds.map(id => new mongoose.Types.ObjectId(id));
 };
 
 /**

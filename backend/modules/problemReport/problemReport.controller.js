@@ -124,10 +124,22 @@ export const updateProblemReportStatus = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Problem report not found' });
     }
 
-    createNotification({
+    const statusLabelMap = {
+      pending: 'Pending',
+      in_progress: 'In Progress',
+      under_review: 'Under Review',
+      resolved: 'Resolved',
+      rejected: 'Rejected',
+      closed: 'Closed'
+    };
+
+    const displayStatus = statusLabelMap[status] || status;
+    const categoryName = report.category ? report.category.replace(/_/g, ' ') : 'Reported Issue';
+
+    await createNotification({
       recipient: report.userId,
       type: 'report_status',
-      text: `Your reported problem is now "${status}"`
+      text: `Your reported problem (${categoryName}) status is now "${displayStatus}".${adminNotes ? ` Note: ${adminNotes}` : ''}`
     });
 
     res.status(200).json({

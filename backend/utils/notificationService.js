@@ -2,6 +2,7 @@ import Notification from '../models/Notification.model.js';
 import User from '../models/User.model.js';
 import Follow from '../models/Follow.model.js';
 import { messaging } from '../config/firebase.js';
+import { sendToUser } from '../config/socket.js';
 
 /**
  * Create an in-app notification and optionally send a push notification via FCM
@@ -51,6 +52,9 @@ export const createNotification = async ({ recipient, sender, type, reel, commen
         existing.createdAt = new Date();
         existing.isRead = false;
         await existing.save();
+        try {
+          sendToUser(recipient.toString(), 'new_notification', existing);
+        } catch (sErr) {}
         return existing;
       }
     }
@@ -63,6 +67,10 @@ export const createNotification = async ({ recipient, sender, type, reel, commen
       comment,
       text
     });
+
+    try {
+      sendToUser(recipient.toString(), 'new_notification', notification);
+    } catch (socketErr) {}
 
     // Send push notification if messaging is initialized and not suppressed
     if (!skipPush && messaging) {
