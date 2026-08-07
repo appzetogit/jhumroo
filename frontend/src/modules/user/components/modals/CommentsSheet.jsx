@@ -22,9 +22,7 @@ const CommentsSheet = ({ isOpen, onClose, commentCount = 0, reelId, reelOwnerId,
   const { user: currentUser, updateUser } = useAuth();
   const quickEmojis = config?.comments?.quickEmojis || [];
   const [newComment, setNewComment] = useState('');
-  const [keyboardOffset, setKeyboardOffset] = useState(0);
-  const setKeyboardOffsetRef = React.useRef(setKeyboardOffset);
-  setKeyboardOffsetRef.current = setKeyboardOffset;
+
   const [commentsList, setCommentsList] = useState([]);
   const [commentsDisabled, setCommentsDisabled] = useState(false);
   const [commentsBlocked, setCommentsBlocked] = useState(false);
@@ -240,64 +238,14 @@ const CommentsSheet = ({ isOpen, onClose, commentCount = 0, reelId, reelOwnerId,
   React.useEffect(() => {
     if (!isOpen) {
       document.body.style.overflow = '';
-      setKeyboardOffsetRef.current(0);
       return;
     }
 
-    const body = document.body;
-    const root = document.getElementById('root');
-    const appShell = root?.firstElementChild;
-    const viewport = window.visualViewport;
-    const lockedHeight = Math.round(
-      appShell instanceof HTMLElement
-        ? appShell.getBoundingClientRect().height
-        : window.innerHeight
-    );
-
-    const previousBodyHeight = body.style.height;
-    const previousRootHeight = root?.style.height ?? '';
-    const previousAppShellHeight = appShell instanceof HTMLElement ? appShell.style.height : '';
-
-    body.style.overflow = 'hidden';
-    body.style.height = `${lockedHeight}px`;
-
-    if (root) {
-      root.style.height = `${lockedHeight}px`;
-    }
-
-    if (appShell instanceof HTMLElement) {
-      appShell.style.height = `${lockedHeight}px`;
-    }
-
-    const syncKeyboardOffset = () => {
-      if (!viewport) {
-        setKeyboardOffsetRef.current(0);
-        return;
-      }
-
-      const nextOffset = Math.max(0, lockedHeight - viewport.height - viewport.offsetTop);
-      setKeyboardOffsetRef.current(nextOffset);
-    };
-
-    syncKeyboardOffset();
-    viewport?.addEventListener('resize', syncKeyboardOffset);
-    viewport?.addEventListener('scroll', syncKeyboardOffset);
+    const previousBodyOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
 
     return () => {
-      viewport?.removeEventListener('resize', syncKeyboardOffset);
-      viewport?.removeEventListener('scroll', syncKeyboardOffset);
-      body.style.overflow = '';
-      body.style.height = previousBodyHeight;
-
-      if (root) {
-        root.style.height = previousRootHeight;
-      }
-
-      if (appShell instanceof HTMLElement) {
-        appShell.style.height = previousAppShellHeight;
-      }
-
-      setKeyboardOffsetRef.current(0);
+      document.body.style.overflow = previousBodyOverflow;
     };
   }, [isOpen]);
 
@@ -387,10 +335,11 @@ const CommentsSheet = ({ isOpen, onClose, commentCount = 0, reelId, reelOwnerId,
   return (
     <>
       <div
-        className={`absolute inset-0 z-[2000] flex flex-col justify-end touch-none comments-sheet-backdrop ${
+        className={`fixed inset-0 z-[2000] flex flex-col justify-end touch-none comments-sheet-backdrop ${
         isDarkMode ? 'bg-black/50' : 'bg-black/30 backdrop-blur-[2px]'
       }`}
       data-modal-open="true"
+      onClick={onClose}
     >
       <div 
         className={`w-full h-[70%] rounded-t-[12px] flex flex-col animate-slide-up touch-auto ${
@@ -398,7 +347,6 @@ const CommentsSheet = ({ isOpen, onClose, commentCount = 0, reelId, reelOwnerId,
             ? 'bg-[#161823] text-white'
             : 'bg-white text-black shadow-[0_-12px_36px_rgba(15,23,42,0.16)] border-t border-black/10'
         }`} 
-        style={{ paddingBottom: keyboardOffset ? `${keyboardOffset}px` : undefined }}
         onClick={(e) => e.stopPropagation()}
       >
         <div className={`relative p-4 border-b flex flex-col items-center ${isDarkMode ? 'border-white/5' : 'border-black/[0.08]'}`}>

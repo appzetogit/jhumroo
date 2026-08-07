@@ -257,6 +257,7 @@ const AdminReels = () => {
               <span>Engagement</span>
               <span>Duration</span>
               <span>Created At</span>
+              <span>Duet</span>
               <span className="text-right">Actions</span>
             </div>
             
@@ -345,6 +346,21 @@ const AdminReels = () => {
                   <div className="flex flex-col">
                     <span className="font-bold text-[13px] text-admin-strong">{date}</span>
                     <span className="text-[11px] text-admin-muted">{time}</span>
+                  </div>
+
+                  {/* Duet Status */}
+                  <div>
+                    {reel.allowDuet !== false ? (
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-600 border border-emerald-200/80 shadow-xs">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                        ON
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-rose-50 text-rose-500 border border-rose-200/80 shadow-xs">
+                        <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
+                        OFF
+                      </span>
+                    )}
                   </div>
 
                   {/* Actions */}
@@ -638,7 +654,7 @@ const AdminReels = () => {
 
       <style dangerouslySetInnerHTML={{ __html: `
         .admin-table-head--reels, .admin-table-row--reels {
-          grid-template-columns: 2fr 1.5fr 1fr 0.8fr 1.2fr 0.8fr;
+          grid-template-columns: 2fr 1.5fr 1fr 0.8fr 1.2fr 0.8fr 0.8fr;
           align-items: center;
           gap: 20px;
         }
