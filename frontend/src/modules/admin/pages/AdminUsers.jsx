@@ -30,9 +30,9 @@ const AdminUsers = () => {
   const fetchUsers = async (searchVal = searchTerm) => {
     setLoading(true);
     try {
-      const response = await adminUserService.getAllUsers({ search: searchVal });
+      const response = await adminUserService.getAllUsers({ search: searchVal, isActive: true });
       if (response.success) {
-        setUsers(response.users);
+        setUsers((response.users || []).filter(u => u.isActive !== false));
       } else {
         setError('Failed to fetch users');
       }

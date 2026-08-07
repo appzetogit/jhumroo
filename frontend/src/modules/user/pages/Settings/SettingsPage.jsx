@@ -77,7 +77,7 @@ const SettingsPage = ({ onLogout }) => {
             setIsDeleting(true);
             await userService.deleteAccount();
             setShowDeleteModal(false);
-            onLogout?.();
+            performLogout();
         } catch (error) {
             console.error('[Settings] Delete account failed:', error);
             alert(error?.response?.data?.message || error?.message || 'Failed to delete account. Please try again.');
@@ -207,12 +207,12 @@ const SettingsPage = ({ onLogout }) => {
 
             {showLogoutModal && (
                 <div
-                  className="absolute inset-0 z-[1200] flex items-center justify-center bg-black/50 backdrop-blur-[2px] px-5"
+                  className="absolute inset-0 z-[1200] flex items-end justify-center bg-black/50 backdrop-blur-[2px]"
                   onClick={() => setShowLogoutModal(false)}
                 >
                     <div
-                      className={`w-full max-w-sm rounded-[24px] overflow-hidden shadow-2xl ${
-                        isDarkMode ? 'bg-[#1b1f31] border border-white/10' : 'bg-white border border-black/[0.08]'
+                      className={`w-full rounded-t-[24px] rounded-b-none overflow-hidden shadow-2xl animate-slide-up ${
+                        isDarkMode ? 'bg-[#1b1f31] border-t border-white/10' : 'bg-white border-t border-black/[0.08]'
                       }`}
                       onClick={(event) => event.stopPropagation()}
                     >
@@ -225,7 +225,7 @@ const SettingsPage = ({ onLogout }) => {
 
                         <div className={`h-px ${isDarkMode ? 'bg-white/8' : 'bg-black/[0.08]'}`} />
 
-                        <div className="flex p-4 gap-3">
+                        <div className="flex px-4 pt-4 pb-8 gap-3">
                             <button
                               type="button"
                               onClick={() => setShowLogoutModal(false)}
@@ -258,12 +258,12 @@ const SettingsPage = ({ onLogout }) => {
 
             {showDeleteModal && (
                 <div
-                  className="absolute inset-0 z-[1200] flex items-center justify-center bg-black/50 backdrop-blur-[2px] px-5"
+                  className="absolute inset-0 z-[1200] flex items-end justify-center bg-black/50 backdrop-blur-[2px]"
                   onClick={() => !isDeleting && setShowDeleteModal(false)}
                 >
                     <div
-                      className={`w-full max-w-sm rounded-[24px] overflow-hidden shadow-2xl ${
-                        isDarkMode ? 'bg-[#1b1f31] border border-white/10' : 'bg-white border border-black/[0.08]'
+                      className={`w-full rounded-t-[24px] rounded-b-none overflow-hidden shadow-2xl animate-slide-up ${
+                        isDarkMode ? 'bg-[#1b1f31] border-t border-white/10' : 'bg-white border-t border-black/[0.08]'
                       }`}
                       onClick={(event) => event.stopPropagation()}
                     >
@@ -276,7 +276,7 @@ const SettingsPage = ({ onLogout }) => {
 
                         <div className={`h-px ${isDarkMode ? 'bg-white/8' : 'bg-black/[0.08]'}`} />
 
-                        <div className="flex p-4 gap-3">
+                        <div className="flex px-4 pt-4 pb-8 gap-3">
                             <button
                               type="button"
                               disabled={isDeleting}

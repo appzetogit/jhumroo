@@ -53,7 +53,12 @@ export const protect = async (req, res, next) => {
         });
       }
 
-      if ((!req.user.isActive || req.user.isBanned) && !req.originalUrl.includes('/support-requests')) {
+      if (
+        (!req.user.isActive || req.user.isBanned) && 
+        !req.originalUrl.includes('/support-requests') &&
+        !req.originalUrl.includes('/logout') &&
+        !req.originalUrl.includes('/fcm-token')
+      ) {
         return res.status(403).json({
           success: false,
           message: 'Account is inactive or banned'

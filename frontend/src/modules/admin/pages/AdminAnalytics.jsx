@@ -41,11 +41,11 @@ const StatCard = ({ label, value, icon, accent, sub, trend }) => (
   </div>
 );
 
-const FilterSelect = ({ label, value, onChange, options, placeholder = 'All' }) => (
+const FilterSelect = ({ label, value, onChange, options, placeholder }) => (
   <div className="anl-filter-group">
     <label className="anl-filter-label">{label}</label>
     <select className="anl-filter-select" value={value} onChange={e => onChange(e.target.value)}>
-      <option value="">{placeholder}</option>
+      {placeholder && <option value="">{placeholder}</option>}
       {options.map(o => (
         <option key={typeof o === 'string' ? o : o.value} value={typeof o === 'string' ? o : o.value}>
           {typeof o === 'string' ? o : o.label}
@@ -84,7 +84,7 @@ const ReelGeoTab = () => {
     setLoading(true);
     try {
       const res = await adminAnalyticsService.getReelGeoAnalytics({
-        metric, days, country, state, district
+        metric, days, country, state, district, _t: Date.now()
       });
       setData(res);
     } catch (e) {
@@ -269,7 +269,7 @@ const AdsAnalyticsTab = () => {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await adminAnalyticsService.getAdsAnalytics({ type, days, country });
+      const res = await adminAnalyticsService.getAdsAnalytics({ type, days, country, _t: Date.now() });
       setData(res);
     } catch (e) {
       console.error(e);
@@ -305,15 +305,15 @@ const AdsAnalyticsTab = () => {
               { value: 'all',   label: 'All Ads'       },
               { value: 'admin', label: 'Platform Ads'  },
               { value: 'user',  label: 'User Ads'      }
-            ]} placeholder="All Ads" />
+            ]} />
           <FilterSelect label="Country" value={country} onChange={setCountry}
+            placeholder="All"
             options={['India', 'USA', 'UK', 'UAE', 'Canada']} />
         </div>
         <div className="anl-filter-right">
           <FilterSelect label="Period" value={days} onChange={setDays}
-            options={[{ value: '7', label: '7 days' }, { value: '30', label: '30 days' }, { value: '90', label: '90 days' }]}
-            placeholder="30 days" />
-          <button className="anl-refresh-btn" onClick={fetchData} disabled={loading}>
+            options={[{ value: '7', label: '7 days' }, { value: '30', label: '30 days' }, { value: '90', label: '90 days' }]} />
+          <button className="anl-refresh-btn" onClick={fetchData} disabled={loading} title="Refresh data">
             <BiRefresh size={16} className={loading ? 'animate-spin' : ''} />
           </button>
         </div>
@@ -584,6 +584,7 @@ const AdminAnalytics = () => {
           100% { box-shadow: 0 0 0 0   rgba(16,185,129,0); }
         }
         @keyframes anl-spin { to { transform: rotate(360deg); } }
+        .animate-spin { animation: anl-spin 0.8s linear infinite !important; }
 
         /* Tabs */
         .anl-tabs { display: flex; gap: .5rem; margin-bottom: 1.75rem; border-bottom: 2px solid rgba(0,0,0,.06); }

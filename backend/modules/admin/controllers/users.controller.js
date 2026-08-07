@@ -40,7 +40,11 @@ export const getAllUsers = asyncHandler(async (req, res) => {
   if (isVerified !== undefined) query.isVerified = isVerified === 'true';
   if (isPrivate !== undefined) query.isPrivate = isPrivate === 'true';
   if (isBanned !== undefined) query.isBanned = isBanned === 'true';
-  if (isActive !== undefined) query.isActive = isActive === 'true';
+  if (isActive !== undefined) {
+    query.isActive = isActive === 'true';
+  } else {
+    query.isActive = true; // Exclude deleted/inactive accounts by default
+  }
 
   // Sort options
   const sort = {};

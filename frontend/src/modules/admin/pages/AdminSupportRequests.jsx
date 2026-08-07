@@ -85,7 +85,8 @@ const AdminSupportRequests = () => {
         ) : (
           <div className="admin-table">
             <div className="admin-table-head admin-support-table-grid">
-              <span>User Details</span>
+              <span>User</span>
+              <span>Email</span>
               <span>Reason</span>
               <span>Date & Time</span>
               <span>Status</span>
@@ -94,16 +95,21 @@ const AdminSupportRequests = () => {
             
             {requests.map((request) => (
               <div key={request._id} className="admin-table-row admin-support-table-grid">
-                <div className="flex flex-col gap-1">
-                  <p className="font-bold text-admin-strong text-[14px]">{request.name}</p>
-                  <div className="flex items-center gap-1 text-[11px] text-gray-400">
-                    <BiEnvelope size={12} />
-                    <span>{request.email}</span>
+                <div className="flex flex-col">
+                  <p className="font-bold text-admin-strong text-[14px] truncate">{request.name}</p>
+                </div>
+
+                <div className="min-w-0 pr-2">
+                  <div className="flex items-center gap-1 text-[13px] font-medium text-gray-700 truncate" title={request.email}>
+                    <BiEnvelope size={13} className="text-gray-400 shrink-0" />
+                    <span className="truncate">{request.email || 'N/A'}</span>
                   </div>
-                  <div className="flex items-center gap-1 text-[11px] text-gray-400">
-                    <BiPhone size={12} />
-                    <span>{request.phoneNumber}</span>
-                  </div>
+                  {request.phoneNumber && (
+                    <div className="flex items-center gap-1 text-[11px] text-gray-400 truncate mt-0.5">
+                      <BiPhone size={11} className="shrink-0" />
+                      <span className="truncate">{request.phoneNumber}</span>
+                    </div>
+                  )}
                 </div>
 
                 <div className="truncate pr-4">
@@ -147,88 +153,92 @@ const AdminSupportRequests = () => {
       {/* Detail Modal */}
       {showDetailModal && selectedRequest && (
         <div className="admin-modal-overlay" onClick={() => setShowDetailModal(false)}>
-          <div className="admin-modal max-w-2xl w-full overflow-hidden" onClick={(e) => e.stopPropagation()}>
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-xl font-bold text-admin-strong">Support Request Details</h2>
+          <div className="admin-modal max-w-lg w-full overflow-hidden p-5" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-lg font-bold text-admin-strong">Support Request Details</h2>
               <button onClick={() => setShowDetailModal(false)} className="text-gray-400 hover:text-gray-600">
-                <BiXCircle size={24} />
+                <BiXCircle size={22} />
               </button>
             </div>
 
-            <div className="grid grid-cols-2 gap-8 mb-8">
-              <div className="space-y-5">
+            <div className="grid grid-cols-2 gap-4 mb-4">
+              <div className="space-y-3">
                 <div>
-                  <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">Contact Info</label>
-                  <div className="mt-2 space-y-2">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-lg bg-gray-50 flex items-center justify-center text-gray-400">
-                        <BiUser size={18} />
+                  <label className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Contact Info</label>
+                  <div className="mt-1.5 space-y-1.5">
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-lg bg-gray-50 flex items-center justify-center text-gray-400 shrink-0">
+                        <BiUser size={15} />
                       </div>
-                      <p className="font-bold text-admin-strong">{selectedRequest.name}</p>
+                      <p className="font-bold text-xs text-admin-strong truncate">{selectedRequest.name}</p>
                     </div>
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-lg bg-gray-50 flex items-center justify-center text-gray-400">
-                        <BiEnvelope size={18} />
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-lg bg-gray-50 flex items-center justify-center text-gray-400 shrink-0">
+                        <BiEnvelope size={15} />
                       </div>
-                      <p className="text-sm text-gray-600">{selectedRequest.email}</p>
+                      <p className="text-xs text-gray-600 truncate">{selectedRequest.email}</p>
                     </div>
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-lg bg-gray-50 flex items-center justify-center text-gray-400">
-                        <BiPhone size={18} />
+                    {selectedRequest.phoneNumber && (
+                      <div className="flex items-center gap-2">
+                        <div className="w-7 h-7 rounded-lg bg-gray-50 flex items-center justify-center text-gray-400 shrink-0">
+                          <BiPhone size={15} />
+                        </div>
+                        <p className="text-xs text-gray-600 truncate">{selectedRequest.phoneNumber}</p>
                       </div>
-                      <p className="text-sm text-gray-600">{selectedRequest.phoneNumber}</p>
-                    </div>
+                    )}
                   </div>
                 </div>
 
                 <div>
-                  <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">Submitted On</label>
-                  <p className="text-admin-strong mt-1 font-medium">{new Date(selectedRequest.createdAt).toLocaleString()}</p>
+                  <label className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Submitted On</label>
+                  <p className="text-admin-strong text-xs mt-0.5 font-medium">{new Date(selectedRequest.createdAt).toLocaleString()}</p>
                 </div>
               </div>
 
-              <div className="space-y-5">
+              <div className="space-y-3">
                 <div>
-                  <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">Current Status</label>
-                  <div className="mt-2">
-                    <span className={`admin-status-pill text-sm py-1.5 px-4 ${getStatusColor(selectedRequest.status)}`}>
+                  <label className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Current Status</label>
+                  <div className="mt-1">
+                    <span className={`admin-status-pill text-xs py-1 px-3 ${getStatusColor(selectedRequest.status)}`}>
                       {selectedRequest.status.replace('_', ' ')}
                     </span>
                   </div>
                 </div>
 
                 <div>
-                  <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">Update Status</label>
-                  <select 
-                    className="admin-input mt-2"
-                    value={statusToUpdate}
-                    onChange={(e) => setStatusToUpdate(e.target.value)}
-                  >
-                    <option value="pending">Pending</option>
-                    <option value="in_progress">In Progress</option>
-                    <option value="resolved">Resolved</option>
-                    <option value="closed">Closed</option>
-                  </select>
+                  <label className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Update Status</label>
+                  <div className="mt-1 p-2 bg-gray-50 rounded-lg border border-gray-100">
+                    <select 
+                      className="admin-input w-full text-xs py-1 px-2"
+                      value={statusToUpdate}
+                      onChange={(e) => setStatusToUpdate(e.target.value)}
+                    >
+                      <option value="pending">Pending</option>
+                      <option value="in_progress">In Progress</option>
+                      <option value="resolved">Resolved</option>
+                      <option value="closed">Closed</option>
+                    </select>
+                  </div>
                 </div>
               </div>
             </div>
 
-            <div className="mb-6">
-              <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">Reason for Support</label>
-              <div className="mt-2 p-5 bg-gray-50 rounded-2xl border border-gray-100">
-                <p className="text-admin-strong whitespace-pre-wrap leading-relaxed">{selectedRequest.reason}</p>
+            <div className="mb-4">
+              <label className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Reason for Support</label>
+              <div className="mt-1 p-3 bg-gray-50 rounded-xl border border-gray-100 max-h-32 overflow-y-auto">
+                <p className="text-xs text-admin-strong whitespace-pre-wrap leading-relaxed">{selectedRequest.reason}</p>
               </div>
             </div>
 
-            <div className="flex gap-4">
+            <div className="flex gap-2.5 pt-1">
               <button 
-                className="flex-1 admin-primary-btn h-12"
+                className="flex-1 admin-primary-btn text-xs py-2 h-9"
                 onClick={() => handleUpdateStatus(selectedRequest._id, statusToUpdate)}
               >
                 Save Changes
               </button>
               <button 
-                className="flex-1 admin-secondary-btn h-12"
+                className="flex-1 admin-secondary-btn text-xs py-2 h-9"
                 onClick={() => setShowDetailModal(false)}
               >
                 Cancel
@@ -241,7 +251,7 @@ const AdminSupportRequests = () => {
       <style dangerouslySetInnerHTML={{ __html: `
         .admin-support-table-grid {
           display: grid;
-          grid-template-columns: 1.5fr 2fr 1.2fr 1fr 0.6fr;
+          grid-template-columns: 1.2fr 1.5fr 2fr 1.2fr 1fr 0.6fr;
           align-items: center;
           gap: 20px;
         }

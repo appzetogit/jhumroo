@@ -86,6 +86,7 @@ const AdminProblemReports = () => {
           <div className="admin-table">
             <div className="admin-table-head admin-problem-table-grid">
               <span>User</span>
+              <span>Email</span>
               <span>Category</span>
               <span>Description</span>
               <span>Date</span>
@@ -103,13 +104,20 @@ const AdminProblemReports = () => {
                     />
                   </div>
                   <div className="min-w-0">
-                    <p className="admin-user-name truncate">@{report.userId?.username}</p>
-                    <p className="admin-user-handle truncate">{report.userId?.fullName}</p>
-                    <div className="flex flex-col mt-1 gap-0.5">
-                      {report.userId?.email && <p className="text-[10px] text-gray-400 truncate">{report.userId.email}</p>}
-                      {report.userId?.phoneNumber && <p className="text-[10px] text-gray-400 truncate">{report.userId.phoneNumber}</p>}
-                    </div>
+                    <p className="admin-user-name truncate">@{report.userId?.username || 'user'}</p>
+                    <p className="admin-user-handle truncate">{report.userId?.fullName || 'N/A'}</p>
                   </div>
+                </div>
+
+                <div className="min-w-0 pr-2">
+                  <p className="text-[13px] font-medium text-gray-700 truncate" title={report.userId?.email || ''}>
+                    {report.userId?.email || 'N/A'}
+                  </p>
+                  {report.userId?.phoneNumber && (
+                    <p className="text-[10px] text-gray-400 truncate mt-0.5">
+                      {report.userId.phoneNumber}
+                    </p>
+                  )}
                 </div>
 
                 <div>
@@ -131,7 +139,7 @@ const AdminProblemReports = () => {
 
                 <div>
                   <span className={`admin-status-pill ${getStatusColor(report.status)}`}>
-                    {report.status.replace('_', ' ')}
+                    {report.status?.replace('_', ' ')}
                   </span>
                 </div>
 
@@ -157,63 +165,58 @@ const AdminProblemReports = () => {
       {/* Detail Modal */}
       {showDetailModal && selectedReport && (
         <div className="admin-modal-overlay" onClick={() => setShowDetailModal(false)}>
-          <div className="admin-modal max-w-2xl w-full overflow-hidden" onClick={(e) => e.stopPropagation()}>
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-xl font-bold text-admin-strong">Report Details</h2>
+          <div className="admin-modal max-w-lg w-full overflow-hidden p-5" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-lg font-bold text-admin-strong">Report Details</h2>
               <button onClick={() => setShowDetailModal(false)} className="text-gray-400 hover:text-gray-600">
-                <BiXCircle size={24} />
+                <BiXCircle size={22} />
               </button>
             </div>
 
-            <div className="grid grid-cols-2 gap-6 mb-6">
-              <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4 mb-4">
+              <div className="space-y-3">
                 <div>
-                  <label className="text-xs font-bold text-gray-400 uppercase">Reporter</label>
-                  <div className="flex items-center gap-3 mt-1">
-                    <div className="w-10 h-10 rounded-full overflow-hidden">
-                      <img src={selectedReport.userId?.profilePicture?.url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${selectedReport.userId?.username}`} alt="" />
+                  <label className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Reporter</label>
+                  <div className="flex items-center gap-2.5 mt-1">
+                    <div className="w-8 h-8 rounded-full overflow-hidden shrink-0 border border-gray-200">
+                      <img src={selectedReport.userId?.profilePicture?.url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${selectedReport.userId?.username}`} alt="" className="w-full h-full object-cover" />
                     </div>
-                    <div>
-                      <p className="font-bold text-admin-strong">@{selectedReport.userId?.username}</p>
-                      <p className="text-sm text-gray-500">{selectedReport.userId?.fullName}</p>
-                      <div className="mt-2 space-y-1">
-                        {selectedReport.userId?.email && (
-                          <p className="text-xs text-gray-400 flex items-center gap-1">
-                            <span className="font-semibold text-gray-500">Email:</span> {selectedReport.userId.email}
-                          </p>
-                        )}
-                        {selectedReport.userId?.phoneNumber && (
-                          <p className="text-xs text-gray-400 flex items-center gap-1">
-                            <span className="font-semibold text-gray-500">Phone:</span> {selectedReport.userId.phoneNumber}
-                          </p>
-                        )}
-                      </div>
+                    <div className="min-w-0">
+                      <p className="font-bold text-xs text-admin-strong truncate">@{selectedReport.userId?.username || 'user'}</p>
+                      <p className="text-[11px] text-gray-500 truncate">{selectedReport.userId?.fullName || 'N/A'}</p>
                     </div>
                   </div>
+                  {(selectedReport.userId?.email || selectedReport.userId?.phoneNumber) && (
+                    <div className="mt-1 space-y-0.5 text-[11px] text-gray-500 pl-1">
+                      {selectedReport.userId?.email && <p className="truncate"><span className="text-gray-400">Email:</span> {selectedReport.userId.email}</p>}
+                      {selectedReport.userId?.phoneNumber && <p className="truncate"><span className="text-gray-400">Phone:</span> {selectedReport.userId.phoneNumber}</p>}
+                    </div>
+                  )}
                 </div>
                 <div>
-                  <label className="text-xs font-bold text-gray-400 uppercase">Category</label>
-                  <p className="text-admin-strong font-medium mt-1">{selectedReport.category}</p>
+                  <label className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Category</label>
+                  <p className="text-admin-strong text-xs font-semibold mt-0.5">{selectedReport.category}</p>
                 </div>
                 <div>
-                  <label className="text-xs font-bold text-gray-400 uppercase">Submitted On</label>
-                  <p className="text-admin-strong mt-1">{new Date(selectedReport.createdAt).toLocaleString()}</p>
+                  <label className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Submitted On</label>
+                  <p className="text-admin-strong text-xs mt-0.5">{new Date(selectedReport.createdAt).toLocaleString()}</p>
                 </div>
               </div>
-              <div className="space-y-4">
+
+              <div className="space-y-3">
                 <div>
-                  <label className="text-xs font-bold text-gray-400 uppercase">Current Status</label>
+                  <label className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Current Status</label>
                   <div className="mt-1">
-                    <span className={`admin-status-pill ${getStatusColor(selectedReport.status)}`}>
-                      {selectedReport.status.replace('_', ' ')}
+                    <span className={`admin-status-pill text-xs py-1 px-3 ${getStatusColor(selectedReport.status)}`}>
+                      {selectedReport.status?.replace('_', ' ')}
                     </span>
                   </div>
                 </div>
                 <div>
-                  <label className="text-xs font-bold text-gray-400 uppercase">Update Status</label>
-                  <div className="mt-1 p-4 bg-gray-50 rounded-xl border border-gray-100">
+                  <label className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Update Status</label>
+                  <div className="mt-1 p-2 bg-gray-50 rounded-lg border border-gray-100">
                     <select
-                      className="admin-input w-full"
+                      className="admin-input w-full text-xs py-1 px-2"
                       value={statusToUpdate}
                       onChange={(e) => setStatusToUpdate(e.target.value)}
                     >
@@ -227,19 +230,19 @@ const AdminProblemReports = () => {
               </div>
             </div>
 
-            <div className="mb-6">
-              <label className="text-xs font-bold text-gray-400 uppercase">Description</label>
-              <div className="mt-1 p-4 bg-gray-50 rounded-xl border border-gray-100">
-                <p className="text-admin-strong whitespace-pre-wrap">{selectedReport.description}</p>
+            <div className="mb-4">
+              <label className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Description</label>
+              <div className="mt-1 p-3 bg-gray-50 rounded-xl border border-gray-100 max-h-28 overflow-y-auto">
+                <p className="text-xs text-admin-strong whitespace-pre-wrap leading-relaxed">{selectedReport.description}</p>
               </div>
             </div>
 
             {selectedReport.attachments && selectedReport.attachments.length > 0 && (
-              <div className="mb-6">
-                <label className="text-xs font-bold text-gray-400 uppercase">Attachments ({selectedReport.attachments.length})</label>
-                <div className="flex flex-wrap gap-4 mt-2">
+              <div className="mb-4">
+                <label className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Attachments ({selectedReport.attachments.length})</label>
+                <div className="flex flex-wrap gap-2.5 mt-1.5">
                   {selectedReport.attachments.map((att, idx) => (
-                    <div key={att._id || idx} className="relative w-40 h-40 rounded-xl overflow-hidden border border-gray-200 bg-black flex items-center justify-center">
+                    <div key={att._id || idx} className="relative w-24 h-24 rounded-lg overflow-hidden border border-gray-200 bg-black flex items-center justify-center">
                       {att.fileType === 'video' ? (
                         <video 
                           src={att.url} 
@@ -261,16 +264,15 @@ const AdminProblemReports = () => {
               </div>
             )}
 
-
-            <div className="flex gap-3">
+            <div className="flex gap-2.5 pt-1">
               <button 
-                className="flex-1 admin-primary-btn"
+                className="flex-1 admin-primary-btn text-xs py-2 h-9"
                 onClick={() => handleUpdateStatus(selectedReport._id, statusToUpdate)}
               >
                 Save Changes
               </button>
               <button 
-                className="flex-1 admin-secondary-btn"
+                className="flex-1 admin-secondary-btn text-xs py-2 h-9"
                 onClick={() => setShowDetailModal(false)}
               >
                 Cancel
@@ -283,14 +285,19 @@ const AdminProblemReports = () => {
       <style dangerouslySetInnerHTML={{ __html: `
         .admin-problem-table-grid {
           display: grid;
-          grid-template-columns: 1.5fr 1fr 2.5fr 1fr 1fr 0.8fr;
+          grid-template-columns: 1.3fr 1.5fr 1.1fr 2.2fr 1fr 0.9fr 0.6fr;
           align-items: center;
-          gap: 20px;
+          gap: 16px;
         }
         .admin-table-head {
           padding: 12px 0;
           border-bottom: 2px solid var(--admin-border);
           margin-bottom: 8px;
+          color: var(--admin-muted);
+          font-weight: 700;
+          text-transform: uppercase;
+          font-size: 11px;
+          letter-spacing: 0.5px;
         }
         .admin-table-row {
           padding: 16px 0;

@@ -150,12 +150,18 @@ api.interceptors.response.use(
       
       switch (status) {
         case 403:
-          if (
+          if (data?.message === 'Account is inactive or banned') {
+            localStorage.removeItem('jhumroo_token');
+            localStorage.removeItem('jhumroo_user');
+            localStorage.removeItem('jhumroo_refresh_token');
+            const isBrowserOnAdminRoute = typeof window !== 'undefined' && window.location.pathname.startsWith('/admin');
+            if (!isBrowserOnAdminRoute && typeof window !== 'undefined' && !window.location.pathname.includes('/auth')) {
+              window.location.href = '/auth';
+            }
+          } else if (
             data.message !== 'This account is private' && 
             !data.message?.includes('messages not allowed') && 
-            !data.message?.includes('mutual followers') &&
-            !data.message?.includes('banned') &&
-            !data.message?.includes('inactive')
+            !data.message?.includes('mutual followers')
           ) {
             console.error('Access denied:', data.message);
           }
