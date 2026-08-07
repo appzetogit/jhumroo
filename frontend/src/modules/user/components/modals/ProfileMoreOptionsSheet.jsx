@@ -94,7 +94,26 @@ const ProfileMoreOptionsSheet = ({
       setIsClosing(false);
       setView('menu');
       setCurrentY(0);
+      document.body.style.overflow = 'hidden';
+      const scrollables = document.querySelectorAll('.scrollable');
+      scrollables.forEach(el => {
+        el.style.overflow = 'hidden';
+      });
+    } else {
+      document.body.style.overflow = '';
+      const scrollables = document.querySelectorAll('.scrollable');
+      scrollables.forEach(el => {
+        el.style.overflow = '';
+      });
     }
+
+    return () => {
+      document.body.style.overflow = '';
+      const scrollables = document.querySelectorAll('.scrollable');
+      scrollables.forEach(el => {
+        el.style.overflow = '';
+      });
+    };
   }, [isOpen]);
 
   if (!isOpen && !isClosing) return null;
@@ -143,9 +162,14 @@ const ProfileMoreOptionsSheet = ({
         isOpen && !isClosing ? 'opacity-100' : 'opacity-0 pointer-events-none'
       } ${isDarkMode ? 'bg-black/60 backdrop-blur-xs' : 'bg-black/50 backdrop-blur-xs'}`}
       onClick={handleClose}
+      onTouchMove={(e) => {
+        if (e.target === e.currentTarget) {
+          e.preventDefault();
+        }
+      }}
     >
       <div 
-        className={`w-full h-auto max-h-[75vh] shrink-0 rounded-t-[24px] pb-6 pt-2 px-3 transition-all duration-300 ease-out shadow-2xl ${
+        className={`w-full h-auto max-h-[75vh] shrink-0 rounded-t-[24px] pb-6 pt-2 px-3 transition-all duration-300 ease-out shadow-2xl no-scrollbar [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden ${
           isOpen && !isClosing ? 'translate-y-0' : 'translate-y-full'
         } ${
           isDarkMode 
@@ -163,7 +187,7 @@ const ProfileMoreOptionsSheet = ({
           <div className={`w-12 h-1 rounded-full ${isDarkMode ? 'bg-white/20' : 'bg-black/15'}`} />
         </div>
 
-        <div className="w-full h-auto max-h-[calc(75vh-2rem)] overflow-y-auto no-scrollbar flex flex-col">
+        <div className="w-full h-auto max-h-[calc(75vh-2rem)] overflow-y-auto no-scrollbar [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden flex flex-col">
           {view === 'menu' ? (
             <div className="flex flex-col">
               {/* Quick Action Row (Bubble Icons) */}

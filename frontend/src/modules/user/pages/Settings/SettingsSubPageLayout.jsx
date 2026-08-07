@@ -33,7 +33,7 @@ const SettingsSubPageLayout = ({ title, children, backTo }) => {
         <div className="w-10" />
       </div>
 
-      <div className="scrollable flex-1 px-4 pb-24 pt-6">{children}</div>
+      <div className="scrollable flex-1 px-4 pb-24 pt-6 no-scrollbar [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">{children}</div>
     </div>
   );
 };
