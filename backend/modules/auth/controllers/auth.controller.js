@@ -46,7 +46,7 @@ export const sendOTP = asyncHandler(async (req, res) => {
       phoneNumber, 
       countryCode,
       username: tempUsername,
-      fullName: `User ${tempUsername.split('_')[1]}`
+      fullName: ''
     });
   }
 

@@ -323,7 +323,12 @@ const AuthPage = ({ onComplete, initialMode = 'signup' }) => {
 
 
   /* ─── Step 6: Complete Profile ─── */
-  const [fullName, setFullName] = useState(authUser?.fullName || '');
+  const getInitialFullName = (name) => {
+    if (!name || /^User \d+$/i.test(name.trim())) return '';
+    return name;
+  };
+
+  const [fullName, setFullName] = useState(getInitialFullName(authUser?.fullName));
   const [username, setUsername] = useState((authUser?.username && !authUser.username.startsWith('user_')) ? authUser.username : '');
   const [email, setEmail] = useState(authUser?.email || '');
   const [country, setCountry] = useState(authUser?.country || 'India');
@@ -331,7 +336,9 @@ const AuthPage = ({ onComplete, initialMode = 'signup' }) => {
 
   useEffect(() => {
     if (authUser) {
-      if (authUser.fullName) setFullName(authUser.fullName);
+      if (authUser.fullName && !/^User \d+$/i.test(authUser.fullName.trim())) {
+        setFullName(authUser.fullName);
+      }
       if (authUser.username && !authUser.username.startsWith('user_')) setUsername(authUser.username);
       if (authUser.email) setEmail(authUser.email);
       if (authUser.country) setCountry(authUser.country);
