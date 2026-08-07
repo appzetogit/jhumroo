@@ -314,9 +314,13 @@ const AppContent = () => {
             } else if (!user.isOnboarded) {
                 if (pathname === '/signup') {
                     // Allowed to go back to complete profile
-                    setAppState('auth');
+                    if (appState !== 'auth') {
+                        setAppState('auth');
+                    }
                 } else {
-                    setAppState('onboarding');
+                    if (appState !== 'onboarding') {
+                        setAppState('onboarding');
+                    }
                     if (pathname !== '/signup/interests') {
                         navigate('/signup/interests', { replace: true });
                     }
@@ -383,17 +387,16 @@ const AppContent = () => {
                     <SuspendedScreen reason={user?.banReason} />
                   ) : (
                     <Routes>
-                        {appState === 'auth' ? (
+                        {(appState === 'auth' || appState === 'onboarding') ? (
                             <>
                                 <Route path="/" element={<AuthPage key="welcome" onComplete={handleAuthComplete} initialMode="signup" />} />
                                 <Route path="/login" element={<AuthPage key="login" onComplete={handleAuthComplete} initialMode="login" />} />
                                 <Route path="/signup" element={<AuthPage key="signup" onComplete={handleAuthComplete} initialMode="signup" />} />
+                                <Route path="/signup/interests" element={<OnboardingPage onComplete={handleOnboardingComplete} onBack={handleOnboardingBack} />} />
                                 <Route path="/settings/terms-and-condition" element={<TermsAndConditionPage backTo="/" />} />
                                 <Route path="/settings/privacy-policy" element={<PrivacyPolicyPage backTo="/" />} />
                                 <Route path="*" element={<Navigate to="/" replace />} />
                             </>
-                        ) : appState === 'onboarding' ? (
-                            <Route path="/*" element={<OnboardingPage onComplete={handleOnboardingComplete} onBack={handleOnboardingBack} />} />
                         ) : (
                             <>
                               <Route path="/admin/login" element={<AdminLogin />} />
