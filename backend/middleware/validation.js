@@ -28,7 +28,8 @@ export const registerValidation = [
   body('username')
     .notEmpty().withMessage('Username is required')
     .isLength({ min: 3, max: 30 }).withMessage('Username must be between 3 and 30 characters')
-    .matches(/^[a-z0-9_]+$/).withMessage('Username can only contain lowercase letters, numbers, and underscores'),
+    .matches(/^[a-z0-9._]+$/).withMessage('Username can only contain lowercase letters, numbers, dots, and underscores')
+    .matches(/[0-9._]/).withMessage('Username must contain at least one number or special character (e.g. . or _)'),
   body('email')
     .optional({ checkFalsy: true })
     .isEmail().withMessage('Invalid email address')
@@ -85,7 +86,8 @@ export const profileUpdateValidation = [
   body('username')
     .optional({ checkFalsy: true })
     .isLength({ min: 3, max: 30 }).withMessage('Username must be between 3 and 30 characters')
-    .matches(/^[a-z0-9_]+$/).withMessage('Username can only contain lowercase letters, numbers, and underscores'),
+    .matches(/^[a-z0-9._]+$/).withMessage('Username can only contain lowercase letters, numbers, dots, and underscores')
+    .matches(/[0-9._]/).withMessage('Username must contain at least one number or special character (e.g. . or _)'),
   body('email')
     .optional({ checkFalsy: true })
     .isEmail().withMessage('Invalid email address')

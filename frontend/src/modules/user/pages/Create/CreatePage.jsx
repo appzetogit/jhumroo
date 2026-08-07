@@ -3686,12 +3686,12 @@ const CreatePage = () => {
     setPostState((currentState) => {
       const currentCaption = currentState.caption || '';
       // Check if we are currently in the middle of typing a mention (ends with @ or @something)
-      const mentionMatch = currentCaption.match(/(^|\s)(@[a-z0-9_]*)$/i);
+      const mentionMatch = currentCaption.match(/(^|\s)(@[a-z0-9._]*)$/i);
 
       let newCaption;
       if (mentionMatch) {
         // Replace the partial mention
-        newCaption = currentCaption.replace(/(^|\s)@[a-z0-9_]*$/i, `$1@${username} `);
+        newCaption = currentCaption.replace(/(^|\s)@[a-z0-9._]*$/i, `$1@${username} `);
       } else {
         // Just append it with a space if needed
         const needsSpace = currentCaption.length > 0 && !currentCaption.endsWith(' ');

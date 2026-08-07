@@ -197,8 +197,27 @@ export const updateProfile = asyncHandler(async (req, res) => {
 
   // Check if username is being changed and if it's available
   if (username && username !== user.username) {
+    const cleanUsername = username.trim().toLowerCase();
+    if (cleanUsername.length < 3) {
+      return res.status(400).json({
+        success: false,
+        message: 'Username must be at least 3 characters'
+      });
+    }
+    if (!/^[a-z0-9._]+$/.test(cleanUsername)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Username can only contain lowercase letters, numbers, dots, and underscores'
+      });
+    }
+    if (!/[0-9._]/.test(cleanUsername)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Username must contain at least one number or special character (e.g. . or _)'
+      });
+    }
     const existingUser = await User.findOne({ 
-      username: username.toLowerCase(),
+      username: cleanUsername,
       _id: { $ne: user._id }
     });
 
@@ -208,7 +227,7 @@ export const updateProfile = asyncHandler(async (req, res) => {
         message: 'Username already taken'
       });
     }
-    user.username = username.toLowerCase();
+    user.username = cleanUsername;
   }
 
   // Update fields

@@ -332,10 +332,7 @@ const AppContent = () => {
     const handleAuthComplete = (needsOnboarding = false) => {
         if (needsOnboarding) {
             setAppState('onboarding');
-            // Must navigate here too (not just set appState) - otherwise pathname stays at
-            // '/signup' and the pathname-driven effect above, seeing '/signup' before this
-            // navigate ever happens, flips appState straight back to 'auth'.
-            navigate('/signup/interests', { replace: true });
+            navigate('/signup/interests');
         } else {
             setAppState('main');
             navigate('/', { replace: true });
@@ -349,11 +346,7 @@ const AppContent = () => {
 
     const handleOnboardingBack = () => {
         sessionStorage.setItem('signup_step', '6');
-        // Don't set appState here - if it flips to 'auth' before the router's pathname catches
-        // up to '/signup', the 'auth' branch's Routes won't have a case for the still-stale
-        // '/signup/interests' path and its catch-all (`*` -> Navigate to '/') kicks the user
-        // out to the welcome screen. Let the pathname-driven effect above set appState once
-        // navigate() has actually landed.
+        setAppState('auth');
         navigate('/signup');
     };
 

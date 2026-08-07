@@ -31,6 +31,22 @@ const EditProfilePage = () => {
             return;
         }
 
+        const cleanUsername = username.trim().toLowerCase();
+        if (!cleanUsername || cleanUsername.length < 3) {
+            showToast('Username must be at least 3 characters', 'error');
+            return;
+        }
+
+        if (!/^[a-z0-9._]+$/.test(cleanUsername)) {
+            showToast('Username can only contain lowercase letters, numbers, dots, and underscores', 'error');
+            return;
+        }
+
+        if (!/[0-9._]/.test(cleanUsername)) {
+            showToast('Username must contain at least one number or special character (e.g. . or _)', 'error');
+            return;
+        }
+
         setLoading(true);
         try {
             const response = await userService.updateProfile({
@@ -164,7 +180,7 @@ const EditProfilePage = () => {
                             <input 
                                 type="text" 
                                 value={username} 
-                                onChange={(e) => setUsername(e.target.value)}
+                                onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9._]/g, ''))}
                                 className="bg-transparent text-white text-[15px] w-full outline-none font-medium" 
                             />
                         </div>

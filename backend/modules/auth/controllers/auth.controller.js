@@ -265,10 +265,16 @@ export const completeProfile = asyncHandler(async (req, res) => {
         message: 'Username must be at least 3 characters'
       });
     }
-    if (!/[0-9_]/.test(cleanUsername)) {
+    if (!/^[a-z0-9._]+$/.test(cleanUsername)) {
       return res.status(400).json({
         success: false,
-        message: 'Username must contain at least one number or special character (e.g. _)'
+        message: 'Username can only contain lowercase letters, numbers, dots, and underscores'
+      });
+    }
+    if (!/[0-9._]/.test(cleanUsername)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Username must contain at least one number or special character (e.g. . or _)'
       });
     }
     const existingUser = await User.findOne({ 
@@ -285,9 +291,8 @@ export const completeProfile = asyncHandler(async (req, res) => {
     req.user.username = cleanUsername;
   }
 
-  // Validate State (mandatory, especially if country is India)
-  const targetCountry = country || req.user.country || 'India';
-  if (targetCountry === 'India' && (!state || state.trim() === '')) {
+  // Validate State (mandatory)
+  if (!state || state.trim() === '') {
     return res.status(400).json({
       success: false,
       message: 'State is a mandatory field'

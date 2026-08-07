@@ -323,11 +323,22 @@ const AuthPage = ({ onComplete, initialMode = 'signup' }) => {
 
 
   /* ─── Step 6: Complete Profile ─── */
-  const [fullName, setFullName] = useState('');
-  const [username, setUsername] = useState('');
-  const [email, setEmail] = useState('');
-  const [country, setCountry] = useState('India');
-  const [state, setState] = useState('');
+  const [fullName, setFullName] = useState(authUser?.fullName || '');
+  const [username, setUsername] = useState((authUser?.username && !authUser.username.startsWith('user_')) ? authUser.username : '');
+  const [email, setEmail] = useState(authUser?.email || '');
+  const [country, setCountry] = useState(authUser?.country || 'India');
+  const [state, setState] = useState(authUser?.state || '');
+
+  useEffect(() => {
+    if (authUser) {
+      if (authUser.fullName) setFullName(authUser.fullName);
+      if (authUser.username && !authUser.username.startsWith('user_')) setUsername(authUser.username);
+      if (authUser.email) setEmail(authUser.email);
+      if (authUser.country) setCountry(authUser.country);
+      if (authUser.state) setState(authUser.state);
+    }
+  }, [authUser]);
+
   const [isCompleting, setIsCompleting] = useState(false);
   const [usernameError, setUsernameError] = useState('');
   const [fullNameError, setFullNameError] = useState('');
@@ -369,13 +380,16 @@ const AuthPage = ({ onComplete, initialMode = 'signup' }) => {
     if (!username || username.trim().length < 3) {
       setUsernameError('Username must be at least 3 characters');
       hasError = true;
-    } else if (!/[0-9_]/.test(username)) {
-      setUsernameError('Username must contain at least one number or special character (e.g. _)');
+    } else if (!/^[a-z0-9._]+$/.test(username)) {
+      setUsernameError('Username can only contain lowercase letters, numbers, dots, and underscores');
+      hasError = true;
+    } else if (!/[0-9._]/.test(username)) {
+      setUsernameError('Username must contain at least one number or special character (e.g. . or _)');
       hasError = true;
     }
 
     // Validate State
-    if (country === 'India' && (!state || state.trim() === '')) {
+    if (!state || state.trim() === '') {
       setStateError('State is a mandatory field');
       hasError = true;
     }
@@ -455,7 +469,7 @@ const AuthPage = ({ onComplete, initialMode = 'signup' }) => {
                   placeholder="username"
                   value={username}
                   onChange={(e) => {
-                    setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''));
+                    setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9._]/g, ''));
                     setUsernameError('');
                   }}
                   className={`w-full h-[54px] bg-white/5 border ${usernameError ? 'border-[#fe2c55]' : 'border-white/10'} rounded-2xl px-4 text-white outline-none focus:border-[#fe2c55] transition-all`}
@@ -489,7 +503,6 @@ const AuthPage = ({ onComplete, initialMode = 'signup' }) => {
                     className="w-full h-[54px] bg-white/5 border border-white/10 rounded-2xl px-4 text-white outline-none focus:border-[#fe2c55] transition-all appearance-none"
                   >
                     <option value="India" className="bg-[#1a1a1a]">India</option>
-                    <option value="Other" className="bg-[#1a1a1a]">Other</option>
                   </select>
                 </div>
                 <div className="flex flex-col gap-1.5">
@@ -500,8 +513,7 @@ const AuthPage = ({ onComplete, initialMode = 'signup' }) => {
                       setState(e.target.value);
                       setStateError('');
                     }}
-                    disabled={country !== 'India'}
-                    className={`w-full h-[54px] bg-white/5 border ${stateError ? 'border-[#fe2c55]' : 'border-white/10'} rounded-2xl px-4 text-white outline-none focus:border-[#fe2c55] transition-all appearance-none ${country !== 'India' ? 'opacity-50' : ''}`}
+                    className={`w-full h-[54px] bg-white/5 border ${stateError ? 'border-[#fe2c55]' : 'border-white/10'} rounded-2xl px-4 text-white outline-none focus:border-[#fe2c55] transition-all appearance-none`}
                   >
                     <option value="" disabled className="bg-[#1a1a1a]">Select State</option>
                     {INDIAN_STATES.map(s => (

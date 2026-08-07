@@ -22,7 +22,13 @@ const userSchema = new mongoose.Schema(
       lowercase: true,
       minlength: [3, 'Username must be at least 3 characters'],
       maxlength: [30, 'Username cannot exceed 30 characters'],
-      match: [/^[a-z0-9_]+$/, 'Username can only contain letters, numbers, and underscores'],
+      match: [/^[a-z0-9._]+$/, 'Username can only contain letters, numbers, dots, and underscores'],
+      validate: {
+        validator: function(v) {
+          return /[0-9._]/.test(v);
+        },
+        message: 'Username must contain at least one number or special character (e.g. . or _)'
+      },
       index: true
     },
     email: {

@@ -10,6 +10,16 @@ const OnboardingPage = ({ onComplete, onBack }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
+    if (!onBack) return;
+    window.history.pushState({ onboarding: true }, '');
+    const handlePopState = () => {
+      onBack();
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [onBack]);
+
+  useEffect(() => {
     const fetchInterests = async () => {
       try {
         const response = await adminInterestService.getInterests();
