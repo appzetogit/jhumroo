@@ -729,7 +729,20 @@ const ProfilePage = () => {
             )}
           </button>
         ) : (
-          <button onClick={() => navigate(-1)} className="text-white active:opacity-60">
+          <button 
+            onClick={() => {
+              if (showOptions) {
+                setShowOptions(false);
+              } else if (showReport) {
+                setShowReport(false);
+              } else if (showPhotoPicker) {
+                setShowPhotoPicker(false);
+              } else {
+                navigate(-1);
+              }
+            }} 
+            className="text-white active:opacity-60"
+          >
             <BiArrowBack size={26} />
           </button>
         )}

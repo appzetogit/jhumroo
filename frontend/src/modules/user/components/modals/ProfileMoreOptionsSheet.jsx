@@ -90,6 +90,21 @@ const ProfileMoreOptionsSheet = ({
   const [currentY, setCurrentY] = useState(0);
 
   useEffect(() => {
+    if (!isOpen) return;
+
+    window.history.pushState({ profileOptionsOpen: true }, '');
+
+    const handlePopState = () => {
+      onClose();
+      setView('menu');
+      setCurrentY(0);
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [isOpen, onClose]);
+
+  useEffect(() => {
     if (isOpen) {
       setIsClosing(false);
       setView('menu');
@@ -126,6 +141,9 @@ const ProfileMoreOptionsSheet = ({
       setIsClosing(false);
       setView('menu');
       setCurrentY(0);
+      if (window.history.state?.profileOptionsOpen) {
+        window.history.back();
+      }
     }, 250);
   };
 
