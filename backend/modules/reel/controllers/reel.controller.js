@@ -62,6 +62,23 @@ const handleMentionNotifications = (reel, currentUserId) => {
 };
 
 /**
+ * Helper to get all user IDs that should be hidden from req.user
+ * (Users blocked by req.user OR users who blocked req.user)
+ */
+const getBlockedUserIds = async (user) => {
+  if (!user || !user._id) return [];
+
+  const currentUser = await User.findById(user._id).select('blockedUsers');
+  const blockedByMe = (currentUser?.blockedUsers || []).map(id => id.toString());
+
+  const blockedMeUsers = await User.find({ blockedUsers: user._id }).select('_id');
+  const blockedMe = blockedMeUsers.map(u => u._id.toString());
+
+  const allBlockedIds = [...new Set([...blockedByMe, ...blockedMe])];
+  return allBlockedIds.map(id => new mongoose.Types.ObjectId(id));
+};
+
+/**
  * @desc    Get presigned URL for direct S3 upload
  * @route   POST /api/reels/create-upload-url
  * @access  Private
@@ -417,13 +434,19 @@ export const getFeedReels = asyncHandler(async (req, res) => {
   }
 
   if (req.user) {
-    const reportedReels = await Report.find({
-      reportedBy: req.user._id,
-      reportType: 'Reel'
-    }).select('reportedItem');
+    const [reportedReels, blockedUserIds] = await Promise.all([
+      Report.find({
+        reportedBy: req.user._id,
+        reportType: 'Reel'
+      }).select('reportedItem'),
+      getBlockedUserIds(req.user)
+    ]);
     const reportedReelIds = reportedReels.map(r => r.reportedItem);
     if (reportedReelIds.length > 0) {
       baseQuery._id = { $nin: reportedReelIds };
+    }
+    if (blockedUserIds.length > 0) {
+      baseQuery.$and.push({ user: { $nin: blockedUserIds } });
     }
   }
 
@@ -582,14 +605,25 @@ export const getFollowingReels = asyncHandler(async (req, res) => {
   }).select('reportedItem');
   const reportedReelIds = reportedReels.map(r => r.reportedItem);
 
-  if (reportedReelIds.length > 0) {
-    if (cursor) {
-      query._id = { 
-        $lt: new mongoose.Types.ObjectId(cursor),
-        $nin: reportedReelIds
-      };
-    } else {
+  if (req.user) {
+    const [reportedReels, blockedUserIds] = await Promise.all([
+      Report.find({
+        reportedBy: req.user._id,
+        reportType: 'Reel'
+      }).select('reportedItem'),
+      getBlockedUserIds(req.user)
+    ]);
+    const reportedReelIds = reportedReels.map(r => r.reportedItem);
+
+    const ninIds = [...reportedReelIds];
+    if (reportedReelIds.length > 0) {
       query._id = { $nin: reportedReelIds };
+    }
+    if (blockedUserIds.length > 0) {
+      query.user = { $in: followingIds, $nin: blockedUserIds };
+    }
+    if (cursor) {
+      query._id = { ...(query._id || {}), $lt: new mongoose.Types.ObjectId(cursor) };
     }
   } else if (cursor) {
     query._id = { $lt: new mongoose.Types.ObjectId(cursor) };
@@ -715,13 +749,19 @@ export const getTrendingReels = asyncHandler(async (req, res) => {
   };
 
   if (req.user) {
-    const reportedReels = await Report.find({
-      reportedBy: req.user._id,
-      reportType: 'Reel'
-    }).select('reportedItem');
+    const [reportedReels, blockedUserIds] = await Promise.all([
+      Report.find({
+        reportedBy: req.user._id,
+        reportType: 'Reel'
+      }).select('reportedItem'),
+      getBlockedUserIds(req.user)
+    ]);
     const reportedReelIds = reportedReels.map(r => r.reportedItem);
     if (reportedReelIds.length > 0) {
       candidateQuery._id = { $nin: reportedReelIds };
+    }
+    if (blockedUserIds.length > 0) {
+      candidateQuery.user = { $nin: blockedUserIds };
     }
   }
 
@@ -892,12 +932,17 @@ export const getReel = asyncHandler(async (req, res) => {
   }
 
   if (req.user) {
-    const isReported = await Report.exists({
-      reportedBy: req.user._id,
-      reportedItem: req.params.id,
-      reportType: 'Reel'
-    });
-    if (isReported) {
+    const [isReported, blockedUserIds] = await Promise.all([
+      Report.exists({
+        reportedBy: req.user._id,
+        reportedItem: req.params.id,
+        reportType: 'Reel'
+      }),
+      getBlockedUserIds(req.user)
+    ]);
+
+    const isUserBlocked = reel.user && blockedUserIds.some(id => id.toString() === reel.user._id.toString());
+    if (isReported || isUserBlocked) {
       return res.status(404).json({
         success: false,
         message: 'Reel not found'
@@ -1348,13 +1393,19 @@ export const searchReels = asyncHandler(async (req, res) => {
   }
 
   if (req.user) {
-    const reportedReels = await Report.find({
-      reportedBy: req.user._id,
-      reportType: 'Reel'
-    }).select('reportedItem');
+    const [reportedReels, blockedUserIds] = await Promise.all([
+      Report.find({
+        reportedBy: req.user._id,
+        reportType: 'Reel'
+      }).select('reportedItem'),
+      getBlockedUserIds(req.user)
+    ]);
     const reportedReelIds = reportedReels.map(r => r.reportedItem);
     if (reportedReelIds.length > 0) {
       query._id = { $nin: reportedReelIds };
+    }
+    if (blockedUserIds.length > 0) {
+      query.user = { $nin: blockedUserIds };
     }
   }
 

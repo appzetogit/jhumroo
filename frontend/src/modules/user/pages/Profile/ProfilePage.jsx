@@ -16,11 +16,13 @@ import VideoCard from '../../components/video/VideoCard';
 
 const LazyVideo = ({ src, className }) => {
   const [shouldLoad, setShouldLoad] = useState(false);
+  const [hasError, setHasError] = useState(false);
   const containerRef = useRef(null);
   const setShouldLoadRef = useRef(setShouldLoad);
   setShouldLoadRef.current = setShouldLoad;
 
   useEffect(() => {
+    setHasError(false);
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting) {
@@ -36,6 +38,10 @@ const LazyVideo = ({ src, className }) => {
     return () => observer.disconnect();
   }, [src]);
 
+  if (hasError || !src) {
+    return <div className="w-full h-full bg-gray-900 flex items-center justify-center text-white/20 text-xs">Unavailable</div>;
+  }
+
   return (
     <div ref={containerRef} className="w-full h-full bg-gray-950">
       {shouldLoad ? (
@@ -45,6 +51,10 @@ const LazyVideo = ({ src, className }) => {
           muted
           playsInline
           className={className}
+          onError={(e) => {
+            e.stopPropagation();
+            setHasError(true);
+          }}
         />
       ) : (
         <div className="w-full h-full bg-gray-900 animate-pulse" />
@@ -149,12 +159,20 @@ const ProfilePage = () => {
 
   const displayUsername = profileUsername || currentUser?.username || 'user';
   const isOwnProfile = !profileUsername || 
-    (profileUsername && currentUser?.username && profileUsername.toLowerCase() === currentUser.username.toLowerCase()) ||
-    (profile?._id && currentUser?._id && profile._id === currentUser._id);
+    (profileUsername && currentUser?.username && profileUsername.toLowerCase() === currentUser.username.toLowerCase());
   const activeProfile = profile || (isOwnProfile ? currentUser : null);
   const isPrivateAndLocked = !isOwnProfile && profile?.isPrivate && !isFollowing;
 
   useEffect(() => {
+    if (!isOwnProfile) {
+      setProfile(null);
+      setUserVideos([]);
+      setIsFollowing(false);
+      setFollowStatus(null);
+      setIsFollower(false);
+      setIsBlocked(false);
+      setIsBlockedByThem(false);
+    }
     fetchProfileData();
   }, [displayUsername, isOwnProfile]);
 
@@ -624,6 +642,67 @@ const ProfilePage = () => {
     setShowOptions(false);
     setShowReport(true);
   };
+
+  if (loading && !profile && !isOwnProfile) {
+    return (
+      <div className="page-container theme-surface-page flex flex-col">
+        {/* Header Skeleton */}
+        <div className="flex items-center justify-between px-4 py-3 shrink-0 sticky top-0 z-[60] bg-[color:var(--theme-page-bg)]/90 backdrop-blur-md">
+          <button onClick={() => navigate(-1)} className="text-white active:opacity-60">
+            <BiArrowBack size={26} />
+          </button>
+          <h2 className="text-[17px] font-bold text-white">{displayUsername}</h2>
+          <div className="w-6" />
+        </div>
+
+        {/* Skeleton Profile Info */}
+        <div className="scrollable flex-1">
+          <div className="flex flex-col items-center pt-4 pb-6 px-4">
+            {/* Avatar Skeleton */}
+            <div className="w-24 h-24 mb-4 rounded-full bg-white/10 animate-pulse" />
+            
+            {/* Name Skeleton */}
+            <div className="w-32 h-5 bg-white/10 rounded-md mb-2 animate-pulse" />
+            <div className="w-20 h-3.5 bg-white/5 rounded-md mb-5 animate-pulse" />
+
+            {/* Stats Skeleton */}
+            <div className="flex items-center justify-center w-full mb-6 gap-8">
+              <div className="flex flex-col items-center gap-1">
+                <div className="w-8 h-5 bg-white/10 rounded animate-pulse" />
+                <div className="w-12 h-3 bg-white/5 rounded animate-pulse" />
+              </div>
+              <div className="w-[1px] h-3 bg-white/10" />
+              <div className="flex flex-col items-center gap-1">
+                <div className="w-8 h-5 bg-white/10 rounded animate-pulse" />
+                <div className="w-12 h-3 bg-white/5 rounded animate-pulse" />
+              </div>
+              <div className="w-[1px] h-3 bg-white/10" />
+              <div className="flex flex-col items-center gap-1">
+                <div className="w-8 h-5 bg-white/10 rounded animate-pulse" />
+                <div className="w-12 h-3 bg-white/5 rounded animate-pulse" />
+              </div>
+            </div>
+
+            {/* Buttons Skeleton */}
+            <div className="flex items-center gap-2 w-full max-w-[340px] mb-6">
+              <div className="flex-1 h-[44px] bg-white/10 rounded-lg animate-pulse" />
+              <div className="flex-1 h-[44px] bg-white/5 rounded-lg animate-pulse" />
+            </div>
+
+            {/* Video Grid Skeleton */}
+            <div className="w-full grid grid-cols-3 gap-0.5 pt-2">
+              <div className="aspect-[3/4] bg-white/5 animate-pulse" />
+              <div className="aspect-[3/4] bg-white/5 animate-pulse" />
+              <div className="aspect-[3/4] bg-white/5 animate-pulse" />
+              <div className="aspect-[3/4] bg-white/5 animate-pulse" />
+              <div className="aspect-[3/4] bg-white/5 animate-pulse" />
+              <div className="aspect-[3/4] bg-white/5 animate-pulse" />
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={`page-container ${isOwnProfile ? '' : 'pb-0'} theme-surface-page flex flex-col`}>

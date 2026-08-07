@@ -510,6 +510,10 @@ const VideoCard = ({ videoData, isActive, preload = 'none', compactBottom = fals
           preload={preload}
           muted={isMuted}
           poster={localVideoData.video?.thumbnail || localVideoData.poster}
+          onError={(e) => {
+            e.stopPropagation();
+            setPlaying(false);
+          }}
           onClick={(e) => {
             if (e.detail === 2) handleDoubleClick();
             else handleScreenTap();

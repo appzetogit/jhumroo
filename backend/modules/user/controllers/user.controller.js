@@ -337,6 +337,16 @@ export const getUserReels = asyncHandler(async (req, res) => {
   let isFollowing = false;
   let isFollower = false;
   if (req.user && req.user._id.toString() !== user._id.toString()) {
+    const isTargetBlockedByMe = req.user.blockedUsers && req.user.blockedUsers.some(id => id.toString() === user._id.toString());
+    const isMeBlockedByTarget = user.blockedUsers && user.blockedUsers.some(id => id.toString() === req.user._id.toString());
+    if (isTargetBlockedByMe || isMeBlockedByTarget) {
+      return res.status(200).json({
+        success: true,
+        reels: [],
+        pagination: { total: 0, pages: 0, page: 1, limit }
+      });
+    }
+
     const [follow, incoming] = await Promise.all([
       Follow.findOne({ follower: req.user._id, following: user._id, status: 'accepted' }),
       Follow.findOne({ follower: user._id, following: req.user._id, status: 'accepted' })

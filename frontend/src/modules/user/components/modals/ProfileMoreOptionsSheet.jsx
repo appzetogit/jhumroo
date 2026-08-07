@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { 
   BiBlock, 
   BiFlag, 
@@ -7,35 +7,69 @@ import {
   BiMessageDetail,
   BiChevronRight,
   BiArrowBack,
-  BiCalendar
+  BiCalendar,
+  BiCheckCircle,
+  BiMap
 } from 'react-icons/bi';
 import { useTheme } from '../../../../context/ThemeContext';
-import { useAuth } from '../../../../context/AuthContext';
-import userService from '../../../../services/userService';
 
-const OptionItem = ({ icon: Icon, label, onClick, color, subLabel, showArrow = false, isDarkMode }) => (
+const BubbleOptionItem = ({ icon: Icon, label, onClick, color, isActive, isDarkMode }) => (
   <button 
     type="button"
     onClick={(e) => {
       e.stopPropagation();
       onClick();
     }}
-    className={`w-full flex items-center p-4 gap-4 active:bg-black/5 transition-all ${
-      isDarkMode ? 'border-b border-white/5 active:bg-white/5' : 'border-b border-black/5 active:bg-black/5'
-    }`}
+    className="flex flex-col items-center gap-1.5 min-w-[60px] active:scale-90 transition-all cursor-pointer"
   >
-    <div className={`text-2xl flex items-center justify-center ${
-      color === 'danger' ? 'text-red-500' : isDarkMode ? 'text-white/90' : 'text-black/80'
+    <div className={`w-12 h-12 rounded-full flex items-center justify-center text-xl transition-all ${
+      isActive 
+        ? 'bg-red-500 text-white' 
+        : color === 'danger'
+          ? isDarkMode ? 'bg-red-500/20 text-red-500' : 'bg-red-50 text-red-600'
+          : isDarkMode ? 'bg-white/10 text-white' : 'bg-black/5 text-gray-800'
     }`}>
       <Icon />
     </div>
-    <div className="flex flex-col items-start flex-1">
-      <span className={`text-[15px] font-semibold ${
-        color === 'danger' ? 'text-red-500' : isDarkMode ? 'text-white/90' : 'text-black/90'
-      }`}>{label}</span>
-      {subLabel && <span className={`text-[12px] opacity-40 font-medium ${isDarkMode ? 'text-white/60' : 'text-black/60'}`}>{subLabel}</span>}
+    <span className={`text-[11px] font-semibold tracking-tight ${
+      color === 'danger' 
+        ? 'text-red-500' 
+        : isDarkMode ? 'text-white/80' : 'text-gray-700'
+    }`}>{label}</span>
+  </button>
+);
+
+const OptionItem = ({ icon: Icon, label, onClick, color = 'default', subLabel, showArrow = false, isDarkMode }) => (
+  <button 
+    type="button"
+    onClick={(e) => {
+      e.stopPropagation();
+      onClick();
+    }}
+    className={`w-full flex items-center px-3.5 py-3 gap-4 transition-all rounded-xl active:scale-[0.99] cursor-pointer ${
+      color === 'danger'
+        ? isDarkMode ? 'hover:bg-red-500/10 active:bg-red-500/20 text-red-500' : 'hover:bg-red-50 active:bg-red-100 text-red-600'
+        : isDarkMode ? 'hover:bg-white/5 active:bg-white/10 text-white/90' : 'hover:bg-black/5 active:bg-black/10 text-gray-900'
+    }`}
+  >
+    <div className={`text-2xl flex items-center justify-center shrink-0 ${
+      color === 'danger' ? 'text-red-500' : isDarkMode ? 'text-white/80' : 'text-gray-700'
+    }`}>
+      <Icon />
     </div>
-    {showArrow && <BiChevronRight size={20} className="opacity-30" />}
+    <div className="flex flex-col items-start flex-1 min-w-0">
+      <span className={`text-[15px] font-bold tracking-tight ${
+        color === 'danger' ? 'text-red-500' : isDarkMode ? 'text-white' : 'text-gray-900'
+      }`}>{label}</span>
+      {subLabel && (
+        <span className={`text-[12px] opacity-50 font-medium ${isDarkMode ? 'text-white/60' : 'text-gray-500'}`}>
+          {subLabel}
+        </span>
+      )}
+    </div>
+    {showArrow && (
+      <BiChevronRight size={20} className={isDarkMode ? 'text-white/40' : 'text-black/40'} />
+    )}
   </button>
 );
 
@@ -50,11 +84,18 @@ const ProfileMoreOptionsSheet = ({
   onMessageClick
 }) => {
   const { isDarkMode } = useTheme();
-  const { user: currentUser } = useAuth();
   const [view, setView] = useState('menu'); // 'menu' or 'about'
   const [isClosing, setIsClosing] = useState(false);
   const startYRef = useRef(null);
   const [currentY, setCurrentY] = useState(0);
+
+  useEffect(() => {
+    if (isOpen) {
+      setIsClosing(false);
+      setView('menu');
+      setCurrentY(0);
+    }
+  }, [isOpen]);
 
   if (!isOpen && !isClosing) return null;
   if (!profile) return null;
@@ -66,7 +107,7 @@ const ProfileMoreOptionsSheet = ({
       setIsClosing(false);
       setView('menu');
       setCurrentY(0);
-    }, 300);
+    }, 250);
   };
 
   const handleTouchStart = (e) => {
@@ -82,7 +123,7 @@ const ProfileMoreOptionsSheet = ({
   };
 
   const handleTouchEnd = () => {
-    if (currentY > 100) {
+    if (currentY > 80) {
       handleClose();
     } else {
       setCurrentY(0);
@@ -99,18 +140,17 @@ const ProfileMoreOptionsSheet = ({
   return (
     <div 
       className={`fixed inset-0 z-[5000] flex flex-col justify-end transition-opacity duration-300 ${
-        isOpen && !isClosing ? 'opacity-100' : 'opacity-0'
-      } ${isDarkMode ? 'bg-black/70' : 'bg-black/40'}`}
-      data-modal-open={isOpen && !isClosing ? "true" : "false"}
+        isOpen && !isClosing ? 'opacity-100' : 'opacity-0 pointer-events-none'
+      } ${isDarkMode ? 'bg-black/60 backdrop-blur-xs' : 'bg-black/50 backdrop-blur-xs'}`}
       onClick={handleClose}
     >
       <div 
-        className={`w-full max-h-[85vh] overflow-y-auto rounded-t-[20px] pb-[calc(var(--safe-area-bottom)+40px)] transition-transform duration-300 transform no-scrollbar ${
+        className={`w-full h-auto max-h-[75vh] shrink-0 rounded-t-[24px] pb-6 pt-2 px-3 transition-all duration-300 ease-out shadow-2xl ${
           isOpen && !isClosing ? 'translate-y-0' : 'translate-y-full'
         } ${
           isDarkMode 
-            ? 'bg-[#161823] text-white border-t border-white/5' 
-            : 'bg-white text-black shadow-2xl shadow-black/50'
+            ? 'bg-[#161823] text-white border-t border-white/10' 
+            : 'bg-white text-gray-900 border-t border-gray-100'
         }`}
         style={{ transform: `translateY(${currentY}px)` }}
         onClick={(e) => e.stopPropagation()}
@@ -118,102 +158,188 @@ const ProfileMoreOptionsSheet = ({
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
       >
-        {/* Handle bar */}
-        <div className="flex flex-col items-center pt-3 pb-2 sticky top-0 z-10 bg-inherit">
-          <div className={`w-10 h-1 rounded-full ${isDarkMode ? 'bg-white/20' : 'bg-black/10'}`}></div>
+        {/* Drag indicator pill */}
+        <div className="flex flex-col items-center pt-1 pb-2">
+          <div className={`w-12 h-1 rounded-full ${isDarkMode ? 'bg-white/20' : 'bg-black/15'}`} />
         </div>
 
-        {view === 'menu' ? (
-          <div className="flex flex-col">
-            <h2 className="text-center text-[16px] font-bold py-2">Profile Options</h2>
-            <div className="px-2">
-              <OptionItem 
-                icon={BiBlock} 
-                label={isBlocked ? "Unblock" : "Block"} 
-                color="danger"
-                isDarkMode={isDarkMode}
-                onClick={onBlockToggle}
-              />
-              <OptionItem 
-                icon={BiFlag} 
-                label="Report" 
-                color="danger"
-                isDarkMode={isDarkMode}
-                onClick={onReportClick}
-              />
-              <OptionItem 
-                icon={BiInfoCircle} 
-                label="About this account" 
-                isDarkMode={isDarkMode}
-                onClick={() => setView('about')}
-                showArrow={true}
-              />
-              <OptionItem 
-                icon={BiShareAlt} 
-                label="Share this profile" 
-                isDarkMode={isDarkMode}
-                onClick={onShareClick}
-              />
-              <OptionItem 
-                icon={BiMessageDetail} 
-                label="Send message" 
-                isDarkMode={isDarkMode}
-                onClick={onMessageClick}
-              />
-            </div>
-          </div>
-        ) : (
-          <div className="flex flex-col">
-            <div className="flex items-center px-4 py-2">
-              <button 
-                type="button"
-                onClick={() => setView('menu')}
-                className="p-2 -ml-2 active:opacity-60"
-              >
-                <BiArrowBack size={24} />
-              </button>
-              <h2 className="flex-1 text-center text-[16px] font-bold mr-8">About this account</h2>
-            </div>
-            
-            <div className="px-6 py-4 flex flex-col items-center">
-              <div className="w-20 h-20 rounded-full mb-4 overflow-hidden border border-gray-100">
-                <img 
-                  src={profile?.profilePicture?.url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${profile?.username}`} 
-                  alt="profile" 
-                  className="w-full h-full object-cover"
+        <div className="w-full h-auto max-h-[calc(75vh-2rem)] overflow-y-auto no-scrollbar flex flex-col">
+          {view === 'menu' ? (
+            <div className="flex flex-col">
+              {/* Quick Action Row (Bubble Icons) */}
+              <div className={`flex items-center justify-around py-3 px-1 mb-2 border-b ${isDarkMode ? 'border-white/10' : 'border-black/5'}`}>
+                <BubbleOptionItem 
+                  icon={BiMessageDetail}
+                  label="Message"
+                  isDarkMode={isDarkMode}
+                  onClick={() => {
+                    handleClose();
+                    onMessageClick?.();
+                  }}
+                />
+                <BubbleOptionItem 
+                  icon={BiShareAlt}
+                  label="Share"
+                  isDarkMode={isDarkMode}
+                  onClick={() => {
+                    handleClose();
+                    onShareClick?.();
+                  }}
+                />
+                <BubbleOptionItem 
+                  icon={BiInfoCircle}
+                  label="About"
+                  isDarkMode={isDarkMode}
+                  onClick={() => setView('about')}
+                />
+                <BubbleOptionItem 
+                  icon={BiBlock}
+                  label={isBlocked ? "Unblock" : "Block"}
+                  color="danger"
+                  isDarkMode={isDarkMode}
+                  onClick={() => {
+                    handleClose();
+                    onBlockToggle?.();
+                  }}
+                />
+                <BubbleOptionItem 
+                  icon={BiFlag}
+                  label="Report"
+                  color="danger"
+                  isDarkMode={isDarkMode}
+                  onClick={() => {
+                    handleClose();
+                    onReportClick?.();
+                  }}
                 />
               </div>
-              <h3 className="text-lg font-bold">{profile?.fullName || profile?.username}</h3>
-              <p className="text-gray-500 mb-6">@{profile?.username}</p>
+
+              {/* Detailed Option List */}
+              <div className="flex flex-col gap-1 pt-1 pb-2">
+                <OptionItem 
+                  icon={BiInfoCircle} 
+                  label="About this account"
+                  subLabel="Joined date & location info"
+                  isDarkMode={isDarkMode}
+                  onClick={() => setView('about')}
+                  showArrow={true}
+                />
+                <OptionItem 
+                  icon={BiShareAlt} 
+                  label="Share this profile" 
+                  subLabel="Send profile link to friends"
+                  isDarkMode={isDarkMode}
+                  onClick={() => {
+                    handleClose();
+                    onShareClick?.();
+                  }}
+                />
+                <OptionItem 
+                  icon={BiMessageDetail} 
+                  label="Send message" 
+                  subLabel={`Direct message @${profile?.username || ''}`}
+                  isDarkMode={isDarkMode}
+                  onClick={() => {
+                    handleClose();
+                    onMessageClick?.();
+                  }}
+                />
+                <OptionItem 
+                  icon={BiBlock} 
+                  label={isBlocked ? `Unblock @${profile?.username || ''}` : `Block @${profile?.username || ''}`} 
+                  subLabel={isBlocked ? "Allow interactions again" : "Block account from interacting"}
+                  color="danger"
+                  isDarkMode={isDarkMode}
+                  onClick={() => {
+                    handleClose();
+                    onBlockToggle?.();
+                  }}
+                />
+                <OptionItem 
+                  icon={BiFlag} 
+                  label="Report account" 
+                  subLabel="Report inappropriate profile or behavior"
+                  color="danger"
+                  isDarkMode={isDarkMode}
+                  onClick={() => {
+                    handleClose();
+                    onReportClick?.();
+                  }}
+                />
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-col pb-2">
+              <div className={`flex items-center px-2 py-2 border-b ${isDarkMode ? 'border-white/10' : 'border-gray-200'} mb-3`}>
+                <button 
+                  type="button"
+                  onClick={() => setView('menu')}
+                  className={`p-2 rounded-full active:scale-95 transition-transform cursor-pointer ${isDarkMode ? 'text-white hover:bg-white/10' : 'text-gray-800 hover:bg-black/5'}`}
+                >
+                  <BiArrowBack size={22} />
+                </button>
+                <h2 className="flex-1 text-center text-[16px] font-bold mr-8 tracking-tight">About this account</h2>
+              </div>
               
-              <div className={`w-full rounded-2xl p-4 flex flex-col gap-4 ${isDarkMode ? 'bg-white/5' : 'bg-gray-50'}`}>
-                <div className="flex items-center gap-4">
-                  <div className="w-10 h-10 rounded-full bg-blue-500/10 text-blue-500 flex items-center justify-center text-xl">
-                    <BiCalendar />
+              <div className="px-4 py-2 flex flex-col items-center">
+                <div className="w-16 h-16 rounded-full mb-2 overflow-hidden border-2 border-white/10 shadow-md">
+                  <img 
+                    src={profile?.profilePicture?.url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${profile?.username}`} 
+                    alt="profile" 
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+                <h3 className="text-base font-bold text-center flex items-center gap-1">
+                  {profile?.fullName || profile?.username}
+                  {profile?.isVerified && (
+                    <span className="text-blue-500 text-sm"><BiCheckCircle /></span>
+                  )}
+                </h3>
+                <p className="text-xs opacity-60 mb-4">@{profile?.username}</p>
+                
+                <div className={`w-full rounded-xl p-3.5 flex flex-col gap-3 ${isDarkMode ? 'bg-white/5 border border-white/10' : 'bg-gray-50 border border-gray-200'}`}>
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-lg bg-blue-500/15 text-blue-400 flex items-center justify-center text-lg shrink-0">
+                      <BiCalendar />
+                    </div>
+                    <div className="flex flex-col">
+                      <span className="text-[11px] opacity-60 font-medium">Date joined</span>
+                      <span className="text-[13px] font-semibold">{formatDate(profile?.createdAt)}</span>
+                    </div>
                   </div>
-                  <div className="flex flex-col">
-                    <span className="text-[13px] text-gray-500">Date joined</span>
-                    <span className="text-[15px] font-semibold">{formatDate(profile?.createdAt)}</span>
+
+                  {(profile?.state || profile?.country) && (
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-lg bg-purple-500/15 text-purple-400 flex items-center justify-center text-lg shrink-0">
+                        <BiMap />
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-[11px] opacity-60 font-medium">Account location</span>
+                        <span className="text-[13px] font-semibold">
+                          {[profile?.state, profile?.country || 'India'].filter(Boolean).join(', ')}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                  
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-lg bg-emerald-500/15 text-emerald-400 flex items-center justify-center text-lg shrink-0">
+                      <BiInfoCircle />
+                    </div>
+                    <div className="flex flex-col">
+                      <span className="text-[11px] opacity-60 font-medium">Account status</span>
+                      <span className="text-[13px] font-semibold text-emerald-400">Active</span>
+                    </div>
                   </div>
                 </div>
                 
-                <div className="flex items-center gap-4">
-                  <div className="w-10 h-10 rounded-full bg-green-500/10 text-green-500 flex items-center justify-center text-xl">
-                    <BiInfoCircle />
-                  </div>
-                  <div className="flex flex-col">
-                    <span className="text-[13px] text-gray-500">Account status</span>
-                    <span className="text-[15px] font-semibold">Active</span>
-                  </div>
-                </div>
+                <p className="text-[11px] opacity-40 mt-4 text-center px-2 leading-relaxed">
+                  To help keep our community authentic, we show information about accounts on Jhumroo.
+                </p>
               </div>
-              
-              <p className="text-[12px] text-gray-400 mt-6 text-center px-4">
-                To help keep our community authentic, we show information about accounts on Jhumroo.
-              </p>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </div>
   );
