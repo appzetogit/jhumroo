@@ -7049,7 +7049,7 @@ const CreatePage = () => {
   const renderMusicLibrarySheet = () => (
     <div className={sheetOverlayClass} onClick={() => setActiveSheet(null)}>
       <div
-        className="music-sheet-content absolute bottom-0 left-0 right-0 flex max-h-[88%] w-full flex-col overflow-hidden rounded-t-[16px] bg-[#1c1c1e] text-white shadow-2xl transition-transform duration-200"
+        className="music-sheet-content fixed bottom-0 left-0 right-0 z-[501] flex max-h-[88%] w-full flex-col overflow-hidden rounded-t-[16px] bg-[#1c1c1e] text-white shadow-2xl transition-transform duration-200"
         onClick={(e) => e.stopPropagation()}
         style={{ height: '80vh' }}
       >
@@ -7498,7 +7498,6 @@ const CreatePage = () => {
         />
       )}
 
-      {activeSheet === 'music-library' && renderMusicLibrarySheet()}
 
       {activeSheet === 'replace-sound' && (
         <BottomSheet title="Replace sound" onClose={() => setActiveSheet(null)}>

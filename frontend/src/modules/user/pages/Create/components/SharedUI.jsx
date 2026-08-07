@@ -2,7 +2,7 @@ import React from 'react';
 import { BiX } from 'react-icons/bi';
 
 export const sheetOverlayClass =
-  'absolute inset-0 z-40 bg-black/55 backdrop-blur-[2px] flex items-end justify-center';
+  'fixed inset-0 z-[500] bg-black/60 backdrop-blur-xs flex items-end justify-center';
 
 export const Toggle = ({ enabled, onToggle, isDarkMode = false }) => (
   <button
