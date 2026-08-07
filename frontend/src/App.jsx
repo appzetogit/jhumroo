@@ -177,38 +177,7 @@ const AppContent = () => {
     }, [pathname]);
 
     useEffect(() => {
-        const cleanPath = pathname.endsWith('/') && pathname.length > 1 
-            ? pathname.slice(0, -1) 
-            : pathname;
-
-        const isFullScreenRoute = 
-            cleanPath === '' ||
-            cleanPath === '/' || 
-            cleanPath === '/login' ||
-            cleanPath === '/signup' ||
-            cleanPath.startsWith('/reel/') ||
-            cleanPath.startsWith('/inbox/chat/') || 
-            cleanPath === '/create' ||
-            cleanPath === '/settings/interests' ||
-            appState === 'onboarding' ||
-            cleanPath.startsWith('/admin');
-            
-        const isScrollable = !isFullScreenRoute;
-        const allowPullToRefresh = 
-            cleanPath === '' ||
-            cleanPath === '/' ||
-            cleanPath.startsWith('/reel/') ||
-            isScrollable;
-
-        document.body.classList.toggle('document-scrollable', isScrollable);
-        document.documentElement.classList.toggle('document-scrollable', isScrollable);
-        document.body.classList.toggle('allow-pull-to-refresh', allowPullToRefresh);
-        document.documentElement.classList.toggle('allow-pull-to-refresh', allowPullToRefresh);
-
-        return () => {
-          document.body.classList.remove('document-scrollable', 'allow-pull-to-refresh');
-          document.documentElement.classList.remove('document-scrollable', 'allow-pull-to-refresh');
-        };
+        // Document viewport is locked globally in index.css to prevent whole page wobble on mobile
     }, [pathname, appState]);
 
     // Sync FCM Token and set up foreground listener when authenticated

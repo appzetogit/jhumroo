@@ -104,17 +104,23 @@
 
   html {
     height: 100%;
-    overflow: hidden;
+    overflow: hidden !important;
+    overscroll-behavior: none !important;
+    overscroll-behavior-y: none !important;
+    overscroll-behavior-x: none !important;
   }
 
   html, body, #root {
-    touch-action: auto;
+    touch-action: pan-y;
+    overscroll-behavior: none !important;
+    overscroll-behavior-y: none !important;
+    overscroll-behavior-x: none !important;
   }
 
   body {
     background-color: var(--theme-app-shell-bg);
     color: var(--theme-text-primary);
-    overflow: hidden;
+    overflow: hidden !important;
     width: 100vw;
     min-height: 100vh;
     min-height: 100svh;
@@ -124,6 +130,14 @@
     justify-content: center;
     align-items: center;
     font-family: 'Inter', sans-serif;
+    overscroll-behavior: none !important;
+    overscroll-behavior-y: none !important;
+    overscroll-behavior-x: none !important;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
   }
 
   #root {
@@ -131,8 +145,9 @@
     min-height: 100%;
     height: 100%;
     position: relative;
-    overflow: hidden;
+    overflow: hidden !important;
     background-color: var(--theme-app-shell-bg);
+    overscroll-behavior: none !important;
   }
 
   @media (min-width: 600px) {
@@ -190,11 +205,14 @@
     padding-bottom: var(--bottom-nav-height);
     position: relative;
     overflow-x: hidden;
+    overscroll-behavior: none !important;
   }
 
   .scrollable {
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain !important;
+    overscroll-behavior-y: contain !important;
   }
 
   .theme-app-shell {
@@ -1666,148 +1684,20 @@
 
 
 
-html {
-  overscroll-behavior-y: auto;
+/* Lock root viewports & prevent elastic overscroll / rubber-banding on mobile browsers & WebViews */
+html, body, #root, .theme-app-shell {
+  overscroll-behavior: none !important;
+  overscroll-behavior-y: none !important;
+  overscroll-behavior-x: none !important;
 }
 
-body {
-  overscroll-behavior-y: auto;
-}
-
-
-/* ============================================================ */
-/* Native Pull-to-Refresh: Document Scrolling Architecture      */
-/* Applied when .allow-pull-to-refresh or .document-scrollable  */
-/* is active on the HTML/Body element                           */
-/* ============================================================ */
-
-/* --- Base overscroll behavior for browser/WebView viewports  */
-html {
-  overscroll-behavior-y: auto;
-}
-
-body {
-  overscroll-behavior-y: auto;
-}
-
-/* --- Fullscreen routes with refresh blocked (Chat screen,     */
-/* --- Create/Camera screen): Lock root to prevent pull gesture */
-body:not(.allow-pull-to-refresh) #root {
-  height: 100vh !important;
-  height: 100svh !important;
-  overflow: hidden !important;
-}
-body:not(.allow-pull-to-refresh) .theme-app-shell {
-  height: 100vh !important;
-  height: 100svh !important;
-  overflow: hidden !important;
-}
-
-/* --- Fullscreen routes with refresh allowed (Home/Feed screen): */
-/* --- Remove overflow: hidden to let the overscroll gesture propagate */
-html.allow-pull-to-refresh {
-  overflow-y: auto !important;
-  height: 100% !important;
-  min-height: calc(100vh + 1px) !important;
-  min-height: calc(100svh + 1px) !important;
-  overscroll-behavior-y: auto !important;
-}
-body.allow-pull-to-refresh {
-  overflow-y: auto !important;
-  height: 100% !important;
-  min-height: calc(100vh + 1px) !important;
-  min-height: calc(100svh + 1px) !important;
-  overscroll-behavior-y: auto !important;
-}
-body.allow-pull-to-refresh #root {
-  overflow: visible !important;
-}
-body.allow-pull-to-refresh .theme-app-shell {
-  overflow: visible !important;
-}
-
-/* ------------------------------------------------------------ */
-/* When .document-scrollable is active (Profile, Inbox,         */
-/* Settings, Search, etc.) — make document itself scroll        */
-/* ------------------------------------------------------------ */
-
-html.document-scrollable {
-  overflow-y: auto !important;
-  height: auto !important;
-  /* GUARANTEE: Force 1px overflow so SwipeRefreshLayout works   */
-  /* even if the list is short (e.g. Inbox with only 1-2 chats)   */
-  min-height: calc(100vh + 1px) !important;
-  min-height: calc(100svh + 1px) !important;
-  overscroll-behavior-y: auto !important;
-}
-
-body.document-scrollable:not([data-reel-overlay-open="true"]) {
-  overflow-y: auto !important;
-  height: auto !important;
-  /* GUARANTEE: Force 1px overflow to activate pull-to-refresh   */
-  min-height: calc(100vh + 1px) !important;
-  min-height: calc(100svh + 1px) !important;
-  flex-direction: column !important;
-  align-items: stretch !important;
-  overscroll-behavior-y: auto !important;
-}
-
-/* Root expands to fit content */
-body.document-scrollable:not([data-reel-overlay-open="true"]) #root {
-  overflow: visible !important;
-  height: auto !important;
-  min-height: 100% !important;
-}
-
-/* KEY FIX: Break the flex chain — app shell must not clip scroll */
-body.document-scrollable:not([data-reel-overlay-open="true"]) .theme-app-shell {
-  display: block !important;
-  overflow: visible !important;
-  height: auto !important;
-  min-height: 100svh !important;
-}
-
-/* Page containers must expand, not lock to viewport height      */
-body.document-scrollable:not([data-reel-overlay-open="true"]) .page-container {
-  display: block !important;
-  overflow: visible !important;
-  height: auto !important;
-  min-height: 100svh !important;
-  /* Override h-screen / min-h-screen Tailwind utilities */
-  max-height: none !important;
-}
-
-/* Inner scroll containers become block so content flows out     */
-body.document-scrollable:not([data-reel-overlay-open="true"]) .scrollable,
-body.document-scrollable:not([data-reel-overlay-open="true"]) .overflow-y-auto {
-  display: block !important;
-  overflow-y: visible !important;
-  height: auto !important;
-  flex: none !important;
-  max-height: none !important;
-}
-
-/* ------------------------------------------------------------ */
-/* Restore internal scroll for modals / sheets / drawers        */
-/* (elements inside .fixed or .absolute positioned parents)     */
-/* ------------------------------------------------------------ */
-
-body.document-scrollable:not([data-reel-overlay-open="true"]) .fixed .scrollable,
-body.document-scrollable:not([data-reel-overlay-open="true"]) .fixed .overflow-y-auto,
-body.document-scrollable:not([data-reel-overlay-open="true"]) [style*="position: fixed"] .scrollable,
-body.document-scrollable:not([data-reel-overlay-open="true"]) [style*="position: fixed"] .overflow-y-auto {
-  display: flex !important;
-  overflow-y: auto !important;
-  height: 100% !important;
-  flex: 1 1 0% !important;
-  max-height: 100% !important;
-}
-
-body.document-scrollable:not([data-reel-overlay-open="true"]) .absolute .scrollable,
-body.document-scrollable:not([data-reel-overlay-open="true"]) .absolute .overflow-y-auto {
-  display: block !important;
-  overflow-y: auto !important;
-  height: auto !important;
+/* Internal scroll containers keep smooth vertical touch scrolling without bouncing outer page */
+.scrollable,
+.overflow-y-auto,
+[data-scrollable="true"] {
+  -webkit-overflow-scrolling: touch !important;
+  overscroll-behavior: contain !important;
+  overscroll-behavior-y: contain !important;
 }
 
 

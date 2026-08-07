@@ -135,25 +135,21 @@ const HomePage = () => {
     if (!container) return;
 
     const updateOverscroll = () => {
+      container.style.overscrollBehaviorY = 'none';
       if (container.scrollTop <= 0) {
-        // At the top: allow overscroll/pull-to-refresh & disable snap-back forces
-        container.style.overscrollBehaviorY = 'auto';
         container.classList.remove('snap-enabled');
       } else {
-        // Scrolled down: prevent accidental refresh & enable vertical snapping
-        container.style.overscrollBehaviorY = 'none';
         container.classList.add('snap-enabled');
       }
     };
 
-    // Initialize: at mount we are always at the top → allow pull-to-refresh
     updateOverscroll();
 
     container.addEventListener('scroll', updateOverscroll, { passive: true });
     return () => {
       container.removeEventListener('scroll', updateOverscroll);
       if (container) {
-        container.style.overscrollBehaviorY = '';
+        container.style.overscrollBehaviorY = 'none';
         container.classList.remove('snap-enabled');
       }
     };
