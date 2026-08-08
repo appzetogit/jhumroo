@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState, useRef, memo, useCallback } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useState, useRef, memo, useCallback } from 'react';
 import axios from 'axios';
 import Instacam from 'instacam';
 import {
@@ -1011,8 +1011,11 @@ const CreatePage = () => {
   // previously both this effect and the handler pushed a state on every stage change,
   // which piled up extra entries and left the guard out of sync with the real stack
   // depth, so a couple of back presses could blow past it into the native exit-app prompt.
+  // useLayoutEffect (not useEffect) so the guard is armed before the browser paints the new
+  // stage - otherwise there's a brief window where the preview/editor screen is already visible
+  // but the back button isn't intercepted yet, and an immediate back press exits the app.
   const historyGuardArmedRef = useRef(false);
-  useEffect(() => {
+  useLayoutEffect(() => {
     const needsGuard = stageStack.length > 1 || activeSheet !== null;
 
     const handlePopState = () => {
