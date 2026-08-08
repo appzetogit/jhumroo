@@ -1006,24 +1006,42 @@ const CreatePage = () => {
     }
   }, [isRestoring, stage, previewUrl, videoFile]);
 
-  // Intercept browser back gesture/button to pop stage stack or close active sheet
+  // Intercept browser back gesture/button to pop stage stack or close active sheet.
+  // Only one guard history entry is ever kept armed at a time (historyGuardArmedRef) -
+  // previously both this effect and the handler pushed a state on every stage change,
+  // which piled up extra entries and left the guard out of sync with the real stack
+  // depth, so a couple of back presses could blow past it into the native exit-app prompt.
+  const historyGuardArmedRef = useRef(false);
   useEffect(() => {
-    const handlePopState = (e) => {
+    const needsGuard = stageStack.length > 1 || activeSheet !== null;
+
+    const handlePopState = () => {
+      let stillNeedsGuard = false;
       if (activeSheet) {
         setActiveSheet(null);
-        window.history.pushState(null, '', window.location.pathname);
+        stillNeedsGuard = stageStack.length > 1;
+      } else if (stageStack.length > 1) {
+        popStage();
+        stillNeedsGuard = stageStack.length - 1 > 1;
+      } else {
+        historyGuardArmedRef.current = false;
         return;
       }
-      if (stageStack.length > 1) {
-        popStage();
+
+      historyGuardArmedRef.current = stillNeedsGuard;
+      if (stillNeedsGuard) {
         window.history.pushState(null, '', window.location.pathname);
-        return;
       }
     };
 
-    if (stageStack.length > 1 || activeSheet !== null) {
-      window.history.pushState(null, '', window.location.pathname);
+    if (needsGuard) {
+      if (!historyGuardArmedRef.current) {
+        window.history.pushState(null, '', window.location.pathname);
+        historyGuardArmedRef.current = true;
+      }
       window.addEventListener('popstate', handlePopState);
+    } else {
+      historyGuardArmedRef.current = false;
     }
 
     return () => {
@@ -2214,7 +2232,12 @@ const CreatePage = () => {
     ];
     let selectedType = types.find(t => MediaRecorder.isTypeSupported(t)) || '';
 
-    const recorder = new MediaRecorder(streamRef.current, selectedType ? { mimeType: selectedType } : {});
+    // Cap bitrate so unedited clips (which skip the compression re-encode and upload this
+    // recording directly - see handleNextClick) aren't stuck at the browser's uncapped
+    // default, which is what made those uploads slow.
+    const recorderOptions = { videoBitsPerSecond: 4000000 };
+    if (selectedType) recorderOptions.mimeType = selectedType;
+    const recorder = new MediaRecorder(streamRef.current, recorderOptions);
     mediaRecorderRef.current = recorder;
 
     recorder.ondataavailable = (e) => {
@@ -2477,8 +2500,15 @@ const CreatePage = () => {
       }
       const combinedStream = new MediaStream(combinedTracks);
 
+      // VP8 has no hardware encoder for canvas streams on most phones, but it software-encodes
+      // several times faster than VP9 does - VP9 was the actual reason Save/export and
+      // edited-video upload felt slow, since this recorder backs both of those actions.
+      const exportMimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp8')
+        ? 'video/webm;codecs=vp8'
+        : 'video/webm';
+
       const recorder = new MediaRecorder(combinedStream, {
-        mimeType: 'video/webm;codecs=vp9',
+        mimeType: exportMimeType,
         // 4Mbps is still high quality at 720x1280 and roughly halves the exported file size vs
         // the previous 8Mbps, which is most of what made upload/export feel slow (smaller file
         // to upload to S3, less data for the backend to download and re-encode to mp4).
