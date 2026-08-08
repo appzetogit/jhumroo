@@ -199,6 +199,9 @@ const CreatePage = () => {
   const pressStartTimeRef = useRef(0);
   const isPressingRef = useRef(false);
   const lastTouchTimeRef = useRef(0);
+  const pinchZoomRef = useRef({ active: false, startDist: 0, startZoom: 1 });
+  const cameraStageRef = useRef(null);
+  const cameraPinchHandlersRef = useRef(null);
   const createFlow = config?.createFlow || {};
   const DURATION_OPTIONS = createFlow.durations || ['15s', '30s', '60s'];
   const SPEED_OPTIONS = createFlow.speeds || ['0.3x', '0.5x', '1x', '2x', '3x'];
@@ -1465,6 +1468,58 @@ const CreatePage = () => {
       return ZOOM_OPTIONS[nextIndex];
     });
   };
+
+  // Pinch-to-zoom on the camera preview: two-finger spread/pinch scrubs selectedZoom directly.
+  const maxPinchZoom = Math.max(1, ...ZOOM_OPTIONS.map((z) => parseFloat(z) || 1));
+
+  const handleCameraTouchStart = (e) => {
+    if (e.touches.length === 2) {
+      const [t0, t1] = e.touches;
+      const dist = Math.hypot(t0.clientX - t1.clientX, t0.clientY - t1.clientY);
+      pinchZoomRef.current = { active: true, startDist: dist, startZoom: parseFloat(selectedZoom) || 1 };
+    }
+  };
+
+  const handleCameraTouchMove = (e) => {
+    if (e.touches.length === 2 && pinchZoomRef.current.active) {
+      e.preventDefault(); // Take over the gesture so the browser doesn't try its own pinch-zoom
+      const [t0, t1] = e.touches;
+      const dist = Math.hypot(t0.clientX - t1.clientX, t0.clientY - t1.clientY);
+      const scale = dist / (pinchZoomRef.current.startDist || dist);
+      const nextZoom = Math.max(1, Math.min(maxPinchZoom, pinchZoomRef.current.startZoom * scale));
+      setSelectedZoom(`${nextZoom.toFixed(1)}x`);
+    }
+  };
+
+  const handleCameraTouchEnd = (e) => {
+    if (e.touches.length < 2) {
+      pinchZoomRef.current.active = false;
+    }
+  };
+
+  // Keep handlers ref updated to avoid listener re-binding during an active pinch
+  cameraPinchHandlersRef.current = { handleCameraTouchStart, handleCameraTouchMove, handleCameraTouchEnd };
+
+  useEffect(() => {
+    const el = cameraStageRef.current;
+    if (!el || stage !== 'camera') return;
+
+    const startHandler = (e) => cameraPinchHandlersRef.current?.handleCameraTouchStart(e);
+    const moveHandler = (e) => cameraPinchHandlersRef.current?.handleCameraTouchMove(e);
+    const endHandler = (e) => cameraPinchHandlersRef.current?.handleCameraTouchEnd(e);
+
+    el.addEventListener('touchstart', startHandler, { passive: false });
+    el.addEventListener('touchmove', moveHandler, { passive: false });
+    el.addEventListener('touchend', endHandler, { passive: false });
+    el.addEventListener('touchcancel', endHandler, { passive: false });
+
+    return () => {
+      el.removeEventListener('touchstart', startHandler);
+      el.removeEventListener('touchmove', moveHandler);
+      el.removeEventListener('touchend', endHandler);
+      el.removeEventListener('touchcancel', endHandler);
+    };
+  }, [stage]);
 
   useEffect(() => {
     if (previewVideoRef.current) {
@@ -4091,7 +4146,11 @@ const CreatePage = () => {
     })();
 
     return (
-      <div className={`relative h-full w-full overflow-hidden ${isDarkMode ? 'bg-black text-white' : 'bg-[var(--theme-page-bg)] text-white'}`}>
+      <div
+        ref={cameraStageRef}
+        className={`relative h-full w-full overflow-hidden ${isDarkMode ? 'bg-black text-white' : 'bg-[var(--theme-page-bg)] text-white'}`}
+        style={{ touchAction: 'none' }}
+      >
         <style>
           {`
             [data-instacam] {
