@@ -3,7 +3,6 @@ import { BiPlus } from 'react-icons/bi';
 import { IoIosMusicalNote } from 'react-icons/io';
 import { useNavigate } from 'react-router-dom';
 import CommentsSheet from '../modals/CommentsSheet';
-import ShareSheet from '../modals/ShareSheet';
 import MoreOptionsSheet from '../modals/MoreOptionsSheet';
 import ReportSheet from '../modals/ReportSheet';
 import EditReelSheet from '../modals/EditReelSheet';
@@ -108,7 +107,6 @@ const VideoOverlay = ({ reelId, username, caption, musicName, isLiked, likes, co
   };
 
   const [isCommentsOpen, setIsCommentsOpen] = useState(false);
-  const [isShareOpen, setIsShareOpen] = useState(false);
   const [isMoreOpen, setIsMoreOpen] = useState(false);
   const [isReportOpen, setIsReportOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
@@ -160,12 +158,6 @@ const VideoOverlay = ({ reelId, username, caption, musicName, isLiked, likes, co
     const shareText = caption || 'Watch this amazing reel on Jhumroo!';
     
     try {
-      // Optimistic update
-      const newSharesCount = (shares || 0) + 1;
-      if (typeof onUpdate === 'function') {
-        onUpdate({ stats: { ...(videoData.stats || {}), sharesCount: newSharesCount } });
-      }
-
       let shared = false;
       if (platform === 'whatsapp') {
         window.open(`https://wa.me/?text=${encodeURIComponent(shareText + ' ' + shareUrl)}`, '_blank');
@@ -174,21 +166,19 @@ const VideoOverlay = ({ reelId, username, caption, musicName, isLiked, likes, co
         try {
           await navigator.clipboard.writeText(shareUrl);
           showOverlayToast('Link copied! Open Instagram to share.');
+          shared = true;
         } catch {
           showOverlayToast('Could not copy link automatically.');
         }
         window.open('https://instagram.com', '_blank');
-        shared = true;
       } else if (platform === 'messenger') {
-        // fb-messenger:// deep-link is not reliably supported in browsers.
-        // Fall back to copying the link and showing a toast.
         try {
           await navigator.clipboard.writeText(shareUrl);
           showOverlayToast('Link copied! Open Messenger to share.');
+          shared = true;
         } catch {
           showOverlayToast('Could not copy link automatically.');
         }
-        shared = true;
       } else if (platform === 'copy') {
         try {
           await navigator.clipboard.writeText(shareUrl);
@@ -199,13 +189,26 @@ const VideoOverlay = ({ reelId, username, caption, musicName, isLiked, likes, co
         }
       } else if (platform === 'general') {
         if (navigator.share) {
-          await navigator.share({ title: 'Jhumroo', text: shareText, url: shareUrl });
-          shared = true;
+          try {
+            await navigator.share({ title: 'Jhumroo', text: shareText, url: shareUrl });
+          } catch (shareErr) {
+            const isCancel = shareErr.name === 'AbortError' || 
+                             shareErr.name === 'NotAllowedError' || 
+                             (shareErr.message && shareErr.message.toLowerCase().includes('cancel'));
+            if (isCancel) {
+              return;
+            }
+            try {
+              await navigator.clipboard.writeText(shareUrl);
+              showOverlayToast('Link copied to clipboard!');
+            } catch {
+              showOverlayToast('Could not copy link.');
+            }
+          }
         } else {
           try {
             await navigator.clipboard.writeText(shareUrl);
             showOverlayToast('Link copied to clipboard!');
-            shared = true;
           } catch {
             showOverlayToast('Could not copy link.');
           }
@@ -220,13 +223,13 @@ const VideoOverlay = ({ reelId, username, caption, musicName, isLiked, likes, co
       }
 
       if (shared) {
+        const newSharesCount = (shares || 0) + 1;
+        if (typeof onUpdate === 'function') {
+          onUpdate({ stats: { ...(videoData.stats || {}), sharesCount: newSharesCount } });
+        }
         await reelService.shareReel(reelId);
       }
     } catch (error) {
-      // Rollback optimistic update
-      if (typeof onUpdate === 'function') {
-        onUpdate({ stats: { ...(videoData.stats || {}), sharesCount: shares } });
-      }
       if (error.name !== 'AbortError') {
         console.error('Error sharing:', error);
       }
@@ -449,7 +452,7 @@ const VideoOverlay = ({ reelId, username, caption, musicName, isLiked, likes, co
 
 
              {/* Share */}
-             <div className="flex flex-col items-center text-white tap-effect" onClick={(e) => { e.stopPropagation(); setIsShareOpen(true); }} style={{ pointerEvents: 'auto' }}>
+             <div className="flex flex-col items-center text-white tap-effect cursor-pointer" onClick={(e) => { e.stopPropagation(); handleShare('general'); }} style={{ pointerEvents: 'auto' }}>
                 <svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="white" stroke="white" strokeWidth="0" strokeLinecap="round" strokeLinejoin="round">
                     <path d="m22 2-7 20-4-9-9-4Z"></path>
                     <path d="M22 2 11 13"></path>
@@ -527,22 +530,6 @@ const VideoOverlay = ({ reelId, username, caption, musicName, isLiked, likes, co
          reelId={reelId}
       />
 
-      {/* Share Sheet Modal */}
-      <ShareSheet 
-         isOpen={isShareOpen} 
-         onClose={() => setIsShareOpen(false)} 
-         reelData={videoData}
-         onShare={handleShare}
-         onReportClick={() => {
-           setIsShareOpen(false);
-           setIsReportOpen(true);
-         }}
-         onNotInterestedClick={() => {
-           setIsShareOpen(false);
-           handleNotInterested();
-         }}
-      />
-
       {/* More Options Sheet */}
       <MoreOptionsSheet 
          isOpen={isMoreOpen}
@@ -552,7 +539,7 @@ const VideoOverlay = ({ reelId, username, caption, musicName, isLiked, likes, co
          onSaveClick={onSaveClick}
          onShareClick={() => {
            setIsMoreOpen(false);
-           setIsShareOpen(true);
+           handleShare('general');
          }}
          onReportClick={() => {
            setIsMoreOpen(false);

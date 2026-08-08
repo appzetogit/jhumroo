@@ -7862,14 +7862,16 @@ const CreatePage = () => {
           <div className="flex flex-col items-center gap-6 px-6 pb-12 pt-8">
             <div className="flex flex-col items-center text-center">
               <h2 className="text-xl font-bold mb-2">Record your voice</h2>
-              <p className="text-[13px] text-black/40">Tap the button to record voiceover for your video</p>
+              <p className="text-[13px] text-black/40">
+                Tap to record voiceover (Max duration: {((videoDuration && videoDuration > 0) ? videoDuration : (recordedSeconds || 15)).toFixed(1)}s)
+              </p>
             </div>
 
             {/* Live Recording Duration / Preview Duration Counter */}
             <div className="h-8 flex items-center justify-center">
               {isRecordingVoice ? (
                 <div className="text-3xl font-black text-[#fe2c55] animate-pulse drop-shadow-[0_0_10px_rgba(254,44,85,0.4)]">
-                  {voiceRecordingSeconds.toFixed(1)}s
+                  {voiceRecordingSeconds.toFixed(1)}s / {((videoDuration && videoDuration > 0) ? videoDuration : (recordedSeconds || 15)).toFixed(1)}s
                 </div>
               ) : voicePreviewUrl ? (
                 <div className="text-[14px] font-bold text-white/60 bg-white/5 border border-white/5 px-3 py-1.5 rounded-full flex items-center gap-1.5">
@@ -7905,8 +7907,26 @@ const CreatePage = () => {
                     : 'border-black/5 bg-black/5 hover:bg-black/10'
                   }`}
                 onClick={async () => {
+                  // Calculate exact reel video duration limit
+                  let reelMaxDuration = 15;
+                  if (videoDuration && videoDuration > 0) {
+                    reelMaxDuration = videoDuration;
+                  } else if (clipSequence && clipSequence.length > 0) {
+                    const total = clipSequence.reduce((acc, c) => {
+                      const dur = ((c.limitEnd || c.originalDuration || c.duration || 0) - (c.limitStart || 0)) / (c.speed || 1);
+                      return acc + dur;
+                    }, 0);
+                    if (total > 0) reelMaxDuration = total;
+                  } else if (recordedSeconds && recordedSeconds > 0) {
+                    reelMaxDuration = recordedSeconds;
+                  } else if (selectedDuration.includes('m')) {
+                    reelMaxDuration = parseFloat(selectedDuration) * 60;
+                  } else if (selectedDuration.includes('s')) {
+                    reelMaxDuration = parseFloat(selectedDuration);
+                  }
+
                   if (isRecordingVoice) {
-                    if (voiceRecorder) {
+                    if (voiceRecorder && voiceRecorder.state !== 'inactive') {
                       voiceRecorder.stop();
                       setIsRecordingVoice(false);
                       showToast('Recording finished');
@@ -7915,7 +7935,7 @@ const CreatePage = () => {
                       clearInterval(voiceTimerIntervalRef.current);
                       voiceTimerIntervalRef.current = null;
                     }
-                    setVoiceMaxDuration(voiceRecordingSeconds);
+                    setVoiceMaxDuration(Math.min(voiceRecordingSeconds, reelMaxDuration));
                   } else {
                     try {
                       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -7933,25 +7953,21 @@ const CreatePage = () => {
                       setVoiceRecordingSeconds(0);
                       setVoiceMaxDuration(0);
                       setVoiceClipStart(0);
-                      // Voiceover can't outlast the reel itself - reuse the same max-duration rule as the camera recorder
-                      let reelMaxDuration = 15;
-                      if (isTimerRecording) {
-                        reelMaxDuration = countdownLength;
-                      } else if (selectedDuration.includes('m')) {
-                        reelMaxDuration = parseFloat(selectedDuration) * 60;
-                      } else if (selectedDuration.includes('s')) {
-                        reelMaxDuration = parseFloat(selectedDuration);
-                      }
+                      
                       voiceTimerIntervalRef.current = setInterval(() => {
                         setVoiceRecordingSeconds(prev => {
                           const next = prev + 0.1;
                           if (next >= reelMaxDuration) {
-                            clearInterval(voiceTimerIntervalRef.current);
-                            voiceTimerIntervalRef.current = null;
-                            recorder.stop();
+                            if (voiceTimerIntervalRef.current) {
+                              clearInterval(voiceTimerIntervalRef.current);
+                              voiceTimerIntervalRef.current = null;
+                            }
+                            if (recorder && recorder.state !== 'inactive') {
+                              recorder.stop();
+                            }
                             setIsRecordingVoice(false);
                             setVoiceMaxDuration(reelMaxDuration);
-                            showToast('Recording finished');
+                            showToast(`Maximum voiceover duration reached (${reelMaxDuration.toFixed(1)}s)`);
                             return reelMaxDuration;
                           }
                           return next;

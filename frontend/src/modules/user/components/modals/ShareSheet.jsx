@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BiX, BiLinkAlt, BiFlag, BiDownload, BiMessageSquareDetail } from 'react-icons/bi';
+import { BiX, BiLinkAlt, BiFlag, BiDownload, BiMessageSquareDetail, BiShareAlt } from 'react-icons/bi';
 import { FaWhatsapp, FaInstagram, FaFacebookMessenger } from 'react-icons/fa';
 import { useTheme } from '../../../../context/ThemeContext';
 import { useAuth } from '../../../../context/AuthContext';
@@ -270,6 +270,14 @@ const ShareSheet = ({ isOpen, onClose, reelData, onShare, onReportClick, onNotIn
                            <BiLinkAlt size={24} />
                        </div>
                        <span className={`text-[10px] font-bold ${isDarkMode ? 'text-white/60' : 'text-black/55'}`}>Copy Link</span>
+                    </div>
+                    <div className="flex flex-col items-center shrink-0 w-16 gap-1 tap-effect cursor-pointer" onClick={() => handleShareAction('general')}>
+                       <div className={`w-12 h-12 rounded-full border flex items-center justify-center ${
+                         isDarkMode ? 'bg-white/5 border-white/10 text-white' : 'bg-black/5 border-black/10 text-black/75'
+                       }`}>
+                           <BiShareAlt size={24} />
+                       </div>
+                       <span className={`text-[10px] font-bold ${isDarkMode ? 'text-white/60' : 'text-black/55'}`}>More</span>
                     </div>
                 </div>
             </div>
