@@ -330,8 +330,9 @@ const AppContent = () => {
         navigate('/', { replace: true });
     };
 
-    // Global suspended check for regular users (support page stays reachable so a banned user can still contact support)
-    const isSuspended = isAuthenticated && user?.isBanned && !pathname.startsWith('/admin') && pathname !== '/settings/support';
+    // Global suspended check for regular users (support page stays reachable so a banned user can still contact support;
+    // login page stays reachable too, since logout() is async and isAuthenticated doesn't flip false until it resolves)
+    const isSuspended = isAuthenticated && user?.isBanned && !pathname.startsWith('/admin') && pathname !== '/settings/support' && pathname !== '/login';
 
     // Suspended users have no route to navigate back to - intercept back so it logs out to the login screen instead of exiting the app
     useEffect(() => {
