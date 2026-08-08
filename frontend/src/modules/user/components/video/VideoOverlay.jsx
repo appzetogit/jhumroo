@@ -191,6 +191,7 @@ const VideoOverlay = ({ reelId, username, caption, musicName, isLiked, likes, co
         if (navigator.share) {
           try {
             await navigator.share({ title: 'Jhumroo', text: shareText, url: shareUrl });
+            shared = true;
           } catch (shareErr) {
             const isCancel = shareErr.name === 'AbortError' || 
                              shareErr.name === 'NotAllowedError' || 
@@ -201,6 +202,7 @@ const VideoOverlay = ({ reelId, username, caption, musicName, isLiked, likes, co
             try {
               await navigator.clipboard.writeText(shareUrl);
               showOverlayToast('Link copied to clipboard!');
+              shared = true;
             } catch {
               showOverlayToast('Could not copy link.');
             }
@@ -209,6 +211,7 @@ const VideoOverlay = ({ reelId, username, caption, musicName, isLiked, likes, co
           try {
             await navigator.clipboard.writeText(shareUrl);
             showOverlayToast('Link copied to clipboard!');
+            shared = true;
           } catch {
             showOverlayToast('Could not copy link.');
           }
