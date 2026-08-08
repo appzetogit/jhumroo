@@ -314,16 +314,16 @@ const CreateAdPage = () => {
       <div className="scrollable flex-1 px-4 pb-28">
         <div className="flex flex-col gap-6 mt-6">
           {/* Media Upload */}
-          <div 
+          <div
             onClick={() => setShowUploadOptions(true)}
-            className="relative aspect-[3/4] rounded-[24px] border-2 border-dashed theme-panel-divider bg-black/5 flex flex-col items-center justify-center cursor-pointer overflow-hidden group"
+            className={`relative aspect-[3/4] rounded-[24px] border-2 border-dashed theme-panel-divider flex flex-col items-center justify-center cursor-pointer overflow-hidden group ${mediaPreview ? 'bg-black' : 'bg-black/5'}`}
           >
             {mediaPreview ? (
               <>
                 {mediaType === 'video' ? (
-                  <video src={mediaPreview} className="w-full h-full object-cover" />
+                  <video src={mediaPreview} className="w-full h-full object-contain" controls />
                 ) : (
-                  <img src={mediaPreview} className="w-full h-full object-cover" alt="" />
+                  <img src={mediaPreview} className="w-full h-full object-contain" alt="" />
                 )}
                 <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                   <span className="text-white font-bold bg-black/50 px-4 py-2 rounded-full text-[13px]">Change Media</span>
