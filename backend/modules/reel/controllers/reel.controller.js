@@ -501,11 +501,14 @@ export const getFeedReels = asyncHandler(async (req, res) => {
     }
   }
 
-  // Populate user data
+  // Populate user data. `options: { lean: true }` keeps populated subdocuments
+  // as plain objects (candidates were already .lean()'d) — without it, Mongoose
+  // hydrates `user` into a real Document, which silently drops ad-hoc fields
+  // like `isFollowing` we assign below when the response is JSON-serialized.
   const reels = await Reel.populate(pageReels, [
-    { path: 'user', select: 'username fullName profilePicture isVerified downloadPrivacy isPrivate' },
-    { path: 'music.audioId' },
-    { path: 'originalReel', populate: { path: 'user', select: 'username fullName profilePicture isVerified' } }
+    { path: 'user', select: 'username fullName profilePicture isVerified downloadPrivacy isPrivate', options: { lean: true } },
+    { path: 'music.audioId', options: { lean: true } },
+    { path: 'originalReel', options: { lean: true }, populate: { path: 'user', select: 'username fullName profilePicture isVerified', options: { lean: true } } }
   ]);
 
   // Inject Ads and Like/Save status
@@ -653,6 +656,8 @@ export const getFollowingReels = asyncHandler(async (req, res) => {
   for (const reel of reels) {
     reel.isLiked = likedReelIds.has(reel._id.toString());
     reel.isSaved = savedReelIds.has(reel._id.toString());
+    // Every reel here is from a followed user by definition of the query above
+    if (reel.user) reel.user.isFollowing = true;
   }
 
   const hasMore = reels.length === limit;

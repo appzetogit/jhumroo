@@ -31,14 +31,16 @@ const VideoCard = ({ videoData, isActive, preload = 'none', compactBottom = fals
     localVideoData.media?.type === 'image'
   );
 
-  // Sync data
+  // Sync data — always adopt a fresh videoData prop (e.g. refetch bringing
+  // updated follow/stats info); only reset view-tracking when it's actually
+  // a different reel.
   useEffect(() => {
     const prevId = localVideoData?._id || localVideoData?.id;
     const nextId = videoData?._id || videoData?.id;
     if (prevId !== nextId) {
-      setLocalVideoData(videoData);
       viewTrackedRef.current = false;
     }
+    setLocalVideoData(videoData);
   }, [videoData]);
 
   // Sync isMuted state globally among all mounted VideoCards
