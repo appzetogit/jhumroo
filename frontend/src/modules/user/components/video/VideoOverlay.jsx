@@ -208,10 +208,12 @@ const VideoOverlay = ({ reelId, username, caption, musicName, isLiked, likes, co
             }
           }
         } else {
+          // No Web Share API on this device: copying a link isn't a confirmed
+          // send, so don't count it as a share (ponytail: no reliable signal
+          // here without a share-to-user picker).
           try {
             await navigator.clipboard.writeText(shareUrl);
             showOverlayToast('Link copied to clipboard!');
-            shared = true;
           } catch {
             showOverlayToast('Could not copy link.');
           }
