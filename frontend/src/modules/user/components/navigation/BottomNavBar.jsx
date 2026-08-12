@@ -44,11 +44,11 @@ const NavItem = ({ item, isActive, isDarkMode }) => {
   if (item.type === 'create') {
     return (
       <NavLink to={item.path} className="flex-1 flex flex-col items-center justify-center transition-transform active:scale-95 duration-150 select-none">
-        <div className="relative w-[46px] h-[28px] flex items-center justify-center">
-          <div className="absolute left-0 w-[38px] h-full bg-[#25F4EE] rounded-[8px] z-[1]" />
-          <div className="absolute right-0 w-[38px] h-full bg-[#FE2C55] rounded-[8px] z-[1]" />
-          <div className="absolute w-[38px] h-full bg-white rounded-[8px] z-[2] flex items-center justify-center shadow-md">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="black" strokeWidth="3.5" strokeLinecap="round">
+        <div className="relative w-[42px] h-[25px] flex items-center justify-center">
+          <div className="absolute left-0 w-[35px] h-full bg-[#25F4EE] rounded-[7px] z-[1]" />
+          <div className="absolute right-0 w-[35px] h-full bg-[#FE2C55] rounded-[7px] z-[1]" />
+          <div className="absolute w-[35px] h-full bg-white rounded-[7px] z-[2] flex items-center justify-center shadow-md">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="black" strokeWidth="3.5" strokeLinecap="round">
               <line x1="12" y1="5" x2="12" y2="19" />
               <line x1="5" y1="12" x2="19" y2="12" />
             </svg>
@@ -64,7 +64,7 @@ const NavItem = ({ item, isActive, isDarkMode }) => {
   return (
     <NavLink
       to={item.path}
-      className={`flex-1 flex flex-col items-center justify-center py-1 transition-opacity group select-none ${
+      className={`flex-1 flex flex-col items-center justify-center py-0.5 transition-opacity group select-none ${
         !isActive ? 'active:opacity-70' : ''
       }`}
     >
@@ -84,7 +84,7 @@ const NavItem = ({ item, isActive, isDarkMode }) => {
       </div>
 
       <span
-        className={`text-[10px] mt-1 font-semibold transition-all duration-200 ${
+        className={`text-[9.5px] mt-0.5 font-semibold transition-all duration-200 ${
           isActive ? 'text-white font-bold' : 'text-white/60'
         }`}
       >
