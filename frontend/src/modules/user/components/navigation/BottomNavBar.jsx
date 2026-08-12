@@ -8,25 +8,25 @@ import messageService from '../../../../services/messageService';
 
 // TikTok SVG Icon Components
 const HomeIcon = ({ isActive }) => (
-  <svg width="21" height="21" viewBox="0 0 48 48" fill={isActive ? "currentColor" : "none"} stroke="currentColor" strokeWidth={isActive ? "0" : "3.8"} strokeLinecap="round" strokeLinejoin="round">
+  <svg width="24" height="24" viewBox="0 0 48 48" fill={isActive ? "currentColor" : "none"} stroke="currentColor" strokeWidth={isActive ? "0" : "3.8"} strokeLinecap="round" strokeLinejoin="round">
     <path d="M24 4L4 20v22a2 2 0 002 2h12V30h12v14h12a2 2 0 002-2V20L24 4z" fill={isActive ? "currentColor" : "none"} />
   </svg>
 );
 
 const FriendsIcon = ({ isActive }) => (
-  <svg width="21" height="21" viewBox="0 0 48 48" fill={isActive ? "currentColor" : "none"} stroke="currentColor" strokeWidth={isActive ? "0" : "3.8"} strokeLinecap="round" strokeLinejoin="round">
+  <svg width="24" height="24" viewBox="0 0 48 48" fill={isActive ? "currentColor" : "none"} stroke="currentColor" strokeWidth={isActive ? "0" : "3.8"} strokeLinecap="round" strokeLinejoin="round">
     <path d="M16 22a8 8 0 100-16 8 8 0 000 16zm16 2a6 6 0 100-12 6 6 0 000 12zm-16 4c-7.3 0-14 3.7-14 9v3h28v-3c0-5.3-6.7-9-14-9zm16 2c-1.8 0-3.9.4-5.9 1.1 2.4 1.8 3.9 4.4 3.9 7.4v2.5H44V36c0-4.3-5.4-7-12-7z" fill={isActive ? "currentColor" : "none"} />
   </svg>
 );
 
 const InboxIcon = ({ isActive }) => (
-  <svg width="21" height="21" viewBox="0 0 48 48" fill={isActive ? "currentColor" : "none"} stroke="currentColor" strokeWidth={isActive ? "0" : "3.8"} strokeLinecap="round" strokeLinejoin="round">
+  <svg width="24" height="24" viewBox="0 0 48 48" fill={isActive ? "currentColor" : "none"} stroke="currentColor" strokeWidth={isActive ? "0" : "3.8"} strokeLinecap="round" strokeLinejoin="round">
     <path d="M42 10H6a2 2 0 00-2 2v24a2 2 0 002 2h36a2 2 0 002-2V12a2 2 0 00-2-2zm-3 10H29a5 5 0 01-10 0H9V14h30v6z" fill={isActive ? "currentColor" : "none"} />
   </svg>
 );
 
 const ProfileIcon = ({ isActive }) => (
-  <svg width="21" height="21" viewBox="0 0 48 48" fill={isActive ? "currentColor" : "none"} stroke="currentColor" strokeWidth={isActive ? "0" : "3.8"} strokeLinecap="round" strokeLinejoin="round">
+  <svg width="24" height="24" viewBox="0 0 48 48" fill={isActive ? "currentColor" : "none"} stroke="currentColor" strokeWidth={isActive ? "0" : "3.8"} strokeLinecap="round" strokeLinejoin="round">
     <path d="M24 22a9 9 0 100-18 9 9 0 000 18zm0 4c-9.3 0-18 4.7-18 11v3h36v-3c0-6.3-8.7-11-18-11z" fill={isActive ? "currentColor" : "none"} />
   </svg>
 );
@@ -44,11 +44,11 @@ const NavItem = ({ item, isActive, isDarkMode }) => {
   if (item.type === 'create') {
     return (
       <NavLink to={item.path} className="flex-1 flex flex-col items-center justify-center transition-transform active:scale-95 duration-150 select-none">
-        <div className="relative w-[44px] h-[26px] flex items-center justify-center">
-          <div className="absolute left-0 w-[36px] h-full bg-[#25F4EE] rounded-[7px] z-[1]" />
-          <div className="absolute right-0 w-[36px] h-full bg-[#FE2C55] rounded-[7px] z-[1]" />
-          <div className="absolute w-[36px] h-full bg-white rounded-[7px] z-[2] flex items-center justify-center shadow-md">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="black" strokeWidth="3.5" strokeLinecap="round">
+        <div className="relative w-[46px] h-[28px] flex items-center justify-center">
+          <div className="absolute left-0 w-[38px] h-full bg-[#25F4EE] rounded-[8px] z-[1]" />
+          <div className="absolute right-0 w-[38px] h-full bg-[#FE2C55] rounded-[8px] z-[1]" />
+          <div className="absolute w-[38px] h-full bg-white rounded-[8px] z-[2] flex items-center justify-center shadow-md">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="black" strokeWidth="3.5" strokeLinecap="round">
               <line x1="12" y1="5" x2="12" y2="19" />
               <line x1="5" y1="12" x2="19" y2="12" />
             </svg>

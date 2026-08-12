@@ -18,7 +18,7 @@ const VideoCard = ({ videoData, isActive, preload = 'none', compactBottom = fals
   
   const [isMuted, setIsMuted] = useState(() => {
     const saved = localStorage.getItem('isReelsMuted');
-    return saved === null ? true : saved === 'true';
+    return saved === 'true'; // Default to false (unmuted) unless user explicitly muted
   });
   const [showMuteOverlay, setShowMuteOverlay] = useState(false);
   const [localVideoData, setLocalVideoData] = useState(videoData);
@@ -147,6 +147,7 @@ const VideoCard = ({ videoData, isActive, preload = 'none', compactBottom = fals
     video.addEventListener('ended', handleEnded);
 
     if (isActive) {
+      if (video) video.muted = isMuted;
       const playPromise = video.play();
       if (playPromise !== undefined) {
         playPromise.then(() => {
@@ -161,7 +162,16 @@ const VideoCard = ({ videoData, isActive, preload = 'none', compactBottom = fals
               }
             }, 3000);
           }
-        }).catch(() => setPlaying(false));
+        }).catch((err) => {
+          // If browser blocked unmuted autoplay, retry muted so video plays smoothly
+          if (video && !video.muted) {
+            video.muted = true;
+            setIsMuted(true);
+            video.play().then(() => setPlaying(true)).catch(() => setPlaying(false));
+          } else {
+            setPlaying(false);
+          }
+        });
       }
     } else {
       handlePauseAndRecord();

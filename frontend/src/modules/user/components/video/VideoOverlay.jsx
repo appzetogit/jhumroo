@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { BiPlus } from 'react-icons/bi';
+import { BiPlus, BiVolumeFull, BiVolumeMute } from 'react-icons/bi';
 import { IoIosMusicalNote } from 'react-icons/io';
 import { useNavigate } from 'react-router-dom';
 import CommentsSheet from '../modals/CommentsSheet';
@@ -599,21 +599,43 @@ const VideoOverlay = ({ reelId, username, caption, musicName, isLiked, likes, co
                 <span className="text-[12px] font-bold mt-1 text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.8)]">{formatTikTokCount(shares)}</span>
              </div>
 
-             {/* 5. Static Vinyl Disc Sound Icon (Spin & Bounce disabled as requested) */}
-             <div
-               className="mt-2 relative cursor-pointer active:scale-90 transition-transform"
-               onClick={() => navigate(`/sound/${encodeURIComponent(musicName?.name || musicName)}`)}
-               style={{ pointerEvents: 'auto' }}
-             >
-                <div className="w-12 h-12 rounded-full border-[8px] border-[#2F2F2F] bg-[#121212] flex justify-center items-center overflow-hidden shadow-2xl">
-                   <img 
-                      src={musicName?.thumbnail || musicName?.audioId?.thumbnail || `https://api.dicebear.com/7.x/identicon/svg?seed=${musicName?.name || musicName}`} 
-                      alt="music thumbnail" 
-                      className="w-5 h-5 rounded-full object-cover" 
-                    />
+              {/* 5. Mute / Unmute Sound Control Button */}
+              <div 
+                className="flex flex-col items-center text-white cursor-pointer group" 
+                onClick={(e) => { 
+                  e.stopPropagation(); 
+                  if (typeof onMuteToggle === 'function') onMuteToggle();
+                }} 
+                style={{ pointerEvents: 'auto' }}
+                title={isMuted ? "Unmute Sound" : "Mute Sound"}
+              >
+                <div className="w-9 h-9 rounded-full bg-black/40 backdrop-blur-md border border-white/20 flex items-center justify-center active:scale-90 transition-transform shadow-lg group-hover:scale-105">
+                  {isMuted ? (
+                    <BiVolumeMute size={21} className="text-white/90" />
+                  ) : (
+                    <BiVolumeFull size={21} className="text-[#FE2C55]" />
+                  )}
                 </div>
-                <IoIosMusicalNote size={13} className="absolute -top-1 -right-1 text-white opacity-85" />
-             </div>
+                <span className="text-[10px] font-bold mt-1 text-white/90 drop-shadow-[0_1px_3px_rgba(0,0,0,0.8)]">
+                  {isMuted ? 'Unmute' : 'Sound'}
+                </span>
+              </div>
+
+              {/* 6. Static Vinyl Disc Sound Icon */}
+              <div
+                className="mt-1 relative cursor-pointer active:scale-90 transition-transform"
+                onClick={() => navigate(`/sound/${encodeURIComponent(musicName?.name || musicName)}`)}
+                style={{ pointerEvents: 'auto' }}
+              >
+                 <div className="w-11 h-11 rounded-full border-[7px] border-[#2F2F2F] bg-[#121212] flex justify-center items-center overflow-hidden shadow-2xl">
+                    <img 
+                       src={musicName?.thumbnail || musicName?.audioId?.thumbnail || `https://api.dicebear.com/7.x/identicon/svg?seed=${musicName?.name || musicName}`} 
+                       alt="music thumbnail" 
+                       className="w-5 h-5 rounded-full object-cover" 
+                     />
+                 </div>
+                 <IoIosMusicalNote size={12} className="absolute -top-1 -right-1 text-white opacity-85" />
+              </div>
 
           </div>
         </div>
