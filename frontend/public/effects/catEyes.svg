@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200">
+        <defs>
+          <radialGradient id="bg" cx="50%" cy="50%" r="70%">
+            <stop offset="0%" stop-color="#38103c"/>
+            <stop offset="100%" stop-color="#0f0312"/>
+          </radialGradient>
+          <linearGradient id="neon" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stop-color="#f857a6"/>
+            <stop offset="100%" stop-color="#ff5858"/>
+          </linearGradient>
+          <filter id="glow">
+            <feGaussianBlur stdDeviation="3.5" result="coloredBlur"/>
+            <feMerge>
+              <feMergeNode in="coloredBlur"/>
+              <feMergeNode in="SourceGraphic"/>
+            </feMerge>
+          </filter>
+        </defs>
+        <rect width="200" height="200" fill="url(#bg)"/>
+        <!-- Left Cat Eye Wing -->
+        <path d="M25 105 Q55 70 85 95 Q55 120 25 105 Z" fill="none" stroke="url(#neon)" stroke-width="4" stroke-linecap="round" filter="url(#glow)"/>
+        <path d="M20 90 Q55 70 85 95" stroke="#ffffff" stroke-width="3" stroke-linecap="round" filter="url(#glow)"/>
+        <circle cx="55" cy="95" r="9" fill="#f857a6" filter="url(#glow)"/>
+        <circle cx="57" cy="93" r="3" fill="#ffffff"/>
+
+        <!-- Right Cat Eye Wing -->
+        <path d="M175 105 Q145 70 115 95 Q145 120 175 105 Z" fill="none" stroke="url(#neon)" stroke-width="4" stroke-linecap="round" filter="url(#glow)"/>
+        <path d="M180 90 Q145 70 115 95" stroke="#ffffff" stroke-width="3" stroke-linecap="round" filter="url(#glow)"/>
+        <circle cx="145" cy="95" r="9" fill="#f857a6" filter="url(#glow)"/>
+        <circle cx="143" cy="93" r="3" fill="#ffffff"/>
+      </svg>

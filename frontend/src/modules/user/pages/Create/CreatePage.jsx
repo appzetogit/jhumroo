@@ -1,6 +1,8 @@
 import React, { useEffect, useLayoutEffect, useMemo, useState, useRef, memo, useCallback } from 'react';
 import axios from 'axios';
 import Instacam from 'instacam';
+import FaceEffectCanvas from './components/FaceEffectCanvas';
+import { FACE_EFFECT_PRESETS } from './utils/faceEffectPresets';
 import {
   BiAt,
   BiCheck,
@@ -384,6 +386,52 @@ const CreatePage = () => {
   const [selectedFilter, setSelectedFilter] = useState('Normal');
   const [filterPreviewFrame, setFilterPreviewFrame] = useState(null);
   const filterSnapshotCanvasRef = useRef(null);
+  const [activeFaceEffect, setActiveFaceEffect] = useState(null);
+  const [rawCameraStream, setRawCameraStream] = useState(null);
+  const [faceEffectCanvasEl, setFaceEffectCanvasEl] = useState(null);
+
+  const cameraEffectsList = useMemo(() => [
+    { id: null, label: 'Normal', icon: '📹' },
+    ...FACE_EFFECT_PRESETS
+  ], []);
+
+  const effectsScrollRef = useRef(null);
+  const scrollDebounceTimerRef = useRef(null);
+
+  const handleEffectsScroll = useCallback(() => {
+    if (scrollDebounceTimerRef.current) clearTimeout(scrollDebounceTimerRef.current);
+    scrollDebounceTimerRef.current = setTimeout(() => {
+      const container = effectsScrollRef.current;
+      if (!container) return;
+      const containerRect = container.getBoundingClientRect();
+      const centerX = containerRect.left + containerRect.width / 2;
+
+      let closestId = null;
+      let minDistance = Infinity;
+
+      const buttons = container.querySelectorAll('[data-effect-id]');
+      buttons.forEach((btn) => {
+        const btnRect = btn.getBoundingClientRect();
+        const btnCenterX = btnRect.left + btnRect.width / 2;
+        const distance = Math.abs(centerX - btnCenterX);
+        if (distance < minDistance) {
+          minDistance = distance;
+          closestId = btn.getAttribute('data-effect-id');
+        }
+      });
+
+      if (closestId !== null) {
+        const targetId = closestId === 'normal' ? null : closestId;
+        setActiveFaceEffect((prev) => {
+          if (prev !== targetId) {
+            if (targetId === null) setFaceEffectCanvasEl(null);
+            return targetId;
+          }
+          return prev;
+        });
+      }
+    }, 80);
+  }, []);
   const [selectedSounds, setSelectedSounds] = useState(() => {
     const saved = localStorage.getItem('create_selectedSounds');
     return saved ? JSON.parse(saved) : [];
@@ -1211,6 +1259,7 @@ const CreatePage = () => {
 
 
   const isFiltersTrayOpen = activeCameraTool === 'filters';
+  const isFaceEffectsTrayOpen = activeCameraTool === 'effects';
   const themedOverlayButtonClass = 'flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-black/30 text-white backdrop-blur-md active:opacity-70';
   const themedFloatingPillClass = 'flex items-center gap-2 rounded-full border border-white/10 bg-black/30 px-4 py-2 text-[13px] font-semibold text-white backdrop-blur-md';
   const themedToolLabelClass = 'rounded-full border border-white/10 bg-black/35 px-2.5 py-1 text-[11px] font-medium text-white/90 shadow-[0_8px_20px_rgba(0,0,0,0.22)] backdrop-blur-md';
@@ -1650,6 +1699,7 @@ const CreatePage = () => {
           if (instacamRef.current) {
             applyZoom(selectedZoom);
             const videoStream = instacamRef.current.v; // Accessing internal stream
+            setRawCameraStream(videoStream);
             try {
               // Request microphone audio stream
               const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -1753,6 +1803,19 @@ const CreatePage = () => {
 
     streamRef.current = null;
   };
+
+  // Swap the recorded video track between the raw camera and the face-effect overlay canvas,
+  // keeping whatever mic audio track is already on streamRef.current.
+  useEffect(() => {
+    if (!streamRef.current) return;
+    const micTracks = streamRef.current.getAudioTracks();
+    const videoTrack = (activeFaceEffect && faceEffectCanvasEl)
+      ? faceEffectCanvasEl.captureStream(30).getVideoTracks()[0]
+      : rawCameraStream?.getVideoTracks()[0];
+    if (videoTrack) {
+      streamRef.current = new MediaStream([videoTrack, ...micTracks]);
+    }
+  }, [activeFaceEffect, rawCameraStream, faceEffectCanvasEl]);
 
   // Update Instacam filters when selectedFilter changes
   useEffect(() => {
@@ -3989,24 +4052,33 @@ const CreatePage = () => {
   );
 
   const renderFiltersTray = () => (
-    <div className="mb-4 px-3 pb-3 pt-3">
-      <div className="flex gap-4 overflow-x-auto no-scrollbar pb-1">
+    <div className="mb-2 max-w-md w-[calc(100%-1.5rem)] bg-black/75 backdrop-blur-xl border border-white/15 rounded-3xl p-2 shadow-2xl animate-in fade-in slide-in-from-bottom-2 duration-200">
+      <div className="flex items-center justify-between px-2 mb-1.5 border-b border-white/10 pb-1">
+        <span className="text-[11px] font-extrabold text-white tracking-wide flex items-center gap-1.5">
+          <span className="text-amber-300 text-xs">🎨</span> Color Filters
+        </span>
+        <button
+          type="button"
+          onClick={() => setActiveCameraTool(null)}
+          className="w-5 h-5 rounded-full bg-white/10 hover:bg-white/20 text-white/80 flex items-center justify-center text-[10px] font-bold active:scale-90 transition-transform"
+          title="Close filters"
+        >
+          ✕
+        </button>
+      </div>
+      <div className="flex gap-3 overflow-x-auto no-scrollbar py-0.5 px-1">
         {activeFilterOptions.map((filterName) => (
           <button
             key={filterName}
             type="button"
             onClick={() => setSelectedFilter(filterName)}
-            className="w-16 shrink-0 text-center text-white active:opacity-70"
+            className="w-14 shrink-0 text-center text-white active:scale-95 transition-transform"
           >
             <span
-              className={`mx-auto flex h-12 w-12 items-center justify-center rounded-full border text-[10px] overflow-hidden ${
+              className={`mx-auto flex h-10 w-10 items-center justify-center rounded-full border text-[10px] overflow-hidden transition-all ${
                 selectedFilter === filterName
-                  ? isDarkMode
-                    ? 'border-white ring-2 ring-white/20'
-                    : 'border-black ring-2 ring-black/10'
-                  : isDarkMode
-                    ? 'border-white/15'
-                    : 'border-black/10'
+                  ? 'border-white ring-2 ring-amber-300/60 scale-105 shadow-md shadow-amber-500/20'
+                  : 'border-white/20 hover:border-white/40'
               }`}
             >
               <div
@@ -4018,8 +4090,8 @@ const CreatePage = () => {
               />
             </span>
             <span
-              className={`mt-2 block text-[10px] drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)] ${
-                selectedFilter === filterName ? 'text-white font-bold' : 'text-white/80'
+              className={`mt-1 block text-[9px] tracking-tight drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)] ${
+                selectedFilter === filterName ? 'text-amber-300 font-bold' : 'text-white/75'
               }`}
             >
               {filterName}
@@ -4030,8 +4102,63 @@ const CreatePage = () => {
     </div>
   );
 
+  const renderFaceEffectsTray = () => {
+    const chipClass = (isActive) =>
+      `mx-auto flex h-10 w-10 items-center justify-center rounded-full border text-lg bg-[#2c2c2e] transition-all ${
+        isActive
+          ? 'border-white ring-2 ring-amber-300/60 scale-105 shadow-md shadow-amber-500/20 bg-amber-400/20 text-xl'
+          : 'border-white/20 hover:border-white/40'
+      }`;
+    const labelClass = (isActive) =>
+      `mt-1 block text-[9px] tracking-tight drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)] ${
+        isActive ? 'text-amber-300 font-bold' : 'text-white/75'
+      }`;
+
+    return (
+      <div className="mb-2 max-w-md w-[calc(100%-1.5rem)] bg-black/75 backdrop-blur-xl border border-white/15 rounded-3xl p-2 shadow-2xl animate-in fade-in slide-in-from-bottom-2 duration-200">
+        <div className="flex items-center justify-between px-2 mb-1.5 border-b border-white/10 pb-1">
+          <span className="text-[11px] font-extrabold text-white tracking-wide flex items-center gap-1.5">
+            <span className="text-amber-300 text-xs">✨</span> Face Effects
+          </span>
+          <button
+            type="button"
+            onClick={() => setActiveCameraTool(null)}
+            className="w-5 h-5 rounded-full bg-white/10 hover:bg-white/20 text-white/80 flex items-center justify-center text-[10px] font-bold active:scale-90 transition-transform"
+            title="Close effects"
+          >
+            ✕
+          </button>
+        </div>
+        <div className="flex gap-3 overflow-x-auto no-scrollbar py-0.5 px-1">
+          <button
+            type="button"
+            onClick={() => {
+              setActiveFaceEffect(null);
+              setFaceEffectCanvasEl(null);
+            }}
+            className="w-14 shrink-0 text-center text-white active:scale-95 transition-transform"
+          >
+            <span className={chipClass(!activeFaceEffect)}>🚫</span>
+            <span className={labelClass(!activeFaceEffect)}>None</span>
+          </button>
+          {FACE_EFFECT_PRESETS.map((effect) => (
+            <button
+              key={effect.id}
+              type="button"
+              onClick={() => setActiveFaceEffect(effect.id)}
+              className="w-14 shrink-0 text-center text-white active:scale-95 transition-transform"
+            >
+              <span className={chipClass(activeFaceEffect === effect.id)}>{effect.icon}</span>
+              <span className={labelClass(activeFaceEffect === effect.id)}>{effect.label}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
   const renderCameraBottom = () => (
-    <div className="absolute inset-x-0 bottom-8 z-30 flex flex-col items-center pointer-events-none">
+    <div className="absolute inset-x-0 bottom-6 sm:bottom-8 z-30 flex flex-col items-center pointer-events-none">
       <div className="pointer-events-auto flex flex-col items-center w-full">
         {/* Speed Selector overlay */}
         {activeCameraTool === 'speed' && (
@@ -4076,97 +4203,203 @@ const CreatePage = () => {
           </div>
         )}
 
-        {/* Duration & Mode Selector Bar (10m, 60s, 15s, PHOTO, TEXT) */}
-        <div className="flex items-center justify-center gap-3.5 mb-3 select-none px-4 overflow-x-auto no-scrollbar w-full max-w-md">
-          {cameraDurationModes.map((modeOpt) => {
-            const isSelected =
-              (modeOpt === selectedDuration && captureMode === 'camera') ||
-              (modeOpt === 'PHOTO' && captureMode === 'photo') ||
-              (modeOpt === 'TEXT' && captureMode === 'text');
-            return (
-              <button
-                key={modeOpt}
-                type="button"
-                onClick={() => {
-                  if (modeOpt === 'PHOTO') {
-                    setCaptureMode('photo');
-                  } else if (modeOpt === 'TEXT') {
-                    setCaptureMode('text');
-                    setStageStack((prev) => [...prev, 'text-overlay']);
-                  } else {
-                    setCaptureMode('camera');
-                    setSelectedDuration(modeOpt);
-                  }
-                }}
-                className={`shrink-0 transition-all duration-200 select-none ${
-                  isSelected
-                    ? 'bg-white text-black font-extrabold text-xs px-3.5 py-1 rounded-full shadow-md shadow-black/30 scale-105'
-                    : 'text-white/90 hover:text-white font-bold text-xs px-2 py-1 tracking-wide drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]'
-                }`}
-              >
-                {modeOpt}
-              </button>
-            );
-          })}
-        </div>
+        {/* Center Record Shutter Button & Dynamic Recording Progress */}
+        {(() => {
+          let maxDurationSeconds = 15;
+          if (selectedDuration.includes('m')) {
+            maxDurationSeconds = parseFloat(selectedDuration) * 60;
+          } else if (selectedDuration.includes('s')) {
+            maxDurationSeconds = parseFloat(selectedDuration);
+          }
+          const progressPercent = Math.min(100, (recordedSeconds / maxDurationSeconds) * 100);
+          const strokeDasharray = 276.46; // 2 * Math.PI * 44
+          const strokeDashoffset = strokeDasharray - (strokeDasharray * progressPercent) / 100;
+          const isRecording = recordStatus === 'recording';
+          const hasRecordedClips = recordedSeconds > 0 || recordStatus === 'recorded';
 
-        {/* Filters Tray */}
-        {isFiltersTrayOpen && renderFiltersTray()}
-
-        {/* Center Record Shutter Button & Translucent Right Circles */}
-        <div className="flex items-center justify-center w-full relative px-6">
-          {recordStatus === 'recorded' ? (
-            <div className="flex flex-col items-center gap-3">
-              <span className="text-[16px] font-bold tracking-widest text-white drop-shadow-md">
-                {formatElapsed(recordedSeconds)}
-              </span>
-              <div className="flex items-center gap-6">
-                <button
-                  type="button"
-                  onClick={() => setActiveSheet('discard-last-clip')}
-                  className="flex h-13 w-13 items-center justify-center rounded-full bg-white/15 backdrop-blur-md text-white border border-white/20 shadow-lg active:scale-90 transition-transform"
-                >
-                  <BiX size={30} />
-                </button>
-                <button
-                  type="button"
-                  onClick={handleConfirmClip}
-                  className="flex h-13 w-13 items-center justify-center rounded-full bg-[#fe2c55] text-white active:scale-90 transition-transform shadow-[0_4px_20px_rgba(254,44,85,0.5)]"
-                >
-                  <BiCheck size={34} />
-                </button>
-              </div>
-            </div>
-          ) : (
+          return (
             <>
-              <button
-                type="button"
-                onMouseDown={handleRecordPressStart}
-                onMouseUp={handleRecordPressEnd}
-                onMouseLeave={handleRecordPressLeave}
-                onTouchStart={handleRecordPressStart}
-                onTouchEnd={handleRecordPressEnd}
-                className="relative flex items-center justify-center select-none active:scale-95 w-[80px] h-[80px] sm:w-[84px] sm:h-[84px] rounded-full border-[4px] border-white p-[5px] bg-transparent transition-all shrink-0 z-10 drop-shadow-[0_4px_12px_rgba(0,0,0,0.5)]"
-              >
-                <span
-                  className={`w-full h-full rounded-full bg-[#fe2c55] transition-all duration-200 flex items-center justify-center ${
-                    recordStatus === 'recording' ? 'rounded-[14px] scale-75' : ''
-                  }`}
-                >
-                  {recordStatus === 'recording' && (
-                    <span className="w-4 h-4 rounded-[3px] bg-white animate-pulse" />
-                  )}
-                </span>
-              </button>
+              {/* Duration & Mode Selector Bar (Exact match to top line in user screenshot) */}
+              {!hasRecordedClips && !isRecording && (
+                <div className="flex items-center justify-center gap-3.5 mb-3 select-none px-4 overflow-x-auto no-scrollbar w-full max-w-md">
+                  {cameraDurationModes.map((modeOpt) => {
+                    const isSelected =
+                      (modeOpt === selectedDuration && captureMode === 'camera') ||
+                      (modeOpt === 'PHOTO' && captureMode === 'photo') ||
+                      (modeOpt === 'TEXT' && captureMode === 'text');
+                    return (
+                      <button
+                        key={modeOpt}
+                        type="button"
+                        onClick={() => {
+                          if (modeOpt === 'PHOTO') {
+                            setCaptureMode('photo');
+                          } else if (modeOpt === 'TEXT') {
+                            setCaptureMode('text');
+                            setStageStack((prev) => [...prev, 'text-overlay']);
+                          } else {
+                            setCaptureMode('camera');
+                            setSelectedDuration(modeOpt);
+                          }
+                        }}
+                        className={`shrink-0 transition-all duration-200 select-none ${
+                          isSelected
+                            ? 'font-black text-xs px-3.5 py-1 rounded-full shadow-md shadow-black/30 scale-105'
+                            : 'font-bold text-xs px-2 py-1 tracking-wide drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]'
+                        }`}
+                        style={{
+                          color: isSelected ? '#000000' : '#ffffff',
+                          backgroundColor: isSelected ? '#ffffff' : 'transparent',
+                        }}
+                      >
+                        {modeOpt}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
 
-              {/* Two translucent side circles on the right (matching reference screenshot) */}
-              <div className="absolute left-[calc(50%+2.8rem)] flex items-center gap-2 pointer-events-none opacity-60">
-                <div className="w-11 h-11 rounded-full bg-white/30 backdrop-blur-xs border border-white/20 shrink-0" />
-                <div className="w-11 h-11 rounded-full bg-white/30 backdrop-blur-xs border border-white/20 shrink-0" />
+              <div className="flex flex-col items-center justify-center w-full relative px-4">
+                {/* Timer display above shutter button when recording or clips exist */}
+                {(isRecording || hasRecordedClips) && (
+                  <div className="mb-2 flex items-center justify-center">
+                    <span className="text-[12px] font-extrabold tracking-widest text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)] bg-black/45 backdrop-blur-md px-3 py-0.5 rounded-full border border-white/15">
+                      {formatElapsed(recordedSeconds)}
+                    </span>
+                  </div>
+                )}
+
+                <div className="relative flex items-center justify-center w-full max-w-md h-[92px] select-none">
+
+                  {/* CENTER FIXED SHUTTER RING ANCHOR */}
+                  <div
+                    onMouseDown={handleRecordPressStart}
+                    onMouseUp={handleRecordPressEnd}
+                    onMouseLeave={handleRecordPressLeave}
+                    onTouchStart={handleRecordPressStart}
+                    onTouchEnd={handleRecordPressEnd}
+                    className="absolute left-1/2 -translate-x-1/2 z-20 w-[78px] h-[78px] sm:w-[84px] sm:h-[84px] rounded-full flex items-center justify-center pointer-events-auto active:scale-95 transition-all"
+                    style={{
+                      border: '4px solid #ffffff',
+                      boxShadow: '0 0 0 1px rgba(0,0,0,0.3), 0 4px 20px rgba(0,0,0,0.8)',
+                    }}
+                  >
+                    {/* SVG Red Circular Progress Arc (when recording or clips exist) */}
+                    {(isRecording || hasRecordedClips) && (
+                      <svg className="absolute inset-0 w-full h-full -rotate-90 pointer-events-none" viewBox="0 0 100 100">
+                        <circle cx="50" cy="50" r="44" fill="none" stroke="rgba(255, 255, 255, 0.3)" strokeWidth="5" />
+                        {progressPercent > 0 && (
+                          <circle
+                            cx="50"
+                            cy="50"
+                            r="44"
+                            fill="none"
+                            stroke="#FE2C55"
+                            strokeWidth="5.5"
+                            strokeDasharray={strokeDasharray}
+                            strokeDashoffset={strokeDashoffset}
+                            strokeLinecap="round"
+                            className="transition-all duration-100 ease-linear"
+                          />
+                        )}
+                      </svg>
+                    )}
+                  </div>
+
+                  {/* HORIZONTAL SWIPEABLE LENS CAROUSEL */}
+                  <div
+                    ref={effectsScrollRef}
+                    onScroll={handleEffectsScroll}
+                    className="w-full flex items-center gap-5 overflow-x-auto no-scrollbar snap-x snap-mandatory px-[calc(50%-33px)] py-2 z-10 pointer-events-auto"
+                  >
+                    {cameraEffectsList.map((effect) => {
+                      const isActive = activeFaceEffect === effect.id;
+                      const isNormal = effect.id === null;
+
+                      return (
+                        <button
+                          key={effect.id || 'normal'}
+                          data-effect-id={effect.id || 'normal'}
+                          type="button"
+                          onClick={(e) => {
+                            setActiveFaceEffect(effect.id);
+                            if (effect.id === null) setFaceEffectCanvasEl(null);
+                            e.currentTarget.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+                          }}
+                          onMouseDown={isNormal ? handleRecordPressStart : undefined}
+                          onMouseUp={isNormal ? handleRecordPressEnd : undefined}
+                          onMouseLeave={isNormal ? handleRecordPressLeave : undefined}
+                          onTouchStart={isNormal ? handleRecordPressStart : undefined}
+                          onTouchEnd={isNormal ? handleRecordPressEnd : undefined}
+                          className={`shrink-0 snap-center transition-all duration-200 flex flex-col items-center justify-center select-none active:scale-95 ${
+                            isActive
+                              ? 'w-[66px] h-[66px] sm:w-[72px] sm:h-[72px] scale-105 opacity-100'
+                              : 'w-[50px] h-[50px] sm:w-[54px] sm:h-[54px] opacity-60 hover:opacity-90'
+                          }`}
+                        >
+                          {isNormal ? (
+                            /* Normal Red Shutter Inner Circle */
+                            <div className="w-full h-full rounded-full bg-[#fe2c55] shadow-lg flex items-center justify-center transition-all duration-200">
+                              {isRecording && <span className="w-3 h-3 rounded-[2px] bg-white animate-pulse" />}
+                            </div>
+                          ) : (
+                            /* Effect Bubble Circle with AI Generated Image Preview */
+                            <div
+                              className={`w-full h-full rounded-full bg-[#2c2c2e] border flex items-center justify-center text-2xl transition-all shadow-md overflow-hidden ${
+                                isActive
+                                  ? 'border-white bg-amber-400/30 ring-2 ring-amber-300/80 shadow-amber-500/30'
+                                  : 'border-white/20 hover:border-white/40'
+                              }`}
+                            >
+                              {effect.image ? (
+                                <img
+                                  src={effect.image}
+                                  alt={effect.label}
+                                  className="w-full h-full object-cover rounded-full transition-transform duration-200"
+                                />
+                              ) : (
+                                <span>{effect.icon}</span>
+                              )}
+                            </div>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* RIGHT ACTION BUTTONS: Backspace Tag `✕` & Red Checkmark `✓` */}
+                  {hasRecordedClips && (
+                    <div className="absolute right-3 flex items-center gap-2.5 z-30 pointer-events-auto">
+                      {!isRecording && (
+                        <button
+                          type="button"
+                          onClick={() => setActiveSheet('discard-last-clip')}
+                          className="active:scale-90 transition-transform flex items-center justify-center drop-shadow-md"
+                          title="Discard last clip"
+                        >
+                          <svg width="36" height="30" viewBox="0 0 24 24" className="drop-shadow-md">
+                            <path d="M21 4H9c-.6 0-1.2.3-1.6.8L1 12l6.4 7.2c.4.5 1 .8 1.6.8h12c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2z" fill="white" />
+                            <path d="M15 9.5l-5 5M10 9.5l5 5" stroke="black" strokeWidth="2.4" strokeLinecap="round" />
+                          </svg>
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={handleConfirmClip}
+                        className="w-9 h-9 rounded-full bg-[#fe2c55] flex items-center justify-center text-white active:scale-90 transition-transform shadow-[0_4px_14px_rgba(254,44,85,0.6)]"
+                        title="Confirm clips"
+                      >
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3.6" strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="20 6 9 17 4 12" />
+                        </svg>
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             </>
-          )}
-        </div>
+          );
+        })()}
       </div>
     </div>
   );
@@ -4279,6 +4512,14 @@ const CreatePage = () => {
                   onDoubleClick={handleCanvasDoubleClick}
                   className="h-full w-full object-cover transition-all duration-300 rounded-[24px] sm:rounded-[28px]"
                 />
+                {activeFaceEffect && (
+                  <FaceEffectCanvas
+                    mediaStream={rawCameraStream}
+                    activeEffectId={activeFaceEffect}
+                    mirrored={facingMode === 'user'}
+                    onCanvasReady={setFaceEffectCanvasEl}
+                  />
+                )}
                 {recordStatus === 'recorded' && previewUrl && (
                   <video
                     src={previewUrl}

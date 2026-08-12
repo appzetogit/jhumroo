@@ -599,27 +599,6 @@ const VideoOverlay = ({ reelId, username, caption, musicName, isLiked, likes, co
                 <span className="text-[12px] font-bold mt-1 text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.8)]">{formatTikTokCount(shares)}</span>
              </div>
 
-              {/* 5. Mute / Unmute Sound Control Button */}
-              <div 
-                className="flex flex-col items-center text-white cursor-pointer group" 
-                onClick={(e) => { 
-                  e.stopPropagation(); 
-                  if (typeof onMuteToggle === 'function') onMuteToggle();
-                }} 
-                style={{ pointerEvents: 'auto' }}
-                title={isMuted ? "Unmute Sound" : "Mute Sound"}
-              >
-                <div className="w-9 h-9 rounded-full bg-black/40 backdrop-blur-md border border-white/20 flex items-center justify-center active:scale-90 transition-transform shadow-lg group-hover:scale-105">
-                  {isMuted ? (
-                    <BiVolumeMute size={21} className="text-white/90" />
-                  ) : (
-                    <BiVolumeFull size={21} className="text-[#FE2C55]" />
-                  )}
-                </div>
-                <span className="text-[10px] font-bold mt-1 text-white/90 drop-shadow-[0_1px_3px_rgba(0,0,0,0.8)]">
-                  {isMuted ? 'Unmute' : 'Sound'}
-                </span>
-              </div>
 
               {/* 6. Static Vinyl Disc Sound Icon */}
               <div

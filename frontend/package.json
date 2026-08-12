@@ -11,6 +11,7 @@
     "doctor": "npx react-doctor@latest"
   },
   "dependencies": {
+    "@mediapipe/tasks-vision": "^1.0.1",
     "@twick/timeline": "^0.15.31",
     "@twick/video-editor": "^0.15.31",
     "axios": "^1.17.0",
