@@ -50,7 +50,7 @@
   --safe-area-bottom: env(safe-area-inset-bottom, 0px);
 
   /* Layout */
-  --bottom-nav-height: 46px;
+  --bottom-nav-height: 38px;
 
   /* Theme Tokens */
   --theme-app-shell-bg: #000000;
