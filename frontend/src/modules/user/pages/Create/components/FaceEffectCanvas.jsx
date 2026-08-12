@@ -52,6 +52,8 @@ export default function FaceEffectCanvas({ mediaStream, activeEffectId, mirrored
         }
 
         const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
         const landmarker = landmarkerRef.current;

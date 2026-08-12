@@ -35,14 +35,35 @@ function applyRegionWarp(ctx, centerX, centerY, radius, sampleFn) {
         sx = localCx + offset.dx;
         sy = localCy + offset.dy;
       }
-      const sxi = Math.min(w - 1, Math.max(0, Math.round(sx)));
-      const syi = Math.min(h - 1, Math.max(0, Math.round(sy)));
+
+      // Clamp coordinates within bounds
+      sx = Math.min(w - 1, Math.max(0, sx));
+      sy = Math.min(h - 1, Math.max(0, sy));
+
+      // Bilinear interpolation for crystal clear, smooth warping without pixelation/blur
+      const x0 = Math.floor(sx);
+      const y0 = Math.floor(sy);
+      const x1 = Math.min(w - 1, x0 + 1);
+      const y1 = Math.min(h - 1, y0 + 1);
+
+      const fx = sx - x0;
+      const fy = sy - y0;
+      const w00 = (1 - fx) * (1 - fy);
+      const w10 = fx * (1 - fy);
+      const w01 = (1 - fx) * fy;
+      const w11 = fx * fy;
+
+      const i00 = (y0 * w + x0) * 4;
+      const i10 = (y0 * w + x1) * 4;
+      const i01 = (y1 * w + x0) * 4;
+      const i11 = (y1 * w + x1) * 4;
+
       const di = (y * w + x) * 4;
-      const si = (syi * w + sxi) * 4;
-      dstData[di] = srcData[si];
-      dstData[di + 1] = srcData[si + 1];
-      dstData[di + 2] = srcData[si + 2];
-      dstData[di + 3] = srcData[si + 3];
+
+      dstData[di]     = Math.round(srcData[i00]     * w00 + srcData[i10]     * w10 + srcData[i01]     * w01 + srcData[i11]     * w11);
+      dstData[di + 1] = Math.round(srcData[i00 + 1] * w00 + srcData[i10 + 1] * w10 + srcData[i01 + 1] * w01 + srcData[i11 + 1] * w11);
+      dstData[di + 2] = Math.round(srcData[i00 + 2] * w00 + srcData[i10 + 2] * w10 + srcData[i01 + 2] * w01 + srcData[i11 + 2] * w11);
+      dstData[di + 3] = Math.round(srcData[i00 + 3] * w00 + srcData[i10 + 3] * w10 + srcData[i01 + 3] * w01 + srcData[i11 + 3] * w11);
     }
   }
   ctx.putImageData(dst, left, top);

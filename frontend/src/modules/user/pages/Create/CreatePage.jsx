@@ -54,11 +54,33 @@ import reelService from '../../../../services/reelService';
 import userService from '../../../../services/userService';
 import followService from '../../../../services/followService';
 import audioService from '../../../../services/audioService';
-import { SOUND_FAVORITES_KEY, createInitialPostState, FILTER_PRESETS, FONT_OPTIONS, COLOR_OPTIONS, MOCK_STICKERS, PREVIEW_TOOLS } from './utils/createConstants';
+import { SOUND_FAVORITES_KEY, createInitialPostState, FILTER_PRESETS, CATEGORIZED_FILTERS, ALL_FILTERS_MAP, FONT_OPTIONS, COLOR_OPTIONS, MOCK_STICKERS, PREVIEW_TOOLS } from './utils/createConstants';
 import { formatElapsed, parseDurationSeconds, readSoundFavorites } from './utils/createUtils';
 import { initDB, saveVideoToCache, getVideoFromCache, saveSequenceToCache, getSequenceFromCache, clearVideoCache } from './services/videoCacheService';
 import { sheetOverlayClass, Toggle, BottomSheet, CenterModal } from './components/SharedUI';
 import { DynamicAudioDuration, MediaPreview, DraggableOverlay, TimelineThumbnail } from './components/MediaComponents';
+
+const getCalculatedFilterCss = (filterName, intensity = 80) => {
+  if (!filterName || filterName === 'Normal') return 'none';
+  const rawPreset = ALL_FILTERS_MAP[filterName] || FILTER_PRESETS[filterName];
+  if (!rawPreset || rawPreset === 'none') return 'none';
+  const factor = intensity / 100;
+  const matches = rawPreset.match(/(\w+)\(([^)]+)\)/g);
+  if (!matches) return rawPreset;
+  return matches.map(m => {
+    const parts = m.match(/(\w+)\(([^)]+)\)/);
+    if (!parts) return m;
+    const name = parts[1];
+    const valStr = parts[2];
+    const num = parseFloat(valStr);
+    const unit = valStr.replace(/[\d.-]/g, '');
+    if (name === 'brightness' || name === 'contrast' || name === 'saturate') {
+      return `${name}(${(1 + (num - 1) * factor).toFixed(3)}${unit})`;
+    }
+    return `${name}(${(num * factor).toFixed(3)}${unit})`;
+  }).join(' ');
+};
+
 const getToolIcon = (toolId, size = 28, isMuted = false, selectedSpeed = '1x', selectedZoom = '1x', flashMode = 'off', isBeautifyOn = false) => {
   switch (toolId) {
     case 'flip':
@@ -379,13 +401,67 @@ const CreatePage = () => {
   const [countdownLength, setCountdownLength] = useState(8.9);
   const [isTimerRecording, setIsTimerRecording] = useState(false);
   const [captureMode, setCaptureMode] = useState('camera');
-  const [facingMode, setFacingMode] = useState('environment');
+  const [facingMode, setFacingMode] = useState('user');
   const [flashMode, setFlashMode] = useState('off');
   const [isBeautifyOn, setIsBeautifyOn] = useState(false);
   const [activeFilterGroup, setActiveFilterGroup] = useState('instacam');
   const [selectedFilter, setSelectedFilter] = useState('Normal');
+  const [filterCategory, setFilterCategory] = useState('Portrait');
+  const [filterIntensity, setFilterIntensity] = useState(80);
   const [filterPreviewFrame, setFilterPreviewFrame] = useState(null);
   const filterSnapshotCanvasRef = useRef(null);
+  const filterRowScrollRef = useRef(null);
+  const filterCategoryTabsRef = useRef(null);
+  const isFilterTabScrollingRef = useRef(false);
+
+  const handleFilterRowScroll = useCallback(() => {
+    if (isFilterTabScrollingRef.current) return;
+    const container = filterRowScrollRef.current;
+    if (!container) return;
+
+    const containerRect = container.getBoundingClientRect();
+    const children = container.querySelectorAll('[data-filter-category]');
+
+    let closestCat = null;
+    let minDistance = Infinity;
+
+    children.forEach((child) => {
+      const rect = child.getBoundingClientRect();
+      const distance = Math.abs(rect.left - (containerRect.left + 24));
+      if (distance < minDistance) {
+        minDistance = distance;
+        closestCat = child.getAttribute('data-filter-category');
+      }
+    });
+
+    if (closestCat && closestCat !== filterCategory) {
+      setFilterCategory(closestCat);
+      const tabsContainer = filterCategoryTabsRef.current;
+      if (tabsContainer) {
+        const tabEl = tabsContainer.querySelector(`[data-tab-category="${closestCat}"]`);
+        if (tabEl) {
+          tabEl.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+        }
+      }
+    }
+  }, [filterCategory]);
+
+  const handleFilterTabClick = useCallback((catName) => {
+    setFilterCategory(catName);
+    isFilterTabScrollingRef.current = true;
+
+    const container = filterRowScrollRef.current;
+    if (container) {
+      const targetEl = container.querySelector(`[data-filter-category="${catName}"]`);
+      if (targetEl) {
+        targetEl.scrollIntoView({ behavior: 'smooth', inline: 'start', block: 'nearest' });
+      }
+    }
+
+    setTimeout(() => {
+      isFilterTabScrollingRef.current = false;
+    }, 450);
+  }, []);
   const [activeFaceEffect, setActiveFaceEffect] = useState(null);
   const [rawCameraStream, setRawCameraStream] = useState(null);
   const [faceEffectCanvasEl, setFaceEffectCanvasEl] = useState(null);
@@ -742,6 +818,25 @@ const CreatePage = () => {
       audioPreviewRef.current.currentTime = clipStart;
     }
   }, [clipStart, playingAudioId, stageStack]);
+
+  // Hardware Torch toggle effect for Back Camera
+  useEffect(() => {
+    if (!rawCameraStream) return;
+    try {
+      const videoTrack = rawCameraStream.getVideoTracks()[0];
+      if (videoTrack) {
+        const capabilities = videoTrack.getCapabilities ? videoTrack.getCapabilities() : {};
+        if (capabilities.torch) {
+          const shouldTorch = facingMode === 'environment' && flashMode === 'on';
+          videoTrack.applyConstraints({
+            advanced: [{ torch: shouldTorch }]
+          }).catch((e) => console.warn('Torch constraint error:', e));
+        }
+      }
+    } catch (e) {
+      console.warn('Torch capability error:', e);
+    }
+  }, [flashMode, facingMode, rawCameraStream]);
 
   // Auto-play music when sound-editor stage becomes active
   useEffect(() => {
@@ -1817,10 +1912,10 @@ const CreatePage = () => {
     }
   }, [activeFaceEffect, rawCameraStream, faceEffectCanvasEl]);
 
-  // Update Instacam filters when selectedFilter changes
+  // Update Instacam filters when selectedFilter or filterIntensity changes
   useEffect(() => {
     if (instacamRef.current && stage === 'camera') {
-      const preset = FILTER_PRESETS[selectedFilter];
+      const preset = ALL_FILTERS_MAP[selectedFilter] || FILTER_PRESETS[selectedFilter];
 
       // Reset all filters first
       instacamRef.current.brightness = 1;
@@ -1832,8 +1927,8 @@ const CreatePage = () => {
       instacamRef.current.sepia = 0;
       instacamRef.current.blur = 0;
 
-      if (preset && preset !== 'none') {
-        // Parse the preset string like "contrast(1.1) brightness(1.05) saturate(1.1)"
+      if (preset && preset !== 'none' && selectedFilter !== 'Normal') {
+        const factor = (filterIntensity ?? 80) / 100;
         const matches = preset.match(/(\w+)\(([^)]+)\)/g);
         if (matches) {
           matches.forEach(m => {
@@ -1843,21 +1938,21 @@ const CreatePage = () => {
               const value = parseFloat(parts[2]);
 
               switch (name) {
-                case 'brightness': instacamRef.current.brightness = value; break;
-                case 'contrast': instacamRef.current.contrast = value; break;
-                case 'saturate': instacamRef.current.saturation = value; break;
-                case 'hue-rotate': instacamRef.current.hue = value; break;
-                case 'invert': instacamRef.current.invert = value; break;
-                case 'grayscale': instacamRef.current.grayscale = value; break;
-                case 'sepia': instacamRef.current.sepia = value; break;
-                case 'blur': instacamRef.current.blur = value; break;
+                case 'brightness': instacamRef.current.brightness = 1 + (value - 1) * factor; break;
+                case 'contrast': instacamRef.current.contrast = 1 + (value - 1) * factor; break;
+                case 'saturate': instacamRef.current.saturation = 1 + (value - 1) * factor; break;
+                case 'hue-rotate': instacamRef.current.hue = value * factor; break;
+                case 'invert': instacamRef.current.invert = value * factor; break;
+                case 'grayscale': instacamRef.current.grayscale = value * factor; break;
+                case 'sepia': instacamRef.current.sepia = value * factor; break;
+                case 'blur': instacamRef.current.blur = value * factor; break;
               }
             }
           });
         }
       }
     }
-  }, [selectedFilter, stage]);
+  }, [selectedFilter, filterIntensity, stage]);
 
   useEffect(() => {
     if (activeSheet !== 'sound-browser') {
@@ -2543,8 +2638,8 @@ const CreatePage = () => {
 
     if (toolId === 'flash') {
       setFlashMode((prev) => {
-        const next = prev === 'off' ? 'on' : prev === 'on' ? 'auto' : 'off';
-        showToast(`Flash: ${next.toUpperCase()}`);
+        const next = prev === 'off' ? 'on' : 'off';
+        showToast(`Flash ${next === 'on' ? 'ON' : 'OFF'}`);
         return next;
       });
       return;
@@ -3983,8 +4078,9 @@ const CreatePage = () => {
   const cameraDurationModes = ['10m', '60s', '15s'];
 
   const renderCameraHeader = () => (
-    <div className="absolute inset-x-0 top-3 z-30 px-3.5 flex items-center justify-between">
-      <div className="flex items-center gap-1.5">
+    <div className="absolute inset-x-0 top-3 z-30 px-3.5 flex items-center justify-between pointer-events-none">
+      {/* Left: Close Button */}
+      <div className="pointer-events-auto">
         <button
           type="button"
           onClick={handleCloseOrBack}
@@ -3993,7 +4089,10 @@ const CreatePage = () => {
         >
           <BiX size={26} />
         </button>
+      </div>
 
+      {/* Center: Add Sound / Music Pill (PERFECT HORIZONTAL CENTER ALIGNMENT) */}
+      <div className="absolute left-1/2 -translate-x-1/2 top-3 pointer-events-auto flex items-center justify-center">
         <button
           type="button"
           onClick={() => setActiveSheet('music-library')}
@@ -4028,6 +4127,9 @@ const CreatePage = () => {
           )}
         </button>
       </div>
+
+      {/* Right Spacer */}
+      <div className="w-9 h-9 shrink-0" aria-hidden="true" />
     </div>
   );
 
@@ -4036,71 +4138,196 @@ const CreatePage = () => {
       {cameraSideTools.map((tool) => {
         const isActive = activeCameraTool === tool.id || (tool.id === 'beautify' && isBeautifyOn) || (tool.id === 'flash' && flashMode !== 'off');
         return (
-          <button
-            key={tool.id}
-            type="button"
-            onClick={() => handleCameraToolClick(tool.id)}
-            className="group flex flex-col items-center justify-center w-10 h-10 rounded-full active:scale-90 transition-transform hover:bg-white/10"
-          >
-            <span className={`text-white transition-colors ${isActive ? 'text-amber-300 scale-105' : ''}`}>
-              {getToolIcon(tool.id, 28, false, selectedSpeed, selectedZoom, flashMode, isBeautifyOn)}
-            </span>
-          </button>
+          <div key={tool.id} className="relative flex items-center justify-center">
+            <button
+              type="button"
+              onClick={() => handleCameraToolClick(tool.id)}
+              className="group flex flex-col items-center justify-center w-10 h-10 rounded-full active:scale-90 transition-transform hover:bg-white/10"
+            >
+              <span className={`text-white transition-colors ${isActive ? 'text-amber-300 scale-105' : ''}`}>
+                {getToolIcon(tool.id, 28, false, selectedSpeed, selectedZoom, flashMode, isBeautifyOn)}
+              </span>
+            </button>
+
+            {/* VERTICAL SPEED SELECTOR POPUP (Positioned to the left of the speed icon) */}
+            {tool.id === 'speed' && activeCameraTool === 'speed' && (
+              <div className="absolute right-12 top-1/2 -translate-y-1/2 bg-black/60 backdrop-blur-xl border border-white/20 rounded-[20px] p-1.5 flex flex-col items-center gap-1 shadow-2xl z-40 animate-in fade-in zoom-in-95 duration-150">
+                {['3x', '2x', '1x', '0.5x', '0.3x'].map((speedOption) => {
+                  const isSelected = selectedSpeed === speedOption;
+                  return (
+                    <button
+                      key={speedOption}
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedSpeed(speedOption);
+                        setActiveCameraTool(null);
+                      }}
+                      className={`w-14 py-2 rounded-xl text-xs font-extrabold transition-all duration-150 text-center select-none ${
+                        isSelected
+                          ? 'shadow-md scale-105'
+                          : 'opacity-80 hover:opacity-100 hover:bg-white/10'
+                      }`}
+                      style={{
+                        backgroundColor: isSelected ? '#ffffff' : 'transparent',
+                        color: isSelected ? '#000000' : '#ffffff',
+                      }}
+                    >
+                      {speedOption}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         );
       })}
     </div>
   );
 
-  const renderFiltersTray = () => (
-    <div className="mb-2 max-w-md w-[calc(100%-1.5rem)] bg-black/75 backdrop-blur-xl border border-white/15 rounded-3xl p-2 shadow-2xl animate-in fade-in slide-in-from-bottom-2 duration-200">
-      <div className="flex items-center justify-between px-2 mb-1.5 border-b border-white/10 pb-1">
-        <span className="text-[11px] font-extrabold text-white tracking-wide flex items-center gap-1.5">
-          <span className="text-amber-300 text-xs">🎨</span> Color Filters
-        </span>
-        <button
-          type="button"
-          onClick={() => setActiveCameraTool(null)}
-          className="w-5 h-5 rounded-full bg-white/10 hover:bg-white/20 text-white/80 flex items-center justify-center text-[10px] font-bold active:scale-90 transition-transform"
-          title="Close filters"
-        >
-          ✕
-        </button>
-      </div>
-      <div className="flex gap-3 overflow-x-auto no-scrollbar py-0.5 px-1">
-        {activeFilterOptions.map((filterName) => (
-          <button
-            key={filterName}
-            type="button"
-            onClick={() => setSelectedFilter(filterName)}
-            className="w-14 shrink-0 text-center text-white active:scale-95 transition-transform"
-          >
+  const renderFiltersTray = () => {
+    const currentCatObj = CATEGORIZED_FILTERS.find((c) => c.category === filterCategory) || CATEGORIZED_FILTERS[0];
+
+    return (
+      <div className="w-full max-w-md flex flex-col items-center pointer-events-auto animate-in fade-in slide-in-from-bottom-4 duration-200">
+        {/* TOP INTENSITY SLIDER (Floating above sheet) */}
+        <div className="w-full max-w-xs mb-3.5 flex flex-col items-center select-none px-4">
+          <div className="relative w-full flex items-center justify-center py-1">
+            {/* Floating numeric badge (Clean text floating directly above white circle thumb) */}
             <span
-              className={`mx-auto flex h-10 w-10 items-center justify-center rounded-full border text-[10px] overflow-hidden transition-all ${
-                selectedFilter === filterName
-                  ? 'border-white ring-2 ring-amber-300/60 scale-105 shadow-md shadow-amber-500/20'
-                  : 'border-white/20 hover:border-white/40'
-              }`}
+              className="absolute -top-5 text-[12px] font-black text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.95)] transform -translate-x-1/2 transition-all pointer-events-none z-10"
+              style={{ left: `${Math.max(6, Math.min(94, filterIntensity))}%` }}
             >
-              <div
-                className="w-full h-full bg-[#2c2c2e]"
-                style={{
-                  filter: FILTER_PRESETS[filterName] || 'none',
-                  background: filterPreviewFrame ? `url(${filterPreviewFrame}) center/cover` : undefined,
-                }}
-              />
+              {filterIntensity}
             </span>
-            <span
-              className={`mt-1 block text-[9px] tracking-tight drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)] ${
-                selectedFilter === filterName ? 'text-amber-300 font-bold' : 'text-white/75'
+
+            <input
+              type="range"
+              min="0"
+              max="100"
+              value={filterIntensity}
+              onChange={(e) => setFilterIntensity(parseInt(e.target.value, 10))}
+              className="w-full h-1 rounded-full appearance-none cursor-pointer custom-filter-range"
+              style={{
+                background: `linear-gradient(to right, #fe2c55 0%, #fe2c55 ${filterIntensity}%, rgba(255,255,255,0.35) ${filterIntensity}%, rgba(255,255,255,0.35) 100%)`,
+              }}
+            />
+          </div>
+        </div>
+
+        {/* DARK BOTTOM SHEET CARD */}
+        <div className="w-full bg-black/90 backdrop-blur-2xl border-t border-white/15 rounded-t-[28px] pt-3.5 pb-6 px-3 shadow-[0_-12px_45px_rgba(0,0,0,0.9)]">
+          {/* SINGLE HORIZONTAL LINE: CATEGORY TABS */}
+          <div
+            ref={filterCategoryTabsRef}
+            className="flex items-center gap-3 overflow-x-auto no-scrollbar border-b border-white/10 pb-2 mb-3.5 px-1 select-none"
+          >
+          {/* Scrollable Category Tabs */}
+          {CATEGORIZED_FILTERS.map((cat) => {
+            const isActive = filterCategory === cat.category;
+            return (
+              <button
+                key={cat.category}
+                data-tab-category={cat.category}
+                type="button"
+                onClick={() => handleFilterTabClick(cat.category)}
+                className="shrink-0 flex flex-col items-center justify-center group px-1"
+              >
+                <span
+                  className={`text-[13px] font-extrabold tracking-wide transition-colors ${
+                    isActive ? 'text-white' : 'text-white/50 group-hover:text-white/80'
+                  }`}
+                >
+                  {cat.category}
+                </span>
+                <div
+                  className={`h-[2.5px] w-full rounded-full mt-1 transition-all duration-200 ${
+                    isActive ? 'bg-white scale-x-100' : 'bg-transparent scale-x-0'
+                  }`}
+                />
+              </button>
+            );
+          })}
+        </div>
+
+        {/* CONTINUOUS MULTI-CATEGORY FILTER THUMBNAIL CIRCLES ROW */}
+        <div
+          ref={filterRowScrollRef}
+          onScroll={handleFilterRowScroll}
+          className="flex gap-3.5 overflow-x-auto no-scrollbar py-1 px-1 snap-x snap-mandatory"
+        >
+          {/* Clear filter option circle */}
+          <button
+            type="button"
+            onClick={() => setSelectedFilter('Normal')}
+            className="shrink-0 flex flex-col items-center gap-1.5 group active:scale-95 transition-transform"
+          >
+            <div
+              className={`w-12 h-12 sm:w-14 sm:h-14 rounded-full border flex items-center justify-center bg-[#2c2c2e] text-lg transition-all ${
+                selectedFilter === 'Normal'
+                  ? 'border-[#fe2c55] ring-2 ring-[#fe2c55]/60 scale-105 shadow-md shadow-[#fe2c55]/30'
+                  : 'border-white/20 group-hover:border-white/40'
               }`}
             >
-              {filterName}
+              🚫
+            </div>
+            <span
+              className={`text-[11px] tracking-tight transition-colors ${
+                selectedFilter === 'Normal' ? 'text-[#fe2c55] font-bold' : 'text-white/80 font-medium'
+              }`}
+            >
+              Normal
             </span>
           </button>
-        ))}
+
+          {/* Render ALL categories sequentially in one continuous horizontal scroll row */}
+          {CATEGORIZED_FILTERS.map((catObj, catIdx) => (
+            <React.Fragment key={catObj.category}>
+              {/* Category Divider Line between category groups */}
+              {catIdx > 0 && (
+                <div className="h-8 w-[1px] bg-white/25 shrink-0 mx-1.5 self-center rounded-full" />
+              )}
+              {catObj.filters.map((f, fIdx) => {
+                const isSel = selectedFilter === f.id;
+                return (
+                  <button
+                    key={`${catObj.category}-${f.id}`}
+                    data-filter-category={catObj.category}
+                    type="button"
+                    onClick={() => setSelectedFilter(f.id)}
+                    className="shrink-0 flex flex-col items-center gap-1.5 group active:scale-95 transition-transform"
+                  >
+                    <div
+                      className={`w-12 h-12 sm:w-14 sm:h-14 rounded-full overflow-hidden border transition-all ${
+                        isSel
+                          ? 'border-2 border-[#fe2c55] ring-2 ring-[#fe2c55]/60 scale-105 shadow-lg shadow-[#fe2c55]/40'
+                          : 'border-white/20 group-hover:border-white/40'
+                      }`}
+                    >
+                      <img
+                        src={f.thumb}
+                        alt={f.label}
+                        className="w-full h-full object-cover transition-transform duration-200"
+                        style={{ filter: getCalculatedFilterCss(f.id, filterIntensity) }}
+                      />
+                    </div>
+                    <span
+                      className={`text-[11px] tracking-tight transition-colors ${
+                        isSel ? 'text-[#fe2c55] font-bold' : 'text-white/80 font-medium'
+                      }`}
+                    >
+                      {f.label}
+                    </span>
+                  </button>
+                );
+              })}
+            </React.Fragment>
+          ))}
+        </div>
       </div>
     </div>
   );
+  };
 
   const renderFaceEffectsTray = () => {
     const chipClass = (isActive) =>
@@ -4158,249 +4385,242 @@ const CreatePage = () => {
   };
 
   const renderCameraBottom = () => (
-    <div className="absolute inset-x-0 bottom-6 sm:bottom-8 z-30 flex flex-col items-center pointer-events-none">
-      <div className="pointer-events-auto flex flex-col items-center w-full">
-        {/* Speed Selector overlay */}
-        {activeCameraTool === 'speed' && (
-          <div className="mb-3 flex items-center justify-center gap-3 bg-black/60 backdrop-blur-md px-4 py-1.5 rounded-full border border-white/10 text-xs font-semibold text-white shadow-lg">
-            {SPEED_OPTIONS.map((speedOption) => (
-              <button
-                key={speedOption}
-                type="button"
-                onClick={() => {
-                  setSelectedSpeed(speedOption);
-                  setActiveCameraTool(null);
-                }}
-                className={`px-3 py-1 rounded-full text-xs font-bold transition-all ${
-                  selectedSpeed === speedOption ? 'bg-white text-black scale-105 shadow-md' : 'text-white/70 hover:text-white'
-                }`}
-              >
-                {speedOption}
-              </button>
-            ))}
-          </div>
-        )}
+    <div className="absolute inset-x-0 bottom-0 sm:bottom-2 z-30 flex flex-col items-center pointer-events-none">
+      {activeCameraTool === 'filters' ? (
+        renderFiltersTray()
+      ) : (
+        <div className="pointer-events-auto flex flex-col items-center w-full mb-6 sm:mb-8">
 
-        {/* Timer selector overlay */}
-        {activeCameraTool === 'timer' && (
-          <div className="mb-3 flex items-center justify-center gap-4 bg-black/60 backdrop-blur-md px-5 py-2 rounded-full border border-white/10 text-xs font-semibold text-white shadow-lg">
-            {['3s', '10s'].map((timeOpt) => (
-              <button
-                key={timeOpt}
-                type="button"
-                onClick={() => {
-                  setSelectedCountdown(timeOpt);
-                  setActiveCameraTool(null);
-                  showToast(`Timer set to ${timeOpt}`);
-                }}
-                className={`px-3 py-1 rounded-full text-xs font-bold transition-all ${
-                  selectedCountdown === timeOpt ? 'bg-white text-black scale-105 shadow-md' : 'text-white/70 hover:text-white'
-                }`}
-              >
-                {timeOpt} Timer
-              </button>
-            ))}
-          </div>
-        )}
+          {/* Timer selector overlay */}
+          {activeCameraTool === 'timer' && (
+            <div className="mb-3 flex items-center justify-center gap-4 bg-black/60 backdrop-blur-md px-5 py-2 rounded-full border border-white/10 text-xs font-semibold text-white shadow-lg">
+              {['3s', '10s'].map((timeOpt) => (
+                <button
+                  key={timeOpt}
+                  type="button"
+                  onClick={() => {
+                    setSelectedCountdown(timeOpt);
+                    setActiveCameraTool(null);
+                    showToast(`Timer set to ${timeOpt}`);
+                  }}
+                  className={`px-3 py-1 rounded-full text-xs font-bold transition-all ${
+                    selectedCountdown === timeOpt ? 'bg-white text-black scale-105 shadow-md' : 'text-white/70 hover:text-white'
+                  }`}
+                >
+                  {timeOpt} Timer
+                </button>
+              ))}
+            </div>
+          )}
 
-        {/* Center Record Shutter Button & Dynamic Recording Progress */}
-        {(() => {
-          let maxDurationSeconds = 15;
-          if (selectedDuration.includes('m')) {
-            maxDurationSeconds = parseFloat(selectedDuration) * 60;
-          } else if (selectedDuration.includes('s')) {
-            maxDurationSeconds = parseFloat(selectedDuration);
-          }
-          const progressPercent = Math.min(100, (recordedSeconds / maxDurationSeconds) * 100);
-          const strokeDasharray = 276.46; // 2 * Math.PI * 44
-          const strokeDashoffset = strokeDasharray - (strokeDasharray * progressPercent) / 100;
-          const isRecording = recordStatus === 'recording';
-          const hasRecordedClips = recordedSeconds > 0 || recordStatus === 'recorded';
+          {/* Center Record Shutter Button & Dynamic Recording Progress */}
+          {(() => {
+            let maxDurationSeconds = 15;
+            if (selectedDuration.includes('m')) {
+              maxDurationSeconds = parseFloat(selectedDuration) * 60;
+            } else if (selectedDuration.includes('s')) {
+              maxDurationSeconds = parseFloat(selectedDuration);
+            }
+            const progressPercent = Math.min(100, (recordedSeconds / maxDurationSeconds) * 100);
+            const strokeDasharray = 276.46; // 2 * Math.PI * 44
+            const strokeDashoffset = strokeDasharray - (strokeDasharray * progressPercent) / 100;
+            const isRecording = recordStatus === 'recording';
+            const hasRecordedClips = recordedSeconds > 0 || recordStatus === 'recorded';
 
-          return (
-            <>
-              {/* Duration & Mode Selector Bar (Exact match to top line in user screenshot) */}
-              {!hasRecordedClips && !isRecording && (
-                <div className="flex items-center justify-center gap-3.5 mb-3 select-none px-4 overflow-x-auto no-scrollbar w-full max-w-md">
-                  {cameraDurationModes.map((modeOpt) => {
-                    const isSelected =
-                      (modeOpt === selectedDuration && captureMode === 'camera') ||
-                      (modeOpt === 'PHOTO' && captureMode === 'photo') ||
-                      (modeOpt === 'TEXT' && captureMode === 'text');
-                    return (
-                      <button
-                        key={modeOpt}
-                        type="button"
-                        onClick={() => {
-                          if (modeOpt === 'PHOTO') {
-                            setCaptureMode('photo');
-                          } else if (modeOpt === 'TEXT') {
-                            setCaptureMode('text');
-                            setStageStack((prev) => [...prev, 'text-overlay']);
-                          } else {
-                            setCaptureMode('camera');
-                            setSelectedDuration(modeOpt);
-                          }
-                        }}
-                        className={`shrink-0 transition-all duration-200 select-none ${
-                          isSelected
-                            ? 'font-black text-xs px-3.5 py-1 rounded-full shadow-md shadow-black/30 scale-105'
-                            : 'font-bold text-xs px-2 py-1 tracking-wide drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]'
-                        }`}
-                        style={{
-                          color: isSelected ? '#000000' : '#ffffff',
-                          backgroundColor: isSelected ? '#ffffff' : 'transparent',
-                        }}
-                      >
-                        {modeOpt}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-
-              <div className="flex flex-col items-center justify-center w-full relative px-4">
-                {/* Timer display above shutter button when recording or clips exist */}
-                {(isRecording || hasRecordedClips) && (
-                  <div className="mb-2 flex items-center justify-center">
-                    <span className="text-[12px] font-extrabold tracking-widest text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)] bg-black/45 backdrop-blur-md px-3 py-0.5 rounded-full border border-white/15">
-                      {formatElapsed(recordedSeconds)}
-                    </span>
-                  </div>
-                )}
-
-                <div className="relative flex items-center justify-center w-full max-w-md h-[92px] select-none">
-
-                  {/* CENTER FIXED SHUTTER RING ANCHOR */}
-                  <div
-                    onMouseDown={handleRecordPressStart}
-                    onMouseUp={handleRecordPressEnd}
-                    onMouseLeave={handleRecordPressLeave}
-                    onTouchStart={handleRecordPressStart}
-                    onTouchEnd={handleRecordPressEnd}
-                    className="absolute left-1/2 -translate-x-1/2 z-20 w-[78px] h-[78px] sm:w-[84px] sm:h-[84px] rounded-full flex items-center justify-center pointer-events-auto active:scale-95 transition-all"
-                    style={{
-                      border: '4px solid #ffffff',
-                      boxShadow: '0 0 0 1px rgba(0,0,0,0.3), 0 4px 20px rgba(0,0,0,0.8)',
-                    }}
-                  >
-                    {/* SVG Red Circular Progress Arc (when recording or clips exist) */}
-                    {(isRecording || hasRecordedClips) && (
-                      <svg className="absolute inset-0 w-full h-full -rotate-90 pointer-events-none" viewBox="0 0 100 100">
-                        <circle cx="50" cy="50" r="44" fill="none" stroke="rgba(255, 255, 255, 0.3)" strokeWidth="5" />
-                        {progressPercent > 0 && (
-                          <circle
-                            cx="50"
-                            cy="50"
-                            r="44"
-                            fill="none"
-                            stroke="#FE2C55"
-                            strokeWidth="5.5"
-                            strokeDasharray={strokeDasharray}
-                            strokeDashoffset={strokeDashoffset}
-                            strokeLinecap="round"
-                            className="transition-all duration-100 ease-linear"
-                          />
-                        )}
-                      </svg>
-                    )}
-                  </div>
-
-                  {/* HORIZONTAL SWIPEABLE LENS CAROUSEL */}
-                  <div
-                    ref={effectsScrollRef}
-                    onScroll={handleEffectsScroll}
-                    className="w-full flex items-center gap-5 overflow-x-auto no-scrollbar snap-x snap-mandatory px-[calc(50%-33px)] py-2 z-10 pointer-events-auto"
-                  >
-                    {cameraEffectsList.map((effect) => {
-                      const isActive = activeFaceEffect === effect.id;
-                      const isNormal = effect.id === null;
-
+            return (
+              <>
+                {/* Duration & Mode Selector Bar */}
+                {!hasRecordedClips && !isRecording && (
+                  <div className="flex items-center justify-center gap-3.5 mb-3 select-none px-4 overflow-x-auto no-scrollbar w-full max-w-md">
+                    {cameraDurationModes.map((modeOpt) => {
+                      const isSelected =
+                        (modeOpt === selectedDuration && captureMode === 'camera') ||
+                        (modeOpt === 'PHOTO' && captureMode === 'photo') ||
+                        (modeOpt === 'TEXT' && captureMode === 'text');
                       return (
                         <button
-                          key={effect.id || 'normal'}
-                          data-effect-id={effect.id || 'normal'}
+                          key={modeOpt}
                           type="button"
-                          onClick={(e) => {
-                            setActiveFaceEffect(effect.id);
-                            if (effect.id === null) setFaceEffectCanvasEl(null);
-                            e.currentTarget.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+                          onClick={() => {
+                            if (modeOpt === 'PHOTO') {
+                              setCaptureMode('photo');
+                            } else if (modeOpt === 'TEXT') {
+                              setCaptureMode('text');
+                              setStageStack((prev) => [...prev, 'text-overlay']);
+                            } else {
+                              setCaptureMode('camera');
+                              setSelectedDuration(modeOpt);
+                            }
                           }}
-                          onMouseDown={isNormal ? handleRecordPressStart : undefined}
-                          onMouseUp={isNormal ? handleRecordPressEnd : undefined}
-                          onMouseLeave={isNormal ? handleRecordPressLeave : undefined}
-                          onTouchStart={isNormal ? handleRecordPressStart : undefined}
-                          onTouchEnd={isNormal ? handleRecordPressEnd : undefined}
-                          className={`shrink-0 snap-center transition-all duration-200 flex flex-col items-center justify-center select-none active:scale-95 ${
-                            isActive
-                              ? 'w-[66px] h-[66px] sm:w-[72px] sm:h-[72px] scale-105 opacity-100'
-                              : 'w-[50px] h-[50px] sm:w-[54px] sm:h-[54px] opacity-60 hover:opacity-90'
+                          className={`shrink-0 transition-all duration-200 select-none ${
+                            isSelected
+                              ? 'font-black text-xs px-3.5 py-1 rounded-full shadow-md shadow-black/30 scale-105'
+                              : 'font-bold text-xs px-2 py-1 tracking-wide drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]'
                           }`}
+                          style={{
+                            color: isSelected ? '#000000' : '#ffffff',
+                            backgroundColor: isSelected ? '#ffffff' : 'transparent',
+                          }}
                         >
-                          {isNormal ? (
-                            /* Normal Red Shutter Inner Circle */
-                            <div className="w-full h-full rounded-full bg-[#fe2c55] shadow-lg flex items-center justify-center transition-all duration-200">
-                              {isRecording && <span className="w-3 h-3 rounded-[2px] bg-white animate-pulse" />}
-                            </div>
-                          ) : (
-                            /* Effect Bubble Circle with AI Generated Image Preview */
-                            <div
-                              className={`w-full h-full rounded-full bg-[#2c2c2e] border flex items-center justify-center text-2xl transition-all shadow-md overflow-hidden ${
-                                isActive
-                                  ? 'border-white bg-amber-400/30 ring-2 ring-amber-300/80 shadow-amber-500/30'
-                                  : 'border-white/20 hover:border-white/40'
-                              }`}
-                            >
-                              {effect.image ? (
-                                <img
-                                  src={effect.image}
-                                  alt={effect.label}
-                                  className="w-full h-full object-cover rounded-full transition-transform duration-200"
-                                />
-                              ) : (
-                                <span>{effect.icon}</span>
-                              )}
-                            </div>
-                          )}
+                          {modeOpt}
                         </button>
                       );
                     })}
                   </div>
+                )}
 
-                  {/* RIGHT ACTION BUTTONS: Backspace Tag `✕` & Red Checkmark `✓` */}
-                  {hasRecordedClips && (
-                    <div className="absolute right-3 flex items-center gap-2.5 z-30 pointer-events-auto">
-                      {!isRecording && (
-                        <button
-                          type="button"
-                          onClick={() => setActiveSheet('discard-last-clip')}
-                          className="active:scale-90 transition-transform flex items-center justify-center drop-shadow-md"
-                          title="Discard last clip"
-                        >
-                          <svg width="36" height="30" viewBox="0 0 24 24" className="drop-shadow-md">
-                            <path d="M21 4H9c-.6 0-1.2.3-1.6.8L1 12l6.4 7.2c.4.5 1 .8 1.6.8h12c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2z" fill="white" />
-                            <path d="M15 9.5l-5 5M10 9.5l5 5" stroke="black" strokeWidth="2.4" strokeLinecap="round" />
-                          </svg>
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        onClick={handleConfirmClip}
-                        className="w-9 h-9 rounded-full bg-[#fe2c55] flex items-center justify-center text-white active:scale-90 transition-transform shadow-[0_4px_14px_rgba(254,44,85,0.6)]"
-                        title="Confirm clips"
-                      >
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3.6" strokeLinecap="round" strokeLinejoin="round">
-                          <polyline points="20 6 9 17 4 12" />
-                        </svg>
-                      </button>
+                <div className="flex flex-col items-center justify-center w-full relative px-4">
+                  {/* Timer display above shutter button when recording or clips exist */}
+                  {(isRecording || hasRecordedClips) && (
+                    <div className="mb-2 flex items-center justify-center">
+                      <span className="text-[12px] font-extrabold tracking-widest text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)] bg-black/45 backdrop-blur-md px-3 py-0.5 rounded-full border border-white/15">
+                        {formatElapsed(recordedSeconds)}
+                      </span>
                     </div>
                   )}
+
+                  <div className="relative flex items-center justify-center w-full max-w-md h-[92px] select-none">
+
+                    {/* CENTER FIXED SHUTTER RING ANCHOR */}
+                    <div
+                      onMouseDown={handleRecordPressStart}
+                      onMouseUp={handleRecordPressEnd}
+                      onMouseLeave={handleRecordPressLeave}
+                      onTouchStart={handleRecordPressStart}
+                      onTouchEnd={handleRecordPressEnd}
+                      className="absolute left-1/2 -translate-x-1/2 z-20 w-[78px] h-[78px] sm:w-[84px] sm:h-[84px] rounded-full flex items-center justify-center pointer-events-auto active:scale-95 transition-all"
+                      style={{
+                        border: '4px solid #ffffff',
+                        boxShadow: '0 0 0 1px rgba(0,0,0,0.3), 0 4px 20px rgba(0,0,0,0.8)',
+                      }}
+                    >
+                      {/* SVG Red Circular Progress Arc */}
+                      {(isRecording || hasRecordedClips) && (
+                        <svg className="absolute inset-0 w-full h-full -rotate-90 pointer-events-none" viewBox="0 0 100 100">
+                          <circle cx="50" cy="50" r="44" fill="none" stroke="rgba(255, 255, 255, 0.3)" strokeWidth="5" />
+                          {progressPercent > 0 && (
+                            <circle
+                              cx="50"
+                              cy="50"
+                              r="44"
+                              fill="none"
+                              stroke="#FE2C55"
+                              strokeWidth="5.5"
+                              strokeDasharray={strokeDasharray}
+                              strokeDashoffset={strokeDashoffset}
+                              strokeLinecap="round"
+                              className="transition-all duration-100 ease-linear"
+                            />
+                          )}
+                        </svg>
+                      )}
+
+                      {/* Inner Shutter Action Circle */}
+                      {isRecording ? (
+                        <div className="w-8 h-8 rounded-md bg-[#fe2c55] shadow-lg flex items-center justify-center transition-all duration-200">
+                          <span className="w-3 h-3 rounded-[2px] bg-white animate-pulse" />
+                        </div>
+                      ) : activeFaceEffect === null ? (
+                        <div className="w-full h-full rounded-full bg-[#fe2c55] shadow-lg flex items-center justify-center transition-all duration-200" />
+                      ) : (
+                        <div className="w-full h-full rounded-full bg-transparent transition-all duration-200" />
+                      )}
+                    </div>
+
+                    {/* HORIZONTAL SWIPEABLE LENS CAROUSEL */}
+                    <div
+                      ref={effectsScrollRef}
+                      onScroll={handleEffectsScroll}
+                      className="w-full flex items-center gap-5 overflow-x-auto no-scrollbar snap-x snap-mandatory px-[calc(50%-33px)] py-2 z-10 pointer-events-auto"
+                    >
+                      {cameraEffectsList.map((effect) => {
+                        const isActive = activeFaceEffect === effect.id;
+                        const isNormal = effect.id === null;
+
+                        return (
+                          <button
+                            key={effect.id || 'normal'}
+                            data-effect-id={effect.id || 'normal'}
+                            type="button"
+                            onClick={(e) => {
+                              setActiveFaceEffect(effect.id);
+                              if (effect.id === null) setFaceEffectCanvasEl(null);
+                              e.currentTarget.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+                            }}
+                            onMouseDown={isNormal ? handleRecordPressStart : undefined}
+                            onMouseUp={isNormal ? handleRecordPressEnd : undefined}
+                            onMouseLeave={isNormal ? handleRecordPressLeave : undefined}
+                            onTouchStart={isNormal ? handleRecordPressStart : undefined}
+                            onTouchEnd={isNormal ? handleRecordPressEnd : undefined}
+                            className={`shrink-0 snap-center transition-all duration-200 flex flex-col items-center justify-center select-none active:scale-95 ${
+                              isActive
+                                ? 'w-[66px] h-[66px] sm:w-[72px] sm:h-[72px] scale-105 opacity-100'
+                                : 'w-[50px] h-[50px] sm:w-[54px] sm:h-[54px] opacity-85 hover:opacity-100'
+                            }`}
+                          >
+                            {isNormal ? (
+                              <div className="w-full h-full rounded-full bg-[#fe2c55] shadow-lg flex items-center justify-center transition-all duration-200">
+                                {isRecording && <span className="w-3 h-3 rounded-[2px] bg-white animate-pulse" />}
+                              </div>
+                            ) : (
+                              <div
+                                className={`w-full h-full rounded-full bg-[#2c2c2e] border flex items-center justify-center text-2xl transition-all shadow-md overflow-hidden ${
+                                  isActive
+                                    ? 'border-white bg-amber-400/30 ring-2 ring-amber-300/80 shadow-amber-500/30'
+                                    : 'border-white/20 hover:border-white/40'
+                                }`}
+                              >
+                                {effect.image ? (
+                                  <img
+                                    src={effect.image}
+                                    alt={effect.label}
+                                    className="w-full h-full object-cover rounded-full transition-transform duration-200 contrast-[1.02]"
+                                  />
+                                ) : (
+                                  <span>{effect.icon}</span>
+                                )}
+                              </div>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {/* RIGHT ACTION BUTTONS */}
+                    {hasRecordedClips && (
+                      <div className="absolute right-3 flex items-center gap-2.5 z-30 pointer-events-auto">
+                        {!isRecording && (
+                          <button
+                            type="button"
+                            onClick={() => setActiveSheet('discard-last-clip')}
+                            className="active:scale-90 transition-transform flex items-center justify-center drop-shadow-md"
+                            title="Discard last clip"
+                          >
+                            <svg width="36" height="30" viewBox="0 0 24 24" className="drop-shadow-md">
+                              <path d="M21 4H9c-.6 0-1.2.3-1.6.8L1 12l6.4 7.2c.4.5 1 .8 1.6.8h12c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2z" fill="white" />
+                              <path d="M15 9.5l-5 5M10 9.5l5 5" stroke="black" strokeWidth="2.4" strokeLinecap="round" />
+                            </svg>
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={handleConfirmClip}
+                          className="w-9 h-9 rounded-full bg-[#fe2c55] flex items-center justify-center text-white active:scale-90 transition-transform shadow-[0_4px_14px_rgba(254,44,85,0.6)]"
+                          title="Confirm clips"
+                        >
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3.6" strokeLinecap="round" strokeLinejoin="round">
+                            <polyline points="20 6 9 17 4 12" />
+                          </svg>
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
-            </>
-          );
-        })()}
-      </div>
+              </>
+            );
+          })()}
+        </div>
+      )}
     </div>
   );
 
@@ -4548,15 +4768,37 @@ const CreatePage = () => {
             />
           </div>
 
-          {/* Progress Bar */}
-          <div className="absolute top-0 inset-x-0 z-30 h-1.5 bg-black/20 px-1 py-1">
-            <div className="h-full bg-white/30 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-[#fe2c55] transition-all duration-75 ease-linear"
-                style={{ width: `${progressPercent}%` }}
-              />
+          {/* FRONT CAMERA SOFT WHITE RING FLASH GLOW OVERLAY */}
+          {flashMode === 'on' && (
+            <div
+              className="absolute inset-0 pointer-events-none z-20 transition-opacity duration-300 rounded-2xl"
+              style={{
+                background: 'radial-gradient(circle at center, transparent 40%, rgba(255, 255, 255, 0.55) 85%, rgba(255, 255, 255, 0.8) 100%)',
+                backdropFilter: 'brightness(1.12) contrast(1.03)',
+              }}
+            />
+          )}
+
+          {/* Progress Bar (Visible when recording or recorded clips exist) */}
+          {(recordStatus === 'recording' || recordedSeconds > 0) && (
+            <div className="absolute top-0 inset-x-0 z-30 h-1.5 bg-black/20 px-1 py-1">
+              <div className="h-full bg-white/30 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-[#fe2c55] transition-all duration-75 ease-linear"
+                  style={{ width: `${progressPercent}%` }}
+                />
+              </div>
             </div>
-          </div>
+          )}
+
+          {/* Touch Backdrop Dismiss Overlay when camera tools (e.g. filters) are open */}
+          {activeCameraTool !== null && (
+            <div
+              onClick={() => setActiveCameraTool(null)}
+              className="absolute inset-0 z-20 cursor-pointer pointer-events-auto"
+              aria-label="Close tool"
+            />
+          )}
 
           {renderCameraHeader()}
           {renderCameraSideTools()}
@@ -4564,7 +4806,7 @@ const CreatePage = () => {
         </div>
 
         {/* Bottom Black Navigation Footer Bar (Outside Camera Card) */}
-        {recordStatus !== 'recorded' && (
+        {recordStatus !== 'recorded' && activeCameraTool !== 'filters' && (
           <div className="bg-black text-white h-20 pt-2 pb-4 w-full flex items-center justify-between px-6 z-40 shrink-0 border-t border-white/10 select-none">
             {/* Left: Gallery Thumbnail Stack Button */}
             <div className="w-12 flex items-center justify-start">

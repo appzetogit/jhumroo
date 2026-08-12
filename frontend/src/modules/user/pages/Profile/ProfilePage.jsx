@@ -709,7 +709,7 @@ const ProfilePage = () => {
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 shrink-0 sticky top-0 z-[60] bg-[color:var(--theme-page-bg)]/90 backdrop-blur-md">
         {isOwnProfile ? (
-          <button onClick={() => navigate('/user/requests')} className="text-black active:opacity-60 relative">
+          <button onClick={() => navigate('/user/requests')} className="theme-text-primary active:opacity-60 relative">
             <svg 
               xmlns="http://www.w3.org/2000/svg" 
               width="26" height="26" 
@@ -741,7 +741,7 @@ const ProfilePage = () => {
                 navigate(-1);
               }
             }} 
-            className="text-black active:opacity-60"
+            className="theme-text-primary active:opacity-60"
           >
             <BiArrowBack size={26} />
           </button>
@@ -750,7 +750,7 @@ const ProfilePage = () => {
         <div className="flex items-center gap-3">
           <button 
             onClick={handleShareProfile}
-            className="text-black active:opacity-60 transition-opacity"
+            className="theme-text-primary active:opacity-60 transition-opacity"
             title="Share Profile"
           >
             <svg 
@@ -768,7 +768,7 @@ const ProfilePage = () => {
           {!isOwnProfile && isBlockedByThem ? null : (
             <button 
               onClick={() => isOwnProfile ? navigate('/settings') : setShowOptions(true)}
-              className="text-black active:opacity-60 transition-opacity"
+              className="theme-text-primary active:opacity-60 transition-opacity"
             >
               {isOwnProfile ? <BiMenu size={28} /> : <BiDotsVerticalRounded size={28} />}
             </button>
