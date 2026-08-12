@@ -28,7 +28,123 @@ const showOverlayToast = (message) => {
   setTimeout(() => { el.style.opacity = '0'; setTimeout(() => el.remove(), 300); }, 2500);
 };
 
-const VideoOverlay = ({ reelId, username, caption, musicName, isLiked, likes, comments, shares, isSaved, onSaveClick, onLikeClick, videoData, onUpdate, isMuted, onMuteToggle, isPlaying, compactBottom = false }) => {
+// Helper to format numbers like TikTok (e.g. 5M, 48K, 0, 1)
+const formatTikTokCount = (num) => {
+  if (num === undefined || num === null || num === '') return '0';
+  if (typeof num === 'string') return num;
+  if (num >= 1000000) return (num / 1000000).toFixed(1).replace(/\.0$/, '') + 'M';
+  if (num >= 1000) return (num / 1000).toFixed(1).replace(/\.0$/, '') + 'K';
+  return num.toString();
+};
+
+// Helper to format seconds into mm:ss (e.g. 00:08, 00:38)
+const formatTime = (seconds) => {
+  if (!seconds || isNaN(seconds) || seconds < 0) return '00:00';
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+};
+
+const VideoSeekBar = ({ currentTime = 0, duration = 0, onSeek, onScrubStateChange }) => {
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragTime, setDragTime] = useState(0);
+  const progressBarRef = React.useRef(null);
+
+  const calculateTimeFromEvent = (e) => {
+    if (!progressBarRef.current || !duration) return 0;
+    const rect = progressBarRef.current.getBoundingClientRect();
+    const clientX = e.touches && e.touches[0] ? e.touches[0].clientX : e.clientX;
+    const offsetX = Math.max(0, Math.min(clientX - rect.left, rect.width));
+    const percentage = offsetX / rect.width;
+    return percentage * duration;
+  };
+
+  const handleStart = (e) => {
+    e.stopPropagation();
+    setIsDragging(true);
+    if (typeof onScrubStateChange === 'function') onScrubStateChange(true);
+    const newTime = calculateTimeFromEvent(e);
+    setDragTime(newTime);
+    if (typeof onSeek === 'function') onSeek(newTime);
+  };
+
+  useEffect(() => {
+    if (!isDragging) return;
+
+    const handleMove = (e) => {
+      e.stopPropagation();
+      const newTime = calculateTimeFromEvent(e);
+      setDragTime(newTime);
+      if (typeof onSeek === 'function') onSeek(newTime);
+    };
+
+    const handleEnd = (e) => {
+      e.stopPropagation();
+      setIsDragging(false);
+      if (typeof onScrubStateChange === 'function') onScrubStateChange(false);
+    };
+
+    window.addEventListener('mousemove', handleMove);
+    window.addEventListener('mouseup', handleEnd);
+    window.addEventListener('touchmove', handleMove);
+    window.addEventListener('touchend', handleEnd);
+
+    return () => {
+      window.removeEventListener('mousemove', handleMove);
+      window.removeEventListener('mouseup', handleEnd);
+      window.removeEventListener('touchmove', handleMove);
+      window.removeEventListener('touchend', handleEnd);
+    };
+  }, [isDragging, duration, onSeek, onScrubStateChange]);
+
+  const displayTime = isDragging ? dragTime : currentTime;
+  const effectiveDuration = duration > 0 ? duration : 1;
+  const progressPercent = Math.min(100, Math.max(0, (displayTime / effectiveDuration) * 100));
+
+  return (
+    <div className="absolute bottom-[calc(var(--bottom-nav-height,50px)-5px+env(safe-area-inset-bottom,0px))] left-0 w-full z-[100]">
+      {/* Big Scrub Time Overlay (Matching Image 2: Floating text in clean empty space, no box!) */}
+      {isDragging && (
+        <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-[110] flex items-center justify-center pointer-events-none select-none drop-shadow-[0_4px_16px_rgba(0,0,0,0.95)]">
+          <span className="text-4xl sm:text-5xl font-extrabold text-white tracking-wider">
+            {formatTime(displayTime)}
+          </span>
+          <span className="text-3xl sm:text-4xl font-light text-white/40 tracking-wider mx-3">
+            /
+          </span>
+          <span className="text-4xl sm:text-5xl font-extrabold text-white/40 tracking-wider">
+            {formatTime(effectiveDuration)}
+          </span>
+        </div>
+      )}
+
+      {/* Bottom Seek Bar (Matching Image 1 & Image 2) */}
+      <div 
+        ref={progressBarRef}
+        className="w-full relative h-4 flex items-center cursor-pointer group pointer-events-auto touch-none select-none px-0"
+        onMouseDown={handleStart}
+        onTouchStart={handleStart}
+      >
+        {/* Track Line */}
+        <div className={`w-full relative transition-all duration-150 bg-white/20 rounded-full overflow-hidden ${isDragging ? 'h-[5px]' : 'h-[1.5px] group-hover:h-[4px]'}`}>
+          {/* Progress Fill */}
+          <div 
+            className="h-full bg-white rounded-full transition-all duration-75"
+            style={{ width: `${progressPercent}%` }}
+          />
+        </div>
+
+        {/* Thumb Handle (Matching Image 1 & Image 2) */}
+        <div 
+          className={`absolute top-1/2 -translate-y-1/2 w-3.5 h-2 bg-white rounded-full shadow-[0_0_6px_rgba(0,0,0,0.8)] transition-all duration-100 -ml-1.75 ${isDragging ? 'scale-125 opacity-100' : 'opacity-0 group-hover:opacity-100 group-hover:scale-110'}`}
+          style={{ left: `${progressPercent}%` }}
+        />
+      </div>
+    </div>
+  );
+};
+
+const VideoOverlay = ({ reelId, username, caption, musicName, isLiked, likes, comments, shares, saves, isSaved, onSaveClick, onLikeClick, videoData, onUpdate, isMuted, onMuteToggle, isPlaying, compactBottom = false, currentTime = 0, duration = 0, onSeek, onScrubStateChange }) => {
   const isAd = videoData.isAd;
   const isAdminAd = isAd && videoData.onModel === 'Admin';
 
@@ -241,12 +357,34 @@ const VideoOverlay = ({ reelId, username, caption, musicName, isLiked, likes, co
     }
   };
 
+  const [animateLike, setAnimateLike] = useState(false);
+  const [animateSave, setAnimateSave] = useState(false);
+
+  const handleLikeAnimate = (e) => {
+    setAnimateLike(true);
+    setTimeout(() => setAnimateLike(false), 500);
+    if (typeof onLikeClick === 'function') onLikeClick(e);
+  };
+
+  const handleSaveAnimate = (e) => {
+    setAnimateSave(true);
+    setTimeout(() => setAnimateSave(false), 500);
+    if (typeof onSaveClick === 'function') onSaveClick(e);
+  };
+
+  const [isScrubbingInternal, setIsScrubbingInternal] = useState(false);
+
+  const handleScrubStateChangeInternal = (scrubbing) => {
+    setIsScrubbingInternal(scrubbing);
+    if (typeof onScrubStateChange === 'function') onScrubStateChange(scrubbing);
+  };
+
   return (
     <>
       <div className="absolute inset-0 pointer-events-none flex flex-col justify-end bg-gradient-to-t from-black/80 via-black/20 to-transparent z-[30]">
-        <div className={`flex justify-between items-end p-4 ${compactBottom ? 'pb-4' : 'pb-[calc(var(--bottom-nav-height)+32px)]'}`}>
+        <div className={`flex justify-between items-end p-4 transition-opacity duration-200 ${isScrubbingInternal ? 'opacity-0 pointer-events-none' : 'opacity-100'} ${compactBottom ? 'pb-4' : 'pb-[calc(var(--bottom-nav-height)+10px)]'}`}>
           {/* Left: User info */}
-          <div className="flex-1 pr-12 text-left text-white pointer-events-none flex flex-col items-start">
+          <div className="flex-1 pr-10 text-left text-white pointer-events-none flex flex-col items-start select-none">
             {/* Ad Action Button - Moved above name */}
             {isAd && (videoData.adType === 'chat' || videoData.link) && (
               <button 
@@ -270,38 +408,14 @@ const VideoOverlay = ({ reelId, username, caption, musicName, isLiked, likes, co
             )}
 
             {/* Username — clickable → user profile */}
-            <div className="flex items-center gap-2 mb-2">
+            <div className="flex items-center gap-2 mb-1">
               {(!isAd || (isAd && videoData.onModel === 'User')) && (
                 <h3
-                  className="text-lg font-bold cursor-pointer active:opacity-70 pointer-events-auto"
+                  className="text-[17px] font-bold cursor-pointer active:opacity-70 pointer-events-auto text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.8)] tracking-wide"
                   onClick={() => navigate(`/user/${username}`)}
                 >
                   @{username}
                 </h3>
-              )}
-              {followingState === 'not_following' && (
-                <button
-                  onClick={handleFollowToggle}
-                  className="px-2.5 py-0.5 rounded bg-[#FE2C55] hover:bg-[#FE2C55]/90 text-white text-[12px] font-bold transition-all cursor-pointer pointer-events-auto active:scale-95 ml-2 shrink-0 flex items-center justify-center h-[22px] border border-transparent"
-                >
-                  Follow
-                </button>
-              )}
-              {followingState === 'following' && (
-                <button
-                  onClick={handleFollowToggle}
-                  className="px-2.5 py-0.5 rounded bg-white/10 hover:bg-white/20 text-white/90 text-[12px] font-semibold transition-all cursor-pointer pointer-events-auto active:scale-95 ml-2 shrink-0 flex items-center justify-center h-[22px] border border-white/10"
-                >
-                  Following
-                </button>
-              )}
-              {followingState === 'pending' && (
-                <button
-                  onClick={handleFollowToggle}
-                  className="px-2.5 py-0.5 rounded bg-white/10 text-white/50 text-[12px] font-semibold transition-all cursor-pointer pointer-events-auto active:scale-95 ml-2 shrink-0 flex items-center justify-center h-[22px] border border-white/5"
-                >
-                  Requested
-                </button>
               )}
               {isAd && (
                 <span className="bg-white/20 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider backdrop-blur-sm">
@@ -315,32 +429,22 @@ const VideoOverlay = ({ reelId, username, caption, musicName, isLiked, likes, co
               )}
             </div>
 
-            {/* Location tag if exists */}
-            {videoData.location?.name && (
-              <div className="flex items-center gap-1.5 text-[11px] font-bold text-white/95 bg-black/35 backdrop-blur-md px-2.5 py-1 rounded-full mb-2 pointer-events-auto w-fit border border-white/5 shadow-sm">
-                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fe2c55" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="animate-bounce">
-                  <path d="M12 2a8 8 0 0 0-8 8c0 5.25 8 12 8 12s8-6.75 8-12a8 8 0 0 0-8-8z"></path>
-                  <circle cx="12" cy="10" r="3" fill="#fe2c55"></circle>
-                </svg>
-                <span>{videoData.location.name}</span>
-              </div>
-            )}
-
-            <div className="text-base mb-2 leading-tight">
+            {/* Caption */}
+            <div className="text-[14px] leading-snug text-white font-normal drop-shadow-[0_1px_3px_rgba(0,0,0,0.8)]">
               {isExpanded ? (
                 <CaptionRenderer text={caption} className="pointer-events-auto" />
               ) : (
                 <>
                   <CaptionRenderer
-                    text={caption.length > 90 ? caption.slice(0, 90) : caption}
+                    text={caption.length > 85 ? caption.slice(0, 85) : caption}
                   />
-                  {caption.length > 90 && (
+                  {caption.length > 85 && (
                     <span 
                       onClick={(e) => {
                         e.stopPropagation();
                         setIsExpanded(true);
                       }}
-                      className="font-bold ml-1 cursor-pointer opacity-80 hover:opacity-100 pointer-events-auto"
+                      className="font-bold text-white/90 cursor-pointer ml-1 pointer-events-auto hover:underline"
                     >
                       ...more
                     </span>
@@ -348,30 +452,15 @@ const VideoOverlay = ({ reelId, username, caption, musicName, isLiked, likes, co
                 </>
               )}
             </div>
-            {/* Music — clickable → sound page */}
-            {(!isAd || (isAd && videoData.onModel === 'User')) && (
-              <div
-                className="flex items-center cursor-pointer active:opacity-70 pointer-events-auto"
-                onClick={() => navigate(`/sound/${encodeURIComponent(musicName?.name || musicName)}`)}
-                style={{ pointerEvents: 'auto' }}
-              >
-                 <IoIosMusicalNote size={14} className="mr-2" />
-                 <div className="w-[180px] overflow-hidden whitespace-nowrap relative">
-                   <span className="inline-block select-none animate-marquee pl-4">
-                     {musicName?.name || musicName} - Original Audio
-                   </span>
-                 </div>
-              </div>
-            )}
           </div>
 
-          {/* Right: Action buttons */}
-          <div className="flex flex-col items-center gap-4 pointer-events-auto">
-             {/* Avatar + Follow button */}
+          {/* Right: Floating TikTok Action Sidebar */}
+          <div className="flex flex-col items-center gap-4.5 pointer-events-auto select-none">
+             {/* Avatar + Follow Badge Button */}
              {(!isAd || (isAd && videoData.onModel === 'User')) && (
-               <div className="relative mb-2 tap-effect">
+               <div className="relative mb-2">
                   <div
-                    className="w-12 h-12 rounded-full border-2 border-white bg-surface overflow-hidden cursor-pointer shadow-lg"
+                    className="w-12 h-12 rounded-full border-2 border-white bg-surface overflow-hidden cursor-pointer shadow-lg active:scale-95 transition-transform"
                     onClick={(e) => {
                       e.stopPropagation();
                       const currentPath = window.location.pathname.toLowerCase();
@@ -395,123 +484,149 @@ const VideoOverlay = ({ reelId, username, caption, musicName, isLiked, likes, co
                   </div>
                   {followingState === 'not_following' && (
                     <div 
-                      className="absolute -bottom-2 left-[14px] w-5 h-5 bg-tiktok-red rounded-full border-2 border-tiktok-black flex items-center justify-center cursor-pointer active:scale-90"
+                      className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-5 h-5 bg-[#FE2C55] rounded-full border-2 border-black flex items-center justify-center cursor-pointer active:scale-90 transition-transform shadow-md"
                       onClick={handleFollowToggle}
+                      title="Follow"
                     >
-                      <BiPlus size={14} color="white" />
+                      <BiPlus size={14} color="white" strokeWidth={1} />
                     </div>
                   )}
                </div>
              )}
 
-             {/* Like */}
+             {/* 1. Like Heart Icon */}
              <div 
-               className="flex flex-col items-center text-white tap-effect" 
+               className="flex flex-col items-center text-white cursor-pointer group" 
+               onClick={(e) => {
+                 e.stopPropagation();
+                 handleLikeAnimate(e);
+               }}
                style={{ pointerEvents: 'auto' }}
              >
-                  <div
-                    className="cursor-pointer"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onLikeClick(e);
-                    }}
+                <div className="active:scale-75 transition-transform duration-150">
+                  <svg 
+                    width="37" height="37" viewBox="0 0 48 48" 
+                    fill={isLiked ? "#FE2C55" : "rgba(255,255,255,0.95)"} 
+                    stroke={isLiked ? "#FE2C55" : "rgba(255,255,255,0.95)"}
+                    strokeWidth="1.2"
+                    strokeLinejoin="round"
+                    className={`transition-all duration-300 ${animateLike ? 'animate-icon-pop' : ''} ${isLiked ? 'scale-110 drop-shadow-[0_0_10px_rgba(254,44,85,0.7)]' : 'drop-shadow-[0_2px_4px_rgba(0,0,0,0.6)] group-hover:scale-105'}`}
                   >
-                    <svg 
-                       xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" 
-                       fill={isLiked ? "var(--color-accent-red, #FE2C55)" : "transparent"} 
-                       stroke={isLiked ? "var(--color-accent-red, #FE2C55)" : "white"} 
-                       strokeWidth={isLiked ? "0" : "1.5"} 
-                       strokeLinecap="round" strokeLinejoin="round"
-                       className={`transition-all duration-300 ease-spring ${isLiked ? 'scale-[1.15] drop-shadow-[0_0_8px_rgba(254,44,85,0.6)]' : 'scale-100 hover:scale-[1.05]'}`}
-                    >
-                     <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
-                    </svg>
-                  </div>
-                  <span 
-                    className="text-sm font-semibold mt-0.5 cursor-pointer hover:text-gray-300"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setIsLikesOpen(true);
-                    }}
-                  >
-                    {likes}
-                  </span>
+                    <path d="M34 9c-4.2 0-7.9 2.1-10 5.4C21.9 11.1 18.2 9 14 9 7.4 9 2 14.4 2 21c0 11.9 14.8 21.2 21.3 25.1.4.2.9.2 1.3 0C31.2 42.2 46 32.9 46 21c0-6.6-5.4-12-12-12z" />
+                  </svg>
+                </div>
+                <span 
+                  className="text-[12px] font-bold mt-1 text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.8)] cursor-pointer hover:text-gray-200"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setIsLikesOpen(true);
+                  }}
+                >
+                  {formatTikTokCount(likes)}
+                </span>
              </div>
 
-             {/* Comment */}
+             {/* 2. Comment Speech Bubble Icon (with 3 dots) */}
              {videoData.allowComments !== false && (
                <div
-                 className="flex flex-col items-center text-white tap-effect"
+                 className="flex flex-col items-center text-white cursor-pointer group"
                  onClick={(e) => {
                    e.stopPropagation();
                    setIsCommentsOpen(true);
                  }}
                  style={{ pointerEvents: 'auto' }}
                >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="white" stroke="white" strokeWidth="0" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path>
-                  </svg>
-                  <span className="text-sm font-semibold mt-0.5">{comments}</span>
+                  <div className="active:scale-75 transition-transform duration-150">
+                    <svg 
+                      width="37" height="37" viewBox="0 0 48 48" 
+                      fill="rgba(255,255,255,0.95)" 
+                      stroke="rgba(255,255,255,0.95)"
+                      strokeWidth="1.2"
+                      strokeLinejoin="round"
+                      className="drop-shadow-[0_2px_4px_rgba(0,0,0,0.6)] group-hover:scale-105"
+                    >
+                      <path d="M24 6C13.5 6 5 13.6 5 23c0 4.3 1.8 8.3 4.8 11.3l-2.4 6.7c-.3.9.6 1.7 1.4 1.3l7.9-3.7c2.3.8 4.7 1.4 7.3 1.4 10.5 0 19-7.6 19-17S34.5 6 24 6zm-10 19c-1.4 0-2.5-1.1-2.5-2.5S12.6 20 14 20s2.5 1.1 2.5 2.5S15.4 25 14 25zm10 0c-1.4 0-2.5-1.1-2.5-2.5S22.6 20 24 20s2.5 1.1 2.5 2.5S25.4 25 24 25zm10 0c-1.4 0-2.5-1.1-2.5-2.5S32.6 20 34 20s2.5 1.1 2.5 2.5S33.4 25 34 25z"/>
+                    </svg>
+                  </div>
+                  <span className="text-[12px] font-bold mt-1 text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.8)]">{formatTikTokCount(comments)}</span>
                </div>
              )}
 
-
-             {/* Direct Real Share Button */}
-             <div className="flex flex-col items-center text-white tap-effect cursor-pointer" onClick={(e) => { e.stopPropagation(); handleShare('general'); }} style={{ pointerEvents: 'auto' }}>
-                <svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="white" stroke="white" strokeWidth="0" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="m22 2-7 20-4-9-9-4Z"></path>
-                    <path d="M22 2 11 13"></path>
-                </svg>
-                <span className="text-sm font-semibold mt-0.5">{shares}</span>
-             </div>
-
-             {/* Mute Toggle */}
-             <div className="flex flex-col items-center text-white tap-effect cursor-pointer" onClick={(e) => { e.stopPropagation(); onMuteToggle(); }} style={{ pointerEvents: 'auto' }}>
-                 {isMuted ? (
-                   <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="white">
-                     <path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/>
-                   </svg>
-                 ) : (
-                   <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="white">
-                     <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
-                   </svg>
-                 )}
-                 <span className="text-sm font-semibold mt-0.5">{isMuted ? 'Unmute' : 'Mute'}</span>
-             </div>
-
-             {/* More Options (3 Dots) */}
-             {!isAd && (
-               <div 
-                 className="flex flex-col items-center text-white tap-effect cursor-pointer py-1" 
-                 style={{ pointerEvents: 'auto' }}
-                 onClick={(e) => { e.stopPropagation(); setIsMoreOpen(true); }}
-               >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="white">
-                     <circle cx="12" cy="5" r="2" />
-                     <circle cx="12" cy="12" r="2" />
-                     <circle cx="12" cy="19" r="2" />
+             {/* 3. Bookmark / Favorite Ribbon Icon */}
+             <div 
+               className="flex flex-col items-center text-white cursor-pointer group" 
+               onClick={(e) => { 
+                 e.stopPropagation(); 
+                 handleSaveAnimate(e);
+               }} 
+               style={{ pointerEvents: 'auto' }}
+             >
+                <div className="active:scale-75 transition-transform duration-150">
+                  <svg 
+                    width="37" height="37" viewBox="0 0 48 48" 
+                    fill={isSaved ? "#FACD00" : "rgba(255,255,255,0.95)"} 
+                    stroke={isSaved ? "#FACD00" : "rgba(255,255,255,0.95)"}
+                    strokeWidth="1.2"
+                    strokeLinejoin="round"
+                    className={`transition-all duration-200 ${animateSave ? 'animate-icon-pop' : ''} ${isSaved ? 'drop-shadow-[0_0_8px_rgba(250,205,0,0.6)] scale-105' : 'drop-shadow-[0_2px_4px_rgba(0,0,0,0.6)] group-hover:scale-105'}`}
+                  >
+                    <path d="M12 7c-1.1 0-2 .9-2 2v32c0 .9.9 1.5 1.7 1.1L24 35l12.3 7.1c.8.4 1.7-.2 1.7-1.1V9c0-1.1-.9-2-2-2H12z"/>
                   </svg>
-               </div>
-             )}
-             
-             {/* Music Disc — clickable → sound page */}
+                </div>
+                <span className="text-[12px] font-bold mt-1 text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.8)]">
+                  {formatTikTokCount(saves !== undefined && saves !== null ? saves : (videoData.stats?.bookmarksCount ?? videoData.bookmarksCount ?? 0))}
+                </span>
+             </div>
+
+             {/* 4. Share Curved Arrow Icon */}
+             <div 
+               className="flex flex-col items-center text-white cursor-pointer group" 
+               onClick={(e) => { e.stopPropagation(); handleShare('general'); }} 
+               style={{ pointerEvents: 'auto' }}
+             >
+                <div className="active:scale-75 transition-transform duration-150">
+                  <svg 
+                    width="37" height="37" viewBox="0 0 48 48" 
+                    fill="rgba(255,255,255,0.95)" 
+                    stroke="rgba(255,255,255,0.95)"
+                    strokeWidth="1.2"
+                    strokeLinejoin="round"
+                    className="drop-shadow-[0_2px_4px_rgba(0,0,0,0.6)] group-hover:scale-105"
+                  >
+                    <path d="M43.2 22.1L27.6 7.3c-1.2-1.1-3.1-.3-3.1 1.4v7.1C13.2 16.7 6 24 6 36.3c0 2.2.3 4.3 1 6.3.3.9 1.5 1.1 2.1.4 4.8-5.8 11.5-8.5 15.4-8.8v6.8c0 1.7 1.9 2.5 3.1 1.4l15.6-14.8c.8-.8.8-2 0-2.7z"/>
+                  </svg>
+                </div>
+                <span className="text-[12px] font-bold mt-1 text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.8)]">{formatTikTokCount(shares)}</span>
+             </div>
+
+             {/* 5. Static Vinyl Disc Sound Icon (Spin & Bounce disabled as requested) */}
              <div
-               className="mt-2 relative tap-effect cursor-pointer"
+               className="mt-2 relative cursor-pointer active:scale-90 transition-transform"
                onClick={() => navigate(`/sound/${encodeURIComponent(musicName?.name || musicName)}`)}
                style={{ pointerEvents: 'auto' }}
              >
-                <div className={`w-11 h-11 rounded-full border-[8px] border-[#2F2F2F] flex justify-center items-center overflow-hidden ${isPlaying ? 'animate-disc-spin' : ''}`}>
+                <div className="w-12 h-12 rounded-full border-[8px] border-[#2F2F2F] bg-[#121212] flex justify-center items-center overflow-hidden shadow-2xl">
                    <img 
                       src={musicName?.thumbnail || musicName?.audioId?.thumbnail || `https://api.dicebear.com/7.x/identicon/svg?seed=${musicName?.name || musicName}`} 
                       alt="music thumbnail" 
                       className="w-5 h-5 rounded-full object-cover" 
                     />
                 </div>
-                <IoIosMusicalNote size={12} className={`absolute -top-1 -right-1 text-white/80 ${isPlaying ? 'animate-bounce-slow' : ''}`} />
+                <IoIosMusicalNote size={13} className="absolute -top-1 -right-1 text-white opacity-85" />
              </div>
 
           </div>
         </div>
+
+        {/* 6. Interactive Video Progress Seek Bar & Drag Overlay */}
+        {!isAd && (
+          <VideoSeekBar
+            currentTime={currentTime}
+            duration={duration}
+            onSeek={onSeek}
+            onScrubStateChange={handleScrubStateChangeInternal}
+          />
+        )}
       </div>
       
       {/* Comments Sheet Modal */}

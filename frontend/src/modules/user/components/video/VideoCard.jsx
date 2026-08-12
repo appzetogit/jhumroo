@@ -60,12 +60,33 @@ const VideoCard = ({ videoData, isActive, preload = 'none', compactBottom = fals
   const [isLiked, setIsLiked] = useState(() => !!localVideoData.isLiked);
   const [likesCount, setLikesCount] = useState(() => Number(localVideoData.stats?.likesCount ?? localVideoData.likes ?? 0));
   const [isSaved, setIsSaved] = useState(() => !!localVideoData.isSaved);
+  const [savesCount, setSavesCount] = useState(() => Number(localVideoData.stats?.bookmarksCount ?? localVideoData.bookmarksCount ?? localVideoData.saves ?? 0));
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(() => Number(localVideoData.video?.duration || 0));
+  const [isScrubbing, setIsScrubbing] = useState(false);
 
   useEffect(() => {
     setIsLiked(!!localVideoData.isLiked);
     setIsSaved(!!localVideoData.isSaved);
     setLikesCount(Number(localVideoData.stats?.likesCount ?? localVideoData.likes ?? 0));
+    setSavesCount(Number(localVideoData.stats?.bookmarksCount ?? localVideoData.bookmarksCount ?? localVideoData.saves ?? 0));
+    if (localVideoData.video?.duration) {
+      setDuration(Number(localVideoData.video.duration));
+    }
   }, [localVideoData]);
+
+  const handleSeek = (newTime) => {
+    setCurrentTime(newTime);
+    if (videoRef.current) {
+      videoRef.current.currentTime = newTime;
+    }
+    if (duetVideoRef.current) {
+      duetVideoRef.current.currentTime = newTime;
+    }
+    if (audioTrackRef.current && localVideoData.music) {
+      audioTrackRef.current.currentTime = (localVideoData.music.startTime || 0) + newTime;
+    }
+  };
 
   const socket = useSocket();
 
@@ -392,30 +413,36 @@ const VideoCard = ({ videoData, isActive, preload = 'none', compactBottom = fals
     }
   };
 
-  const handleSaveClick = async () => {
+  const handleSaveClick = async (e) => {
+    if (e && typeof e.stopPropagation === 'function') e.stopPropagation();
     const wasSaved = isSaved;
-    if (isSaved) {
-      setIsSaved(false);
-      videoData.isSaved = false;
-      localVideoData.isSaved = false;
-      try {
-        await reelService.toggleSave(reelId);
-      } catch {
-        setIsSaved(wasSaved);
-        videoData.isSaved = wasSaved;
-        localVideoData.isSaved = wasSaved;
-      }
-      return;
-    }
-    setIsSaved(true);
-    videoData.isSaved = true;
-    localVideoData.isSaved = true;
+    const nextSaved = !wasSaved;
+    const nextCount = nextSaved ? savesCount + 1 : Math.max(0, savesCount - 1);
+
+    setIsSaved(nextSaved);
+    setSavesCount(nextCount);
+
+    videoData.isSaved = nextSaved;
+    localVideoData.isSaved = nextSaved;
+    if (!videoData.stats) videoData.stats = {};
+    if (!localVideoData.stats) localVideoData.stats = {};
+    videoData.stats.bookmarksCount = nextCount;
+    localVideoData.stats.bookmarksCount = nextCount;
+
     try {
-      await reelService.toggleSave(reelId);
+      const response = await reelService.toggleSave(reelId);
+      if (response?.success && typeof response.bookmarksCount === 'number') {
+        setSavesCount(response.bookmarksCount);
+        videoData.stats.bookmarksCount = response.bookmarksCount;
+        localVideoData.stats.bookmarksCount = response.bookmarksCount;
+      }
     } catch (err) {
       setIsSaved(wasSaved);
+      setSavesCount(savesCount);
       videoData.isSaved = wasSaved;
       localVideoData.isSaved = wasSaved;
+      videoData.stats.bookmarksCount = savesCount;
+      localVideoData.stats.bookmarksCount = savesCount;
     }
   };
 
@@ -520,6 +547,15 @@ const VideoCard = ({ videoData, isActive, preload = 'none', compactBottom = fals
             if (e.detail === 2) handleDoubleClick();
             else handleScreenTap();
           }}
+          onTimeUpdate={(e) => {
+            if (!isScrubbing) setCurrentTime(e.target.currentTime);
+          }}
+          onLoadedMetadata={(e) => {
+            if (e.target.duration && !isNaN(e.target.duration)) setDuration(e.target.duration);
+          }}
+          onDurationChange={(e) => {
+            if (e.target.duration && !isNaN(e.target.duration)) setDuration(e.target.duration);
+          }}
         />
       )}
 
@@ -531,6 +567,7 @@ const VideoCard = ({ videoData, isActive, preload = 'none', compactBottom = fals
         likes={likesCount}
         comments={localVideoData.stats?.commentsCount || localVideoData.comments || 0}
         shares={localVideoData.stats?.sharesCount || localVideoData.shares || 0}
+        saves={savesCount}
         isLiked={isLiked}
         isSaved={isSaved}
         onSaveClick={handleSaveClick}
@@ -542,6 +579,10 @@ const VideoCard = ({ videoData, isActive, preload = 'none', compactBottom = fals
         isPlaying={playing}
         isImageAd={isImageAd}
         compactBottom={compactBottom}
+        currentTime={currentTime}
+        duration={duration}
+        onSeek={handleSeek}
+        onScrubStateChange={setIsScrubbing}
       />
 
       {showMuteOverlay && !isImageAd && (

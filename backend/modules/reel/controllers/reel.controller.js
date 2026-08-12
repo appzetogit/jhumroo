@@ -555,6 +555,8 @@ export const getFeedReels = asyncHandler(async (req, res) => {
       reels.forEach(r => {
         r.isLiked = likedSet.has(r._id.toString());
         r.isSaved = savedSet.has(r._id.toString());
+        if (!r.stats) r.stats = {};
+        r.stats.bookmarksCount = r.stats.bookmarksCount ?? r.stats.savesCount ?? 0;
         if (r.user && r.user._id) {
           r.user.isFollowing = followingSet.has(r.user._id.toString());
         }
@@ -656,6 +658,8 @@ export const getFollowingReels = asyncHandler(async (req, res) => {
   for (const reel of reels) {
     reel.isLiked = likedReelIds.has(reel._id.toString());
     reel.isSaved = savedReelIds.has(reel._id.toString());
+    if (!reel.stats) reel.stats = {};
+    reel.stats.bookmarksCount = reel.stats.bookmarksCount ?? reel.stats.savesCount ?? 0;
     // Every reel here is from a followed user by definition of the query above
     if (reel.user) reel.user.isFollowing = true;
   }
@@ -1272,11 +1276,20 @@ export const toggleSave = asyncHandler(async (req, res) => {
   if (existingSave) {
     // ─── UNSAVE FLOW ───
     await SavedReel.findOneAndDelete({ _id: existingSave._id });
-    
+    const actualSavesCount = await SavedReel.countDocuments(isAd ? { ad: cId } : { reel: cId });
+
+    if (isAd) {
+      await Ad.findByIdAndUpdate(cId, { 'stats.bookmarksCount': actualSavesCount, 'stats.savesCount': actualSavesCount });
+    } else {
+      await Reel.findByIdAndUpdate(cId, { 'stats.bookmarksCount': actualSavesCount, 'stats.savesCount': actualSavesCount });
+    }
+
     return res.status(200).json({
       success: true,
       message: 'Unsaved successfully',
-      isSaved: false
+      isSaved: false,
+      bookmarksCount: actualSavesCount,
+      savesCount: actualSavesCount
     });
   } else {
     // ─── SAVE FLOW ───
@@ -1287,6 +1300,14 @@ export const toggleSave = asyncHandler(async (req, res) => {
       collection
     });
 
+    const actualSavesCount = await SavedReel.countDocuments(isAd ? { ad: cId } : { reel: cId });
+
+    if (isAd) {
+      await Ad.findByIdAndUpdate(cId, { 'stats.bookmarksCount': actualSavesCount, 'stats.savesCount': actualSavesCount });
+    } else {
+      await Reel.findByIdAndUpdate(cId, { 'stats.bookmarksCount': actualSavesCount, 'stats.savesCount': actualSavesCount });
+    }
+
     // Update interests for save action
     if (req.user && !isAd) {
       RecommendationEngine.updateUserInterests(userId, cId, 'save');
@@ -1295,7 +1316,9 @@ export const toggleSave = asyncHandler(async (req, res) => {
     return res.status(200).json({
       success: true,
       message: 'Saved successfully',
-      isSaved: true
+      isSaved: true,
+      bookmarksCount: actualSavesCount,
+      savesCount: actualSavesCount
     });
   }
 });

@@ -217,29 +217,46 @@ const HomePage = () => {
       onTouchStart={onboardingStep === 2 ? handleFinishOnboarding : undefined}
     >
       {/* Top Navigation */}
-      <div className="absolute top-[var(--safe-area-top)] left-0 w-full flex justify-between items-center px-4 py-3 z-[50] pointer-events-none">
+      <div className="absolute top-[calc(var(--safe-area-top)+8px)] left-0 w-full flex justify-between items-center px-4 z-[50] pointer-events-none">
         <div className="w-8" />
-        <div className="flex items-center gap-4 pointer-events-auto">
+        <div className="flex items-center gap-6 pointer-events-auto">
           {reelId ? (
-            <div className="flex items-center gap-1 text-white font-bold cursor-pointer" onClick={() => navigate('/')}>
+            <div className="flex items-center gap-1 text-white font-bold cursor-pointer drop-shadow-md" onClick={() => navigate('/')}>
               <BiChevronLeft size={28} /> <span>Back</span>
             </div>
           ) : (
-            reelSections.map((section, idx) => (
-              <React.Fragment key={section.id}>
-                {idx > 0 && <span className="text-white text-[14px] font-bold pointer-events-none">|</span>}
-                <span
-                  className={`text-[17px] font-semibold cursor-pointer transition-colors relative ${currentTab === section.id ? 'text-white font-black' : 'text-white/60'}`}
+            reelSections.map((section) => {
+              const isActive = currentTab === section.id;
+              return (
+                <div
+                  key={section.id}
+                  className="relative cursor-pointer py-1 select-none"
                   onClick={() => handleTabChange(section.id)}
                 >
-                  {section.label}
-                </span>
-              </React.Fragment>
-            ))
+                  <span
+                    className={`text-[17px] transition-all duration-200 drop-shadow-md ${
+                      isActive ? 'text-white font-bold tracking-wide' : 'text-white/70 font-semibold hover:text-white'
+                    }`}
+                  >
+                    {section.label}
+                  </span>
+                  {isActive && (
+                    <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-7 h-[3px] bg-white rounded-full shadow-[0_1px_4px_rgba(0,0,0,0.5)] transition-all duration-300" />
+                  )}
+                </div>
+              );
+            })
           )}
         </div>
-        <div className="pointer-events-auto text-white cursor-pointer" onClick={() => navigate('/search')}>
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <div 
+          className="pointer-events-auto text-white cursor-pointer p-1 active:scale-95 transition-transform drop-shadow-md" 
+          onClick={() => navigate('/search')}
+          title="Search"
+        >
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="11" cy="11" r="7.5"/>
+            <path d="M16.5 16.5L21 21"/>
+          </svg>
         </div>
       </div>
 

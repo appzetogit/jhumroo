@@ -57,36 +57,76 @@ import { formatElapsed, parseDurationSeconds, readSoundFavorites } from './utils
 import { initDB, saveVideoToCache, getVideoFromCache, saveSequenceToCache, getSequenceFromCache, clearVideoCache } from './services/videoCacheService';
 import { sheetOverlayClass, Toggle, BottomSheet, CenterModal } from './components/SharedUI';
 import { DynamicAudioDuration, MediaPreview, DraggableOverlay, TimelineThumbnail } from './components/MediaComponents';
-const getToolIcon = (toolId, size = 22, isMuted = false, selectedSpeed = '1x', selectedZoom = '1x') => {
+const getToolIcon = (toolId, size = 28, isMuted = false, selectedSpeed = '1x', selectedZoom = '1x', flashMode = 'off', isBeautifyOn = false) => {
   switch (toolId) {
     case 'flip':
-      return <BiRefresh size={size + 1} />;
-    case 'speed':
-      return <span className="text-[13px] font-black leading-none tracking-tight">{selectedSpeed}</span>;
-    case 'zoom':
-      return <span className="text-[13px] font-black leading-none tracking-tight">{selectedZoom}</span>;
+      return (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" className="drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]">
+          <path d="M20 10A8 8 0 0 0 5.3 5.3L3 7" />
+          <path d="M3 3v4h4" />
+          <path d="M4 14a8 8 0 0 0 14.7 4.7L21 17" />
+          <path d="M21 21v-4h-4" />
+        </svg>
+      );
+    case 'flash':
+      return (
+        <div className="relative flex items-center justify-center">
+          <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" className="drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]">
+            <path d="M13 2L4 13h7l-1 9 10-11h-7l1-9z" />
+            {flashMode === 'off' && (
+              <line x1="3" y1="3" x2="21" y2="21" stroke="currentColor" strokeWidth="2.8" />
+            )}
+          </svg>
+          {flashMode === 'auto' && (
+            <span className="absolute -bottom-1 -right-1 text-[8px] font-black bg-white text-black px-1 rounded-full leading-none">A</span>
+          )}
+        </div>
+      );
     case 'timer':
       return (
-        <span className="relative flex items-center justify-center">
-          <IoTimerOutline size={size} />
-          <span className="absolute -bottom-[2px] -right-[5px] text-[9px] font-black leading-none">3</span>
-        </span>
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" className="drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]">
+          <circle cx="12" cy="13" r="7.5" />
+          <path d="M12 9.5v3.5l2.5 2.5" strokeWidth="2.6" />
+          <path d="M10 2.5h4" strokeWidth="2.4" />
+          <path d="M12 2.5v3" strokeWidth="2.4" />
+        </svg>
+      );
+    case 'beautify':
+    case 'retouch':
+    case 'enhance':
+      return (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className={`drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)] ${isBeautifyOn ? 'text-amber-300' : ''}`}>
+          <circle cx="12" cy="9.5" r="3.5" />
+          <path d="M6 19.5c0-3.3 2.7-6 6-6s6 2.7 6 6" />
+          <path d="M18.5 4.5l.8 1.5 1.5.8-1.5.8-.8 1.5-.8-1.5-1.5-.8 1.5-.8z" fill="currentColor" stroke="none" />
+          <path d="M5 14.5l.5 1 1 .5-1 .5-.5 1-.5-1-1-.5 1-.5z" fill="currentColor" stroke="none" />
+        </svg>
       );
     case 'filters':
+    case 'effects':
       return (
-        <span className="relative block h-[18px] w-[18px]">
-          <span className="absolute left-0 top-[5px] h-2.5 w-2.5 rounded-full bg-current" />
-          <span className="absolute right-0 top-[5px] h-2.5 w-2.5 rounded-full bg-current opacity-90" />
-          <span className="absolute left-1/2 top-0 h-2.5 w-2.5 -translate-x-1/2 rounded-full bg-current opacity-80" />
-        </span>
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" className="drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]">
+          <circle cx="12" cy="8.5" r="4.2" />
+          <circle cx="8" cy="14.5" r="4.2" />
+          <circle cx="16" cy="14.5" r="4.2" />
+        </svg>
       );
-
+    case 'speed':
+      return (
+        <div className="flex flex-col items-center justify-center -space-y-0.5 drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]">
+          <svg width={size} height={size - 6} viewBox="0 0 24 18" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M3.5 14.5 A 8.5 8.5 0 0 1 20.5 14.5" />
+            <line x1="12" y1="14.5" x2="15.5" y2="8.5" strokeWidth="2.8" />
+          </svg>
+          <span className="text-[11px] font-black leading-none tracking-tighter text-white">{selectedSpeed || '1x'}</span>
+        </div>
+      );
+    case 'zoom':
+      return <span className="text-[13px] font-black leading-none tracking-tight">{selectedZoom}</span>;
     case 'text':
       return <IoTextOutline size={size} />;
     case 'stickers':
       return <IoSparklesOutline size={size} />;
-    case 'effects':
-      return <IoColorWandOutline size={size} />;
     case 'editor':
       return <IoVideocamOutline size={size} />;
     case 'captions':
@@ -95,8 +135,6 @@ const getToolIcon = (toolId, size = 22, isMuted = false, selectedSpeed = '1x', s
       return <BiVolumeFull size={size} />;
     case 'audio':
       return <BiMicrophone size={size} />;
-    case 'enhance':
-      return <IoSparklesOutline size={size} />;
     case 'privacy':
       return <BiWorld size={size} />;
     case 'split':
@@ -123,6 +161,14 @@ const getToolIcon = (toolId, size = 22, isMuted = false, selectedSpeed = '1x', s
 };
 const CreatePage = () => {
   const navigate = useNavigate();
+
+  useEffect(() => {
+    const prevBg = document.body.style.backgroundColor;
+    document.body.style.backgroundColor = '#000000';
+    return () => {
+      document.body.style.backgroundColor = prevBg;
+    };
+  }, []);
   const { isDarkMode } = useTheme();
   const location = useLocation();
   const [duetVideo, setDuetVideo] = useState(() => {
@@ -332,6 +378,8 @@ const CreatePage = () => {
   const [isTimerRecording, setIsTimerRecording] = useState(false);
   const [captureMode, setCaptureMode] = useState('camera');
   const [facingMode, setFacingMode] = useState('environment');
+  const [flashMode, setFlashMode] = useState('off');
+  const [isBeautifyOn, setIsBeautifyOn] = useState(false);
   const [activeFilterGroup, setActiveFilterGroup] = useState('instacam');
   const [selectedFilter, setSelectedFilter] = useState('Normal');
   const [filterPreviewFrame, setFilterPreviewFrame] = useState(null);
@@ -2426,14 +2474,27 @@ const CreatePage = () => {
     if (toolId === 'flip') {
       const nextMode = facingMode === 'user' ? 'environment' : 'user';
       setFacingMode(nextMode);
-      // We need to restart camera with new facing mode
-      // The startCamera will be called by useEffect if we add facingMode to deps,
-      // or we can call it manually.
       startCameraManual(nextMode);
       return;
     }
 
+    if (toolId === 'flash') {
+      setFlashMode((prev) => {
+        const next = prev === 'off' ? 'on' : prev === 'on' ? 'auto' : 'off';
+        showToast(`Flash: ${next.toUpperCase()}`);
+        return next;
+      });
+      return;
+    }
 
+    if (toolId === 'beautify' || toolId === 'enhance' || toolId === 'retouch') {
+      setIsBeautifyOn((prev) => {
+        const next = !prev;
+        showToast(`Beautify filter: ${next ? 'ON' : 'OFF'}`);
+        return next;
+      });
+      return;
+    }
 
     setActiveCameraTool((currentTool) => (currentTool === toolId ? null : toolId));
 
@@ -3847,71 +3908,88 @@ const CreatePage = () => {
     setEditorAction(actionId);
   };
 
-  const renderCameraHeader = () => (
-    <div
-      className="absolute inset-x-0 top-0 z-20 px-4 pb-4"
-      style={{ paddingTop: 'max(env(safe-area-inset-top), 14px)' }}
-    >
-      <div className="flex items-center justify-between">
-        <button type="button" onClick={handleCloseOrBack} className={themedOverlayButtonClass}>
-          <BiX size={24} />
-        </button>
-        <div className="flex items-center">
-          <button
-            type="button"
-            onClick={() => setActiveSheet('music-library')}
-            className={`${themedFloatingPillClass} max-w-[200px] overflow-hidden flex items-center gap-2 ${selectedSound?.title && !['Original sound', 'Original audio', 'Original Audio'].includes(selectedSound.title) ? 'pr-1' : ''}`}
-          >
-            <BiMusic size={15} className={selectedSound?.title && !['Original sound', 'Original audio', 'Original Audio'].includes(selectedSound.title) ? 'animate-pulse text-[#fe2c55]' : ''} />
-            <span className="truncate">
-              {selectedSound?.title && !['Original sound', 'Original audio', 'Original Audio'].includes(selectedSound.title) ? selectedSound.title : 'Add sound'}
-            </span>
-            {selectedSound?.title && !['Original sound', 'Original audio', 'Original Audio'].includes(selectedSound.title) && (
-              <div
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setSelectedSounds([]);
-                  showToast('Sound removed');
-                }}
-                className="ml-1 p-1 hover:bg-white/10 rounded-full transition-colors cursor-pointer"
-              >
-                <BiX size={16} className="text-white/60" />
-              </div>
-            )}
-          </button>
+  const cameraSideTools = [
+    { id: 'flip', label: '' },
+    { id: 'flash', label: '' },
+    { id: 'timer', label: '' },
+    { id: 'beautify', label: '' },
+    { id: 'filters', label: '' },
+    { id: 'speed', label: '' },
+  ];
 
-        </div>
-        <span className="h-9 w-9 shrink-0" aria-hidden="true" />
+  const cameraDurationModes = ['10m', '60s', '15s'];
+
+  const renderCameraHeader = () => (
+    <div className="absolute inset-x-0 top-3 z-30 px-3.5 flex items-center justify-between">
+      <div className="flex items-center gap-1.5">
+        <button
+          type="button"
+          onClick={handleCloseOrBack}
+          className="w-9 h-9 rounded-full flex items-center justify-center text-white active:scale-90 transition-transform drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)] hover:bg-white/10 shrink-0"
+          title="Close"
+        >
+          <BiX size={26} />
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveSheet('music-library')}
+          className={`bg-black/40 backdrop-blur-md border border-white/15 text-white px-3.5 py-1.5 rounded-full text-xs font-bold flex items-center gap-2 max-w-[190px] overflow-hidden shadow-lg shadow-black/30 active:scale-95 transition-transform ${
+            selectedSound?.title && !['Original sound', 'Original audio', 'Original Audio'].includes(selectedSound.title) ? 'pr-1.5' : ''
+          }`}
+        >
+          <BiMusic
+            size={14}
+            className={
+              selectedSound?.title && !['Original sound', 'Original audio', 'Original Audio'].includes(selectedSound.title)
+                ? 'animate-pulse text-[#fe2c55]'
+                : 'text-white'
+            }
+          />
+          <span className="truncate tracking-wide">
+            {selectedSound?.title && !['Original sound', 'Original audio', 'Original Audio'].includes(selectedSound.title)
+              ? selectedSound.title
+              : 'Add sound'}
+          </span>
+          {selectedSound?.title && !['Original sound', 'Original audio', 'Original Audio'].includes(selectedSound.title) && (
+            <div
+              onClick={(e) => {
+                e.stopPropagation();
+                setSelectedSounds([]);
+                showToast('Sound removed');
+              }}
+              className="ml-1 p-0.5 hover:bg-white/20 rounded-full transition-colors cursor-pointer"
+            >
+              <BiX size={14} className="text-white/80" />
+            </div>
+          )}
+        </button>
       </div>
     </div>
   );
 
   const renderCameraSideTools = () => (
-    <div
-      className={`absolute right-4 z-20 flex flex-col items-center gap-5 transition-all duration-300 ${isFiltersTrayOpen ? 'top-[10%]' : 'top-[14%]'
-        }`}
-    >
-      {CREATE_SIDE_TOOLS.map((tool) => (
-        <button
-          key={tool.id}
-          type="button"
-          onClick={() => handleCameraToolClick(tool.id)}
-          className="group flex flex-col items-center gap-1.5 active:scale-95 transition-transform"
-        >
-          <span className={getThemedCameraToolButtonClass(activeCameraTool === tool.id)}>
-            {getToolIcon(tool.id, 20, false, selectedSpeed, selectedZoom)}
-          </span>
-          <span className="text-[10px] font-bold tracking-wide uppercase text-white shadow-black drop-shadow-md">
-            {tool.label}
-          </span>
-        </button>
-      ))}
+    <div className="absolute right-3.5 top-5 z-30 flex flex-col items-center gap-5 transition-all duration-300">
+      {cameraSideTools.map((tool) => {
+        const isActive = activeCameraTool === tool.id || (tool.id === 'beautify' && isBeautifyOn) || (tool.id === 'flash' && flashMode !== 'off');
+        return (
+          <button
+            key={tool.id}
+            type="button"
+            onClick={() => handleCameraToolClick(tool.id)}
+            className="group flex flex-col items-center justify-center w-10 h-10 rounded-full active:scale-90 transition-transform hover:bg-white/10"
+          >
+            <span className={`text-white transition-colors ${isActive ? 'text-amber-300 scale-105' : ''}`}>
+              {getToolIcon(tool.id, 28, false, selectedSpeed, selectedZoom, flashMode, isBeautifyOn)}
+            </span>
+          </button>
+        );
+      })}
     </div>
   );
 
   const renderFiltersTray = () => (
     <div className="mb-4 px-3 pb-3 pt-3">
-
       <div className="flex gap-4 overflow-x-auto no-scrollbar pb-1">
         {activeFilterOptions.map((filterName) => (
           <button
@@ -3921,28 +3999,28 @@ const CreatePage = () => {
             className="w-16 shrink-0 text-center text-white active:opacity-70"
           >
             <span
-              className={`mx-auto flex h-12 w-12 items-center justify-center rounded-full border text-[10px] overflow-hidden ${selectedFilter === filterName
+              className={`mx-auto flex h-12 w-12 items-center justify-center rounded-full border text-[10px] overflow-hidden ${
+                selectedFilter === filterName
                   ? isDarkMode
                     ? 'border-white ring-2 ring-white/20'
                     : 'border-black ring-2 ring-black/10'
                   : isDarkMode
                     ? 'border-white/15'
                     : 'border-black/10'
-                }`}
+              }`}
             >
               <div
                 className="w-full h-full bg-[#2c2c2e]"
                 style={{
                   filter: FILTER_PRESETS[filterName] || 'none',
-                  background: filterPreviewFrame ? `url(${filterPreviewFrame}) center/cover` : undefined
+                  background: filterPreviewFrame ? `url(${filterPreviewFrame}) center/cover` : undefined,
                 }}
               />
             </span>
             <span
-              className={`mt-2 block text-[10px] drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)] ${selectedFilter === filterName
-                  ? 'text-white font-bold'
-                  : 'text-white/80'
-                }`}
+              className={`mt-2 block text-[10px] drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)] ${
+                selectedFilter === filterName ? 'text-white font-bold' : 'text-white/80'
+              }`}
             >
               {filterName}
             </span>
@@ -3953,106 +4031,114 @@ const CreatePage = () => {
   );
 
   const renderCameraBottom = () => (
-    <div className={themedBottomPanelClass}>
-      {activeCameraTool === 'speed' && (
-        <div className="mb-5 flex items-center justify-center gap-4 text-[13px] font-medium text-white/80">
-          {SPEED_OPTIONS.map((speedOption) => (
-            <button
-              key={speedOption}
-              type="button"
-              onClick={() => {
-                setSelectedSpeed(speedOption);
-                setActiveCameraTool(null);
-              }}
-              className={getDurationButtonClass(selectedSpeed === speedOption)}
-            >
-              {speedOption}
-            </button>
-          ))}
+    <div className="absolute inset-x-0 bottom-8 z-30 flex flex-col items-center pointer-events-none">
+      <div className="pointer-events-auto flex flex-col items-center w-full">
+        {/* Speed Selector overlay */}
+        {activeCameraTool === 'speed' && (
+          <div className="mb-3 flex items-center justify-center gap-3 bg-black/60 backdrop-blur-md px-4 py-1.5 rounded-full border border-white/10 text-xs font-semibold text-white shadow-lg">
+            {SPEED_OPTIONS.map((speedOption) => (
+              <button
+                key={speedOption}
+                type="button"
+                onClick={() => {
+                  setSelectedSpeed(speedOption);
+                  setActiveCameraTool(null);
+                }}
+                className={`px-3 py-1 rounded-full text-xs font-bold transition-all ${
+                  selectedSpeed === speedOption ? 'bg-white text-black scale-105 shadow-md' : 'text-white/70 hover:text-white'
+                }`}
+              >
+                {speedOption}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Timer selector overlay */}
+        {activeCameraTool === 'timer' && (
+          <div className="mb-3 flex items-center justify-center gap-4 bg-black/60 backdrop-blur-md px-5 py-2 rounded-full border border-white/10 text-xs font-semibold text-white shadow-lg">
+            {['3s', '10s'].map((timeOpt) => (
+              <button
+                key={timeOpt}
+                type="button"
+                onClick={() => {
+                  setSelectedCountdown(timeOpt);
+                  setActiveCameraTool(null);
+                  showToast(`Timer set to ${timeOpt}`);
+                }}
+                className={`px-3 py-1 rounded-full text-xs font-bold transition-all ${
+                  selectedCountdown === timeOpt ? 'bg-white text-black scale-105 shadow-md' : 'text-white/70 hover:text-white'
+                }`}
+              >
+                {timeOpt} Timer
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Duration & Mode Selector Bar (10m, 60s, 15s, PHOTO, TEXT) */}
+        <div className="flex items-center justify-center gap-3.5 mb-3 select-none px-4 overflow-x-auto no-scrollbar w-full max-w-md">
+          {cameraDurationModes.map((modeOpt) => {
+            const isSelected =
+              (modeOpt === selectedDuration && captureMode === 'camera') ||
+              (modeOpt === 'PHOTO' && captureMode === 'photo') ||
+              (modeOpt === 'TEXT' && captureMode === 'text');
+            return (
+              <button
+                key={modeOpt}
+                type="button"
+                onClick={() => {
+                  if (modeOpt === 'PHOTO') {
+                    setCaptureMode('photo');
+                  } else if (modeOpt === 'TEXT') {
+                    setCaptureMode('text');
+                    setStageStack((prev) => [...prev, 'text-overlay']);
+                  } else {
+                    setCaptureMode('camera');
+                    setSelectedDuration(modeOpt);
+                  }
+                }}
+                className={`shrink-0 transition-all duration-200 select-none ${
+                  isSelected
+                    ? 'bg-white text-black font-extrabold text-xs px-3.5 py-1 rounded-full shadow-md shadow-black/30 scale-105'
+                    : 'text-white/90 hover:text-white font-bold text-xs px-2 py-1 tracking-wide drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]'
+                }`}
+              >
+                {modeOpt}
+              </button>
+            );
+          })}
         </div>
-      )}
 
-      {activeCameraTool === 'zoom' && (
-        <div className="mb-5 flex items-center justify-center gap-4 text-[13px] font-medium text-white/80">
-          {ZOOM_OPTIONS.map((zoomOption) => (
-            <button
-              key={zoomOption}
-              type="button"
-              onClick={() => {
-                setSelectedZoom(zoomOption);
-                setActiveCameraTool(null);
-              }}
-              className={getDurationButtonClass(selectedZoom === zoomOption)}
-            >
-              {zoomOption}
-            </button>
-          ))}
-        </div>
-      )}
+        {/* Filters Tray */}
+        {isFiltersTrayOpen && renderFiltersTray()}
 
-      <div className={themedDurationRowClass}>
-        {DURATION_OPTIONS.map((durationOption) => (
-          <button
-            key={durationOption}
-            type="button"
-            onClick={() => setSelectedDuration(durationOption)}
-            className={getDurationButtonClass(selectedDuration === durationOption)}
-          >
-            {durationOption}
-          </button>
-        ))}
-      </div>
-
-      {isFiltersTrayOpen && renderFiltersTray()}
-
-      <div className="flex items-end justify-between px-2">
-        {/* Left: Effects (hidden when recorded) */}
-        <div className="flex w-[92px] items-center justify-start">
-          {recordStatus !== 'recorded' && (
-            <button
-              type="button"
-              onClick={() => handleCameraToolClick('filters')}
-              className={`w-[74px] text-center ${themedUtilityTextClass} active:opacity-70`}
-            >
-              <span className="mx-auto flex h-11 w-11 items-center justify-center overflow-hidden rounded-xl border border-white/25 bg-[radial-gradient(circle_at_30%_30%,#ffd8e6_0%,#f4abc1_48%,#d86583_100%)] shadow-[0_10px_20px_rgba(223,109,141,0.32)] backdrop-blur-sm">
-                <span className="translate-y-[1px] text-[22px] leading-none drop-shadow-sm" role="img" aria-label="Effects emoji">
-                  😊
-                </span>
-              </span>
-              <span className="mt-2 block text-[11px] font-medium">Effects</span>
-            </button>
-          )}
-        </div>
-
-        {/* Center: Record button OR Confirm/Discard buttons */}
-        <div className="flex flex-col items-center">
+        {/* Center Record Shutter Button & Translucent Right Circles */}
+        <div className="flex items-center justify-center w-full relative px-6">
           {recordStatus === 'recorded' ? (
-            <div className="flex flex-col items-center gap-6">
-              <span className="text-[20px] font-bold tracking-[0.1em] text-white/90 drop-shadow-md">
+            <div className="flex flex-col items-center gap-3">
+              <span className="text-[16px] font-bold tracking-widest text-white drop-shadow-md">
                 {formatElapsed(recordedSeconds)}
               </span>
-              <div className="flex items-center gap-8">
+              <div className="flex items-center gap-6">
                 <button
                   type="button"
                   onClick={() => setActiveSheet('discard-last-clip')}
-                  className="flex h-14 w-14 items-center justify-center rounded-full bg-white/10 backdrop-blur-md text-white border border-white/20 shadow-[0_4px_16px_rgba(0,0,0,0.3)] active:scale-90 transition-transform"
+                  className="flex h-13 w-13 items-center justify-center rounded-full bg-white/15 backdrop-blur-md text-white border border-white/20 shadow-lg active:scale-90 transition-transform"
                 >
-                  <BiX size={32} />
+                  <BiX size={30} />
                 </button>
                 <button
                   type="button"
                   onClick={handleConfirmClip}
-                  className="flex h-14 w-14 items-center justify-center rounded-full bg-[#fe2c55] text-white active:scale-90 transition-transform shadow-[0_4px_20px_rgba(254,44,85,0.4)]"
+                  className="flex h-13 w-13 items-center justify-center rounded-full bg-[#fe2c55] text-white active:scale-90 transition-transform shadow-[0_4px_20px_rgba(254,44,85,0.5)]"
                 >
-                  <BiCheck size={36} />
+                  <BiCheck size={34} />
                 </button>
               </div>
             </div>
           ) : (
             <>
-              <span className="mb-2 text-[12px] font-medium tracking-[0.18em] text-white/90">
-                {formatElapsed(recordedSeconds)}
-              </span>
               <button
                 type="button"
                 onMouseDown={handleRecordPressStart}
@@ -4060,67 +4146,28 @@ const CreatePage = () => {
                 onMouseLeave={handleRecordPressLeave}
                 onTouchStart={handleRecordPressStart}
                 onTouchEnd={handleRecordPressEnd}
-                className={`relative flex items-center justify-center select-none active:scale-95 ${isFiltersTrayOpen ? 'h-20 w-20' : 'h-24 w-24'
-                  }`}
+                className="relative flex items-center justify-center select-none active:scale-95 w-[80px] h-[80px] sm:w-[84px] sm:h-[84px] rounded-full border-[4px] border-white p-[5px] bg-transparent transition-all shrink-0 z-10 drop-shadow-[0_4px_12px_rgba(0,0,0,0.5)]"
               >
-                <span className="absolute inset-0 rounded-full bg-white/20 backdrop-blur-md" />
                 <span
-                  className={`absolute rounded-full border-[4px] border-white/70 ${isFiltersTrayOpen ? 'inset-[12px]' : 'inset-[14px]'
-                    }`}
-                />
-                <span
-                  className={`relative flex items-center justify-center rounded-full bg-[#fe2c55] transition-all ${isFiltersTrayOpen ? 'h-[48px] w-[48px]' : 'h-[54px] w-[54px]'
-                    } ${recordStatus === 'recording' ? 'rounded-[16px]' : ''
-                    }`}
+                  className={`w-full h-full rounded-full bg-[#fe2c55] transition-all duration-200 flex items-center justify-center ${
+                    recordStatus === 'recording' ? 'rounded-[14px] scale-75' : ''
+                  }`}
                 >
-                  {recordStatus === 'recording' ? (
-                    <span className="h-5 w-5 rounded-[4px] bg-white" />
-                  ) : (
-                    <span className="h-5 w-5 rounded-full bg-white/0" />
+                  {recordStatus === 'recording' && (
+                    <span className="w-4 h-4 rounded-[3px] bg-white animate-pulse" />
                   )}
                 </span>
               </button>
+
+              {/* Two translucent side circles on the right (matching reference screenshot) */}
+              <div className="absolute left-[calc(50%+2.8rem)] flex items-center gap-2 pointer-events-none opacity-60">
+                <div className="w-11 h-11 rounded-full bg-white/30 backdrop-blur-xs border border-white/20 shrink-0" />
+                <div className="w-11 h-11 rounded-full bg-white/30 backdrop-blur-xs border border-white/20 shrink-0" />
+              </div>
             </>
           )}
         </div>
-
-        {/* Right: Upload (hidden when recorded) */}
-        <div className="flex w-[92px] items-center justify-end gap-2">
-          {recordStatus !== 'recorded' && (
-            <button
-              type="button"
-              onClick={triggerFilePicker}
-              className={`w-[74px] text-center ${themedUtilityTextClass} active:opacity-70`}
-            >
-              <span className={themedUtilityBadgeClass}>
-                <div className="flex h-full w-full items-center justify-center bg-white/10">
-                  <BiImageAlt size={24} className="text-white/60" />
-                </div>
-              </span>
-              <span className="mt-2 block text-[11px] font-medium">Upload</span>
-            </button>
-          )}
-        </div>
       </div>
-
-      {recordStatus !== 'recorded' && (
-        <div className={themedModeTabsClass}>
-          {['camera'].map((mode) => (
-            <button
-              key={mode}
-              type="button"
-              onClick={() => setCaptureMode(mode)}
-              className={`relative capitalize ${captureMode === mode ? 'text-white' : ''
-                }`}
-            >
-              {mode}
-              {captureMode === mode && (
-                <span className="absolute left-1/2 top-[calc(100%+8px)] h-1.5 w-1.5 -translate-x-1/2 rounded-full bg-white" />
-              )}
-            </button>
-          ))}
-        </div>
-      )}
     </div>
   );
 
@@ -4148,123 +4195,166 @@ const CreatePage = () => {
     return (
       <div
         ref={cameraStageRef}
-        className={`relative h-full w-full overflow-hidden ${isDarkMode ? 'bg-black text-white' : 'bg-[var(--theme-page-bg)] text-white'}`}
+        className="relative h-full w-full overflow-hidden bg-black text-white flex flex-col"
         style={{ touchAction: 'none' }}
       >
-        <style>
-          {`
-            [data-instacam] {
-              width: 100% !important;
-              height: 100% !important;
-              position: absolute !important;
-              inset: 0 !important;
-            }
-            [data-instacam] canvas {
-              width: 100% !important;
-              height: 100% !important;
-              object-fit: cover !important;
-            }
-          `}
-        </style>
-        <div className={duetVideo ? "absolute top-1/2 -translate-y-1/2 w-full aspect-[9/8] flex flex-row bg-black z-0 overflow-hidden" : "absolute inset-0 z-0 flex flex-row"}>
-          {duetVideo ? (
-            <>
-              {/* Left Column: Original Video */}
-              <div className="w-1/2 h-full bg-black relative border-r border-white/10 flex items-center justify-center">
-                <video
-                  ref={duetVideoPlayerRef}
-                  src={duetVideo.video.url}
-                  className="w-full h-full object-cover"
-                  playsInline
-                  loop
-                  muted={isDuetMuted}
-                />
-                {recordStatus === 'recorded' && previewUrl && (
+        {/* Top Black Status Bar Space */}
+        <div className="h-8 w-full bg-black shrink-0 z-40" />
+
+        {/* Main Camera Card Container with BOTH Top & Bottom Rounded Corners */}
+        <div className="relative flex-1 w-full bg-black rounded-[24px] sm:rounded-[28px] overflow-hidden z-10 shadow-2xl">
+          <style>
+            {`
+              [data-instacam] {
+                width: 100% !important;
+                height: 100% !important;
+                position: absolute !important;
+                inset: 0 !important;
+                overflow: hidden !important;
+                border-radius: 24px !important;
+              }
+              [data-instacam] canvas {
+                width: 100% !important;
+                height: 100% !important;
+                object-fit: cover !important;
+                border-radius: 24px !important;
+              }
+            `}
+          </style>
+          <div className={duetVideo ? "absolute top-1/2 -translate-y-1/2 w-full aspect-[9/8] flex flex-row bg-black z-0 overflow-hidden rounded-[24px]" : "absolute inset-0 z-0 flex flex-row overflow-hidden bg-black rounded-[24px] sm:rounded-[28px]"}>
+            {duetVideo ? (
+              <>
+                {/* Left Column: Original Video */}
+                <div className="w-1/2 h-full bg-black relative border-r border-white/10 flex items-center justify-center">
                   <video
+                    ref={duetVideoPlayerRef}
                     src={duetVideo.video.url}
-                    className="absolute inset-0 w-full h-full object-cover z-10"
+                    className="w-full h-full object-cover"
                     playsInline
                     loop
-                    autoPlay
                     muted={isDuetMuted}
                   />
-                )}
-                <div className="absolute bottom-4 left-4 bg-black/60 backdrop-blur-md px-3 py-1 rounded-full text-xs font-bold text-white border border-white/10 flex items-center gap-1 z-20">
-                  <span className="w-1.5 h-1.5 bg-[#fe2c55] rounded-full animate-pulse"></span>
-                  @{duetVideo.user?.username || 'creator'}
+                  {recordStatus === 'recorded' && previewUrl && (
+                    <video
+                      src={duetVideo.video.url}
+                      className="absolute inset-0 w-full h-full object-cover z-10"
+                      playsInline
+                      loop
+                      autoPlay
+                      muted={isDuetMuted}
+                    />
+                  )}
+                  <div className="absolute bottom-4 left-4 bg-black/60 backdrop-blur-md px-3 py-1 rounded-full text-xs font-bold text-white border border-white/10 flex items-center gap-1 z-20">
+                    <span className="w-1.5 h-1.5 bg-[#fe2c55] rounded-full animate-pulse"></span>
+                    @{duetVideo.user?.username || 'creator'}
+                  </div>
                 </div>
-              </div>
-              {/* Right Column: Camera Canvas */}
-              <div className="w-1/2 h-full bg-black relative">
+                {/* Right Column: Camera Canvas */}
+                <div className="w-1/2 h-full bg-black relative">
+                  <canvas
+                    ref={canvasRef}
+                    onDoubleClick={handleCanvasDoubleClick}
+                    className="w-full h-full object-cover transition-all duration-300"
+                  />
+                  {recordStatus === 'recorded' && previewUrl && (
+                    <video
+                      src={previewUrl}
+                      className="absolute inset-0 w-full h-full object-cover z-10"
+                      playsInline
+                      loop
+                      autoPlay
+                      muted={isVideoMuted}
+                      style={{
+                        transform: supportsHardwareZoom ? 'none' : `scale(${parseFloat(selectedZoom) || 1.0})`,
+                        transformOrigin: 'center'
+                      }}
+                    />
+                  )}
+                </div>
+              </>
+            ) : (
+              <>
                 <canvas
                   ref={canvasRef}
                   onDoubleClick={handleCanvasDoubleClick}
-                  className="w-full h-full object-cover transition-all duration-300"
+                  className="h-full w-full object-cover transition-all duration-300 rounded-[24px] sm:rounded-[28px]"
                 />
                 {recordStatus === 'recorded' && previewUrl && (
                   <video
                     src={previewUrl}
-                    className="absolute inset-0 w-full h-full object-cover z-10"
+                    className="absolute inset-0 h-full w-full object-cover z-10 rounded-[24px] sm:rounded-[28px]"
                     playsInline
                     loop
                     autoPlay
                     muted={isVideoMuted}
+                    ref={(el) => {
+                      if (el) el.playbackRate = parseFloat(selectedSpeed) || 1;
+                    }}
                     style={{
                       transform: supportsHardwareZoom ? 'none' : `scale(${parseFloat(selectedZoom) || 1.0})`,
                       transformOrigin: 'center'
                     }}
                   />
                 )}
-              </div>
-            </>
-          ) : (
-            <>
-              <canvas
-                ref={canvasRef}
-                onDoubleClick={handleCanvasDoubleClick}
-                className="h-full w-full object-cover transition-all duration-300"
-              />
-              {recordStatus === 'recorded' && previewUrl && (
-                <video
-                  src={previewUrl}
-                  className="absolute inset-0 h-full w-full object-cover z-10"
-                  playsInline
-                  loop
-                  autoPlay
-                  muted={isVideoMuted}
-                  ref={(el) => {
-                    if (el) el.playbackRate = parseFloat(selectedSpeed) || 1;
-                  }}
-                  style={{
-                    transform: supportsHardwareZoom ? 'none' : `scale(${parseFloat(selectedZoom) || 1.0})`,
-                    transformOrigin: 'center'
-                  }}
-                />
-              )}
-            </>
-          )}
-          <video
-            ref={videoRef}
-            autoPlay
-            muted
-            playsInline
-            className="hidden"
-          />
-        </div>
-
-        {/* Progress Bar */}
-        <div className="absolute top-0 inset-x-0 z-30 h-1.5 bg-black/20 px-1 py-1">
-          <div className="h-full bg-white/30 rounded-full overflow-hidden">
-            <div
-              className="h-full bg-[#fe2c55] transition-all duration-75 ease-linear"
-              style={{ width: `${progressPercent}%` }}
+              </>
+            )}
+            <video
+              ref={videoRef}
+              autoPlay
+              muted
+              playsInline
+              className="hidden"
             />
           </div>
+
+          {/* Progress Bar */}
+          <div className="absolute top-0 inset-x-0 z-30 h-1.5 bg-black/20 px-1 py-1">
+            <div className="h-full bg-white/30 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-[#fe2c55] transition-all duration-75 ease-linear"
+                style={{ width: `${progressPercent}%` }}
+              />
+            </div>
+          </div>
+
+          {renderCameraHeader()}
+          {renderCameraSideTools()}
+          {renderCameraBottom()}
         </div>
 
-        {renderCameraHeader()}
-        {renderCameraSideTools()}
-        {renderCameraBottom()}
+        {/* Bottom Black Navigation Footer Bar (Outside Camera Card) */}
+        {recordStatus !== 'recorded' && (
+          <div className="bg-black text-white h-20 pt-2 pb-4 w-full flex items-center justify-between px-6 z-40 shrink-0 border-t border-white/10 select-none">
+            {/* Left: Gallery Thumbnail Stack Button */}
+            <div className="w-12 flex items-center justify-start">
+              <button
+                type="button"
+                onClick={triggerFilePicker}
+                className="relative group active:scale-95 transition-transform"
+                title="Upload from gallery"
+              >
+                <div className="absolute -bottom-1 -right-1 w-9 h-9 rounded-lg bg-white/30 border border-white/20 -z-10 shadow-sm" />
+                <div className="w-9 h-9 rounded-lg bg-black border-2 border-white overflow-hidden shadow-md flex items-center justify-center">
+                  {CREATE_GALLERY_ITEMS && CREATE_GALLERY_ITEMS[0]?.image ? (
+                    <img src={CREATE_GALLERY_ITEMS[0].image} alt="Gallery" className="w-full h-full object-cover" />
+                  ) : (
+                    <BiImageAlt size={20} className="text-white/80" />
+                  )}
+                </div>
+              </button>
+            </div>
+
+            {/* Center: CAMERA Mode Tab */}
+            <div className="flex items-center justify-center">
+              <span className="text-xs tracking-widest uppercase text-white font-black scale-105 select-none">
+                CAMERA
+              </span>
+            </div>
+
+            {/* Right: Empty spacer container */}
+            <div className="w-12 shrink-0" aria-hidden="true" />
+          </div>
+        )}
 
         {/* Countdown Overlay */}
         {activeCountdown !== null && (

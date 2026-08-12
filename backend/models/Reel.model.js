@@ -174,6 +174,11 @@ const reelSchema = new mongoose.Schema(
         default: 0,
         min: 0
       },
+      bookmarksCount: {
+        type: Number,
+        default: 0,
+        min: 0
+      },
       totalWatchTime: {
         type: Number,
         default: 0,

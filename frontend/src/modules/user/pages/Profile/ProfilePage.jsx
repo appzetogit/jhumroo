@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { BiMenu, BiUserPlus, BiBookmark, BiHeart, BiArrowBack, BiBell, BiDotsVerticalRounded, BiX } from 'react-icons/bi';
+import { BiMenu, BiUserPlus, BiBookmark, BiHeart, BiArrowBack, BiBell, BiDotsVerticalRounded, BiX, BiChevronDown } from 'react-icons/bi';
 import { BsGrid3X3 } from 'react-icons/bs';
 import { useTheme } from '../../../../context/ThemeContext';
 import { useAppContent } from '../../../../hooks/useAppContent';
@@ -651,7 +651,7 @@ const ProfilePage = () => {
           <button onClick={() => navigate(-1)} className="text-white active:opacity-60">
             <BiArrowBack size={26} />
           </button>
-          <h2 className="text-[17px] font-bold text-white">{displayUsername}</h2>
+          <div className="flex-1" />
           <div className="w-6" />
         </div>
 
@@ -709,7 +709,7 @@ const ProfilePage = () => {
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 shrink-0 sticky top-0 z-[60] bg-[color:var(--theme-page-bg)]/90 backdrop-blur-md">
         {isOwnProfile ? (
-          <button onClick={() => navigate('/user/requests')} className="text-white active:opacity-60 relative">
+          <button onClick={() => navigate('/user/requests')} className="text-black active:opacity-60 relative">
             <svg 
               xmlns="http://www.w3.org/2000/svg" 
               width="26" height="26" 
@@ -723,7 +723,7 @@ const ProfilePage = () => {
               <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/>
             </svg>
             {pendingRequestsCount > 0 && (
-              <div className="absolute -top-1 -right-1 w-4 h-4 bg-[#FE2C55] rounded-full border-2 border-[#161616] flex items-center justify-center text-[8px] text-white font-bold">
+              <div className="absolute -top-1 -right-1 w-4 h-4 bg-[#FE2C55] rounded-full border-2 border-white flex items-center justify-center text-[8px] text-white font-bold">
                 {pendingRequestsCount > 9 ? '9+' : pendingRequestsCount}
               </div>
             )}
@@ -741,34 +741,34 @@ const ProfilePage = () => {
                 navigate(-1);
               }
             }} 
-            className="text-white active:opacity-60"
+            className="text-black active:opacity-60"
           >
             <BiArrowBack size={26} />
           </button>
         )}
-        <h2 className="text-[17px] font-bold text-white">{activeProfile?.fullName || displayUsername}</h2>
+        <div className="flex-1" />
         <div className="flex items-center gap-3">
           <button 
             onClick={handleShareProfile}
-            className="text-white active:opacity-60 transition-opacity"
+            className="text-black active:opacity-60 transition-opacity"
+            title="Share Profile"
           >
             <svg 
-              xmlns="http://www.w3.org/2000/svg" 
               width="24" height="24" 
-              viewBox="0 0 24 24" 
+              viewBox="0 0 48 48" 
               fill="none" 
               stroke="currentColor" 
-              strokeWidth="2.2" 
+              strokeWidth="3.5" 
               strokeLinecap="round" 
               strokeLinejoin="round"
             >
-              <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+              <path d="M43.2 22.1L27.6 7.3c-1.2-1.1-3.1-.3-3.1 1.4v7.1C13.2 16.7 6 24 6 36.3c0 2.2.3 4.3 1 6.3.3.9 1.5 1.1 2.1.4 4.8-5.8 11.5-8.5 15.4-8.8v6.8c0 1.7 1.9 2.5 3.1 1.4l15.6-14.8c.8-.8.8-2 0-2.7z"/>
             </svg>
           </button>
           {!isOwnProfile && isBlockedByThem ? null : (
             <button 
               onClick={() => isOwnProfile ? navigate('/settings') : setShowOptions(true)}
-              className="text-white active:opacity-60 transition-opacity"
+              className="text-black active:opacity-60 transition-opacity"
             >
               {isOwnProfile ? <BiMenu size={28} /> : <BiDotsVerticalRounded size={28} />}
             </button>
@@ -780,49 +780,73 @@ const ProfilePage = () => {
         {/* Profile Info */}
         <div className="flex flex-col items-center pt-4 pb-6 px-4">
           <div className="relative w-24 h-24 mb-4">
-            <div className="w-full h-full rounded-full p-[2px] bg-gradient-to-tr from-yellow-400 to-pink-600">
-              <div className="w-full h-full rounded-full p-[3px] bg-[#161616]">
+            <div className="w-full h-full rounded-full p-[2px] bg-white">
+              <div className="w-full h-full rounded-full overflow-hidden bg-[#242424]">
                 <img 
                   src={activeProfile?.profilePicture?.url || (typeof activeProfile?.profilePicture === 'string' ? activeProfile?.profilePicture : null) || `https://api.dicebear.com/7.x/avataaars/svg?seed=${displayUsername}`} 
                   alt="avatar" 
-                  className="w-full h-full rounded-full object-cover bg-[#242424]" 
+                  className="w-full h-full rounded-full object-cover" 
                 />
               </div>
             </div>
             {isOwnProfile && (
               <div 
                 onClick={() => setShowPhotoPicker(true)}
-                className="absolute right-0 bottom-0 w-7 h-7 bg-[#20D5EC] rounded-full border-[3px] border-[#161616] flex items-center justify-center text-white cursor-pointer shadow-sm active:scale-90 transition-transform"
+                className="absolute right-0 bottom-0 w-7 h-7 bg-white rounded-full p-[2.5px] flex items-center justify-center cursor-pointer shadow-md active:scale-90 transition-transform"
               >
-                {uploading ? (
-                  <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                ) : (
-                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="3" viewBox="0 0 24 24"><path d="M12 5v14m-7-7h14"/></svg>
-                )}
+                <div className="w-full h-full bg-[#00D2E5] rounded-full flex items-center justify-center text-white">
+                  {uploading ? (
+                    <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  ) : (
+                    <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="3" viewBox="0 0 24 24"><path d="M12 5v14m-7-7h14"/></svg>
+                  )}
+                </div>
               </div>
             )}
           </div>
           
-          <h1 className="text-[18px] font-bold text-white mb-0.5">{activeProfile?.fullName || displayUsername}</h1>
-          <p className="text-[13px] font-medium text-white/50 mb-5">@{displayUsername}</p>
+          {/* Name + Edit Pill */}
+          <div className="flex items-center justify-center gap-2 mb-0.5">
+            <h1 className="text-[15px] font-bold text-white">
+              {activeProfile?.fullName || displayUsername}
+            </h1>
+            {isOwnProfile && (
+              <button 
+                onClick={() => navigate('/settings/edit-profile')}
+                className="px-3.5 py-0.5 bg-gray-200 hover:bg-gray-300 text-black text-[13px] font-semibold rounded-full active:scale-95 transition-all ml-1"
+              >
+                Edit
+              </button>
+            )}
+          </div>
 
-          {/* Stats Section with Dividers */}
-          <div className="flex items-center justify-center w-full mb-6">
-            <div className="flex flex-col items-center px-6 cursor-pointer active:opacity-70" onClick={() => navigate(`/user/${displayUsername}/followers`, { state: { activeTab: 'following' } })}>
+          {/* Username Handle */}
+          <p className="text-[12px] font-normal text-white/50 mb-4">@{displayUsername}</p>
+
+          {/* Stats Section with Dividers (Matching TikTok screenshot) */}
+          <div className="flex items-center justify-center w-full mb-3">
+            <div className="flex flex-col items-center px-4 cursor-pointer active:opacity-70" onClick={() => navigate(`/user/${displayUsername}/followers`, { state: { activeTab: 'following' } })}>
               <span className="text-[17px] font-bold text-white">{activeProfile?.stats?.followingCount ?? activeProfile?.followingCount ?? 0}</span>
-              <span className="text-[12px] text-white/40">Following</span>
+              <span className="text-[12px] text-white/40 font-normal mt-0.5">Following</span>
             </div>
-            <div className="w-[1px] h-3 bg-white/10" />
-            <div className="flex flex-col items-center px-6 cursor-pointer active:opacity-70" onClick={() => navigate(`/user/${displayUsername}/followers`, { state: { activeTab: 'followers' } })}>
+            <div className="w-[1px] h-3.5 bg-white/15" />
+            <div className="flex flex-col items-center px-4 cursor-pointer active:opacity-70" onClick={() => navigate(`/user/${displayUsername}/followers`, { state: { activeTab: 'followers' } })}>
               <span className="text-[17px] font-bold text-white">{activeProfile?.stats?.followersCount ?? activeProfile?.followersCount ?? 0}</span>
-              <span className="text-[12px] text-white/40">Followers</span>
+              <span className="text-[12px] text-white/40 font-normal mt-0.5">Followers</span>
             </div>
-            <div className="w-[1px] h-3 bg-white/10" />
-            <div className="flex flex-col items-center px-6">
+            <div className="w-[1px] h-3.5 bg-white/15" />
+            <div className="flex flex-col items-center px-4">
               <span className="text-[17px] font-bold text-white">{activeProfile?.stats?.likesCount ?? activeProfile?.likesCount ?? 0}</span>
-              <span className="text-[12px] text-white/40">Likes</span>
+              <span className="text-[12px] text-white/40 font-normal mt-0.5">Likes</span>
             </div>
           </div>
+
+          {/* Bio text below stats (Matching TikTok screenshot) */}
+          {(activeProfile?.bio || activeProfile?.description) && (
+            <p className="text-[13px] text-white/80 font-normal mt-1 mb-4 text-center px-6 max-w-sm leading-snug">
+              {activeProfile?.bio || activeProfile?.description}
+            </p>
+          )}
 
           {/* Action Buttons */}
           {!isOwnProfile && (
@@ -893,13 +917,7 @@ const ProfilePage = () => {
             </div>
           )}
 
-          {!showSuggested && (
-            <div className="px-6">
-               <p className="text-[14px] text-white/80 text-center leading-relaxed whitespace-pre-line">
-                {activeProfile?.bio || 'No bio yet'}
-              </p>
-            </div>
-          )}
+
         </div>
 
         {/* Suggested Section */}
