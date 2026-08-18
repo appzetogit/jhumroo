@@ -442,6 +442,7 @@ const ChatPage = () => {
   const [isBlocked, setIsBlocked] = useState(false);
   const [showReportSheet, setShowReportSheet] = useState(false);
   const [isBlockedByThem, setIsBlockedByThem] = useState(false);
+  const [isTargetOnline, setIsTargetOnline] = useState(false);
 
   const theme = THEMES[activeThemeKey] || THEMES.default;
 
@@ -563,15 +564,29 @@ const ChatPage = () => {
         }
       });
 
+      socket.on('user_online', (data) => {
+        if (data.userId === targetUser?._id && targetUser?.activeStatusPrivacy !== 'no_one') {
+          setIsTargetOnline(true);
+        }
+      });
+
+      socket.on('user_offline', (data) => {
+        if (data.userId === targetUser?._id) {
+          setIsTargetOnline(false);
+        }
+      });
+
       return () => {
         socket.emit('leave_conversation', conversation._id);
         socket.off('new_message');
         socket.off('user_typing');
         socket.off('conversation_read');
         socket.off('message_pinned');
+        socket.off('user_online');
+        socket.off('user_offline');
       };
     }
-  }, [socket, conversation?._id, currentUser?._id]);
+  }, [socket, conversation?._id, currentUser?._id, targetUser?._id, targetUser?.activeStatusPrivacy]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -584,6 +599,8 @@ const ChatPage = () => {
       if (userRes.success) {
         setTargetUser(userRes.user);
         setIsBlockedByThem(userRes.user.isBlockedByThem || false);
+        const privacy = userRes.user.activeStatusPrivacy || 'friends';
+        setIsTargetOnline(!!userRes.user.isOnline && privacy !== 'no_one');
         const convRes = await messageService.getConversation(userRes.user._id);
         if (convRes.success) {
           setConversation(convRes.conversation);
@@ -795,19 +812,37 @@ const ChatPage = () => {
               className={`flex items-center gap-3 ${isBlockedByThem ? 'cursor-default' : 'cursor-pointer'}`}
               onClick={() => !isBlockedByThem && navigate(`/user/${username}`)}
             >
-              <div className="w-10 h-10 rounded-full overflow-hidden border border-gray-100">
-                <img
-                  src={displayAvatar}
-                  alt={displayUsername}
-                  className="w-full h-full object-cover"
-                />
+              <div className="relative shrink-0">
+                <div className="w-10 h-10 rounded-full overflow-hidden border border-gray-100">
+                  <img
+                    src={displayAvatar}
+                    alt={displayUsername}
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+                {!isBlockedByThem && (
+                  <span
+                    className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-white dark:border-[#161616] transition-colors duration-300 z-10 ${
+                      isTargetOnline
+                        ? 'bg-[#00E676] shadow-[0_0_6px_#00E676]'
+                        : 'bg-gray-400 dark:bg-gray-500'
+                    }`}
+                    title={isTargetOnline ? 'Online' : 'Offline'}
+                  />
+                )}
               </div>
               <div className="flex flex-col">
                 <p className={`text-[15px] font-bold leading-tight ${theme.headerText}`}>
                   {displayName}
                 </p>
                 <p className="text-[12px] opacity-60 font-medium">
-                  {isTyping && !isBlockedByThem ? <span className="text-[#FE2C55]">Typing...</span> : `@${displayUsername}`}
+                  {isTyping && !isBlockedByThem ? (
+                    <span className="text-[#FE2C55]">Typing...</span>
+                  ) : isTargetOnline && !isBlockedByThem ? (
+                    <span className="text-[#00E676] font-semibold">Active now</span>
+                  ) : (
+                    `@${displayUsername}`
+                  )}
                 </p>
               </div>
             </div>

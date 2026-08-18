@@ -47,7 +47,6 @@ import SoundPage from './modules/user/pages/Sound/SoundPage';
 import FollowersPage from './modules/user/pages/Profile/FollowersPage';
 import NewFollowersPage from './modules/user/pages/Inbox/NewFollowersPage';
 import AllActivityPage from './modules/user/pages/Inbox/AllActivityPage';
-import NewMessagePage from './modules/user/pages/Inbox/NewMessagePage';
 import ChatPage from './modules/user/pages/Inbox/ChatPage';
 import ChatMediaPage from './modules/user/pages/Inbox/ChatMediaPage';
 import FollowRequestsPage from './modules/user/pages/Profile/FollowRequestsPage';
@@ -74,9 +73,7 @@ const MainLayout = ({ onLogout }) => {
       document.activeElement.blur();
     }
 
-    const isChatSubPage =
-      pathname === '/inbox/new-message' ||
-      pathname.startsWith('/inbox/chat/');
+    const isChatSubPage = pathname.startsWith('/inbox/chat/');
     const isSettingsPage =
       pathname === '/settings' ||
       pathname.startsWith('/settings/');
@@ -108,7 +105,6 @@ const MainLayout = ({ onLogout }) => {
         <Route path="/inbox" element={<InboxPage />} />
         <Route path="/inbox/new-followers" element={<NewFollowersPage />} />
         <Route path="/inbox/activity" element={<AllActivityPage />} />
-        <Route path="/inbox/new-message" element={<NewMessagePage />} />
         <Route path="/inbox/chat/:username" element={<ChatPage />} />
 
 

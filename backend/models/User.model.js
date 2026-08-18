@@ -205,6 +205,11 @@ const userSchema = new mongoose.Schema(
       enum: ['On', 'Off'],
       default: 'On'
     },
+    activeStatusPrivacy: {
+      type: String,
+      enum: ['public', 'friends', 'no_one'],
+      default: 'friends'
+    },
     notificationSettings: {
       likes: {
         type: Boolean,

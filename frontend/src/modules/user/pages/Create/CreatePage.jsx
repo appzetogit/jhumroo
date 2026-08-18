@@ -5,6 +5,7 @@ import FaceEffectCanvas from './components/FaceEffectCanvas';
 import { FACE_EFFECT_PRESETS } from './utils/faceEffectPresets';
 import {
   BiAt,
+  BiBlock,
   BiCheck,
   BiChevronDown,
   BiChevronLeft,
@@ -32,6 +33,8 @@ import {
   BiSlider,
   BiCrop,
   BiExpand,
+  BiExitFullscreen,
+  BiCaptions,
 } from 'react-icons/bi';
 import {
   IoCameraReverseOutline,
@@ -386,6 +389,7 @@ const CreatePage = () => {
     }
   });
   const stage = stageStack[stageStack.length - 1];
+  const [isEditorFullscreen, setIsEditorFullscreen] = useState(false);
   const [activeSheet, setActiveSheet] = useState(null);
   const [activeCameraTool, setActiveCameraTool] = useState(null);
   const [recordStatus, setRecordStatus] = useState(() => {
@@ -406,6 +410,9 @@ const CreatePage = () => {
   const [isBeautifyOn, setIsBeautifyOn] = useState(false);
   const [activeFilterGroup, setActiveFilterGroup] = useState('instacam');
   const [selectedFilter, setSelectedFilter] = useState('Normal');
+  const [selectedVideoEffect, setSelectedVideoEffect] = useState(null);
+  const [effectsCategoryTab, setEffectsCategoryTab] = useState('visual');
+  const [effectSearchQuery, setEffectSearchQuery] = useState('');
   const [filterCategory, setFilterCategory] = useState('Portrait');
   const [filterIntensity, setFilterIntensity] = useState(80);
   const [filterPreviewFrame, setFilterPreviewFrame] = useState(null);
@@ -619,8 +626,16 @@ const CreatePage = () => {
 
   const getCombinedFilter = () => {
     const base = selectedFilter === 'Normal' ? '' : (FILTER_PRESETS[selectedFilter] || '');
+    let effectFilter = '';
+    if (selectedVideoEffect === 'gold_powder') effectFilter = 'sepia(0.35) saturate(1.8) brightness(1.08)';
+    if (selectedVideoEffect === 'heart') effectFilter = 'sepia(0.15) saturate(1.4) hue-rotate(-20deg)';
+    if (selectedVideoEffect === 'neon') effectFilter = 'saturate(2.2) contrast(1.2)';
+    if (selectedVideoEffect === 'bling') effectFilter = 'brightness(1.15) contrast(1.1)';
+    if (selectedVideoEffect === 'illusion') effectFilter = 'contrast(1.4) saturate(1.8)';
+    if (selectedVideoEffect === 'glitch') effectFilter = 'drop-shadow(-2px 0 0 rgba(255,0,0,0.6)) drop-shadow(2px 0 0 rgba(0,255,255,0.6))';
+
     const adj = `brightness(${imageAdjustments.brightness}%) contrast(${imageAdjustments.contrast}%) saturate(${imageAdjustments.saturate}%) hue-rotate(${imageAdjustments.hueRotate}deg) invert(${imageAdjustments.invert}%) grayscale(${imageAdjustments.grayscale}%) sepia(${imageAdjustments.sepia}%) blur(${imageAdjustments.blur}px) opacity(${imageAdjustments.opacity}%)`;
-    return `${base} ${adj}`.trim() || 'none';
+    return `${base} ${effectFilter} ${adj}`.trim() || 'none';
   };
 
   // Ensure background audio is cleaned up on unmount
@@ -2177,7 +2192,7 @@ const CreatePage = () => {
 
 
   const formatPlaybackTime = (elapsed, total) => {
-    return `${formatElapsed(Math.round(elapsed || 0))} / ${formatElapsed(Math.round(total || 0))}`;
+    return `<span class="text-white">${formatElapsed(Math.round(elapsed || 0))}</span><span class="text-white/40">/${formatElapsed(Math.round(total || 0))}</span>`;
   };
 
   const handleLeftQuickTrim = () => {
@@ -2208,7 +2223,7 @@ const CreatePage = () => {
       const newGlobalTime = pastDuration;
       const timeSpan = document.getElementById('editor-playback-time');
       if (timeSpan) {
-        timeSpan.innerText = formatPlaybackTime(newGlobalTime, newTotalDur);
+        timeSpan.innerHTML = formatPlaybackTime(newGlobalTime, newTotalDur);
       }
       const timeline = document.getElementById('editor-timeline');
       if (timeline) {
@@ -2252,7 +2267,7 @@ const CreatePage = () => {
       const newGlobalTime = pastDuration;
       const timeSpan = document.getElementById('editor-playback-time');
       if (timeSpan) {
-        timeSpan.innerText = formatPlaybackTime(newGlobalTime, newTotalDur);
+        timeSpan.innerHTML = formatPlaybackTime(newGlobalTime, newTotalDur);
       }
       const timeline = document.getElementById('editor-timeline');
       if (timeline) {
@@ -2293,7 +2308,7 @@ const CreatePage = () => {
       const newGlobalTime = pastDuration + newDuration - 0.01;
       const timeSpan = document.getElementById('editor-playback-time');
       if (timeSpan) {
-        timeSpan.innerText = formatPlaybackTime(newGlobalTime, newTotalDur);
+        timeSpan.innerHTML = formatPlaybackTime(newGlobalTime, newTotalDur);
       }
       const timeline = document.getElementById('editor-timeline');
       if (timeline) {
@@ -2338,7 +2353,7 @@ const CreatePage = () => {
       const newGlobalTime = pastDuration + newDuration - 0.01;
       const timeSpan = document.getElementById('editor-playback-time');
       if (timeSpan) {
-        timeSpan.innerText = formatPlaybackTime(newGlobalTime, newTotalDur);
+        timeSpan.innerHTML = formatPlaybackTime(newGlobalTime, newTotalDur);
       }
       const timeline = document.getElementById('editor-timeline');
       if (timeline) {
@@ -3040,6 +3055,10 @@ const CreatePage = () => {
       setOverlayFontSize(28);
       setSelectedTextId(null);
       setIsEditingText(true);
+      return;
+    }
+    if (toolId === 'effects') {
+      setActiveSheet('effects-preview');
       return;
     }
     if (toolId === 'filters') {
@@ -4077,8 +4096,10 @@ const CreatePage = () => {
 
   const cameraDurationModes = ['10m', '60s', '15s'];
 
-  const renderCameraHeader = () => (
-    <div className="absolute inset-x-0 top-3 z-30 px-3.5 flex items-center justify-between pointer-events-none">
+  const renderCameraHeader = () => {
+    if (recordStatus === 'recording') return null;
+    return (
+      <div className="absolute inset-x-0 top-3 z-30 px-3.5 flex items-center justify-between pointer-events-none">
       {/* Left: Close Button */}
       <div className="pointer-events-auto">
         <button
@@ -4132,9 +4153,12 @@ const CreatePage = () => {
       <div className="w-9 h-9 shrink-0" aria-hidden="true" />
     </div>
   );
+};
 
-  const renderCameraSideTools = () => (
-    <div className="absolute right-3.5 top-5 z-30 flex flex-col items-center gap-5 transition-all duration-300">
+  const renderCameraSideTools = () => {
+    if (recordStatus === 'recording') return null;
+    return (
+      <div className="absolute right-3.5 top-5 z-30 flex flex-col items-center gap-5 transition-all duration-300">
       {cameraSideTools.map((tool) => {
         const isActive = activeCameraTool === tool.id || (tool.id === 'beautify' && isBeautifyOn) || (tool.id === 'flash' && flashMode !== 'off');
         return (
@@ -4184,6 +4208,7 @@ const CreatePage = () => {
       })}
     </div>
   );
+};
 
   const renderFiltersTray = () => {
     const currentCatObj = CATEGORIZED_FILTERS.find((c) => c.category === filterCategory) || CATEGORIZED_FILTERS[0];
@@ -4528,63 +4553,65 @@ const CreatePage = () => {
                     </div>
 
                     {/* HORIZONTAL SWIPEABLE LENS CAROUSEL */}
-                    <div
-                      ref={effectsScrollRef}
-                      onScroll={handleEffectsScroll}
-                      className="w-full flex items-center gap-5 overflow-x-auto no-scrollbar snap-x snap-mandatory px-[calc(50%-33px)] py-2 z-10 pointer-events-auto"
-                    >
-                      {cameraEffectsList.map((effect) => {
-                        const isActive = activeFaceEffect === effect.id;
-                        const isNormal = effect.id === null;
+                    {!isRecording && !hasRecordedClips && (
+                      <div
+                        ref={effectsScrollRef}
+                        onScroll={handleEffectsScroll}
+                        className="w-full flex items-center gap-5 overflow-x-auto no-scrollbar snap-x snap-mandatory px-[calc(50%-33px)] py-2 z-10 pointer-events-auto"
+                      >
+                        {cameraEffectsList.map((effect) => {
+                          const isActive = activeFaceEffect === effect.id;
+                          const isNormal = effect.id === null;
 
-                        return (
-                          <button
-                            key={effect.id || 'normal'}
-                            data-effect-id={effect.id || 'normal'}
-                            type="button"
-                            onClick={(e) => {
-                              setActiveFaceEffect(effect.id);
-                              if (effect.id === null) setFaceEffectCanvasEl(null);
-                              e.currentTarget.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
-                            }}
-                            onMouseDown={isNormal ? handleRecordPressStart : undefined}
-                            onMouseUp={isNormal ? handleRecordPressEnd : undefined}
-                            onMouseLeave={isNormal ? handleRecordPressLeave : undefined}
-                            onTouchStart={isNormal ? handleRecordPressStart : undefined}
-                            onTouchEnd={isNormal ? handleRecordPressEnd : undefined}
-                            className={`shrink-0 snap-center transition-all duration-200 flex flex-col items-center justify-center select-none active:scale-95 ${
-                              isActive
-                                ? 'w-[66px] h-[66px] sm:w-[72px] sm:h-[72px] scale-105 opacity-100'
-                                : 'w-[50px] h-[50px] sm:w-[54px] sm:h-[54px] opacity-85 hover:opacity-100'
-                            }`}
-                          >
-                            {isNormal ? (
-                              <div className="w-full h-full rounded-full bg-[#fe2c55] shadow-lg flex items-center justify-center transition-all duration-200">
-                                {isRecording && <span className="w-3 h-3 rounded-[2px] bg-white animate-pulse" />}
-                              </div>
-                            ) : (
-                              <div
-                                className={`w-full h-full rounded-full bg-[#2c2c2e] border flex items-center justify-center text-2xl transition-all shadow-md overflow-hidden ${
-                                  isActive
-                                    ? 'border-white bg-amber-400/30 ring-2 ring-amber-300/80 shadow-amber-500/30'
-                                    : 'border-white/20 hover:border-white/40'
-                                }`}
-                              >
-                                {effect.image ? (
-                                  <img
-                                    src={effect.image}
-                                    alt={effect.label}
-                                    className="w-full h-full object-cover rounded-full transition-transform duration-200 contrast-[1.02]"
-                                  />
-                                ) : (
-                                  <span>{effect.icon}</span>
-                                )}
-                              </div>
-                            )}
-                          </button>
-                        );
-                      })}
-                    </div>
+                          return (
+                            <button
+                              key={effect.id || 'normal'}
+                              data-effect-id={effect.id || 'normal'}
+                              type="button"
+                              onClick={(e) => {
+                                setActiveFaceEffect(effect.id);
+                                if (effect.id === null) setFaceEffectCanvasEl(null);
+                                e.currentTarget.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+                              }}
+                              onMouseDown={isNormal ? handleRecordPressStart : undefined}
+                              onMouseUp={isNormal ? handleRecordPressEnd : undefined}
+                              onMouseLeave={isNormal ? handleRecordPressLeave : undefined}
+                              onTouchStart={isNormal ? handleRecordPressStart : undefined}
+                              onTouchEnd={isNormal ? handleRecordPressEnd : undefined}
+                              className={`shrink-0 snap-center transition-all duration-200 flex flex-col items-center justify-center select-none active:scale-95 ${
+                                isActive
+                                  ? 'w-[66px] h-[66px] sm:w-[72px] sm:h-[72px] scale-105 opacity-100'
+                                  : 'w-[50px] h-[50px] sm:w-[54px] sm:h-[54px] opacity-85 hover:opacity-100'
+                              }`}
+                            >
+                              {isNormal ? (
+                                <div className="w-full h-full rounded-full bg-[#fe2c55] shadow-lg flex items-center justify-center transition-all duration-200">
+                                  {isRecording && <span className="w-3 h-3 rounded-[2px] bg-white animate-pulse" />}
+                                </div>
+                              ) : (
+                                <div
+                                  className={`w-full h-full rounded-full bg-[#2c2c2e] border flex items-center justify-center text-2xl transition-all shadow-md overflow-hidden ${
+                                    isActive
+                                      ? 'border-white bg-amber-400/30 ring-2 ring-amber-300/80 shadow-amber-500/30'
+                                      : 'border-white/20 hover:border-white/40'
+                                  }`}
+                                >
+                                  {effect.image ? (
+                                    <img
+                                      src={effect.image}
+                                      alt={effect.label}
+                                      className="w-full h-full object-cover rounded-full transition-transform duration-200 contrast-[1.02]"
+                                    />
+                                  ) : (
+                                    <span>{effect.icon}</span>
+                                  )}
+                                </div>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
 
                     {/* RIGHT ACTION BUTTONS */}
                     {hasRecordedClips && (
@@ -4769,12 +4796,13 @@ const CreatePage = () => {
           </div>
 
           {/* FRONT CAMERA SOFT WHITE RING FLASH GLOW OVERLAY */}
-          {flashMode === 'on' && (
+          {flashMode === 'on' && recordStatus !== 'recorded' && (
             <div
-              className="absolute inset-0 pointer-events-none z-20 transition-opacity duration-300 rounded-2xl"
+              className="absolute inset-0 pointer-events-none z-20 transition-all duration-300 rounded-2xl overflow-hidden"
               style={{
-                background: 'radial-gradient(circle at center, transparent 40%, rgba(255, 255, 255, 0.55) 85%, rgba(255, 255, 255, 0.8) 100%)',
-                backdropFilter: 'brightness(1.12) contrast(1.03)',
+                background: 'radial-gradient(circle at center, transparent 40%, rgba(255, 255, 255, 0.45) 75%, rgba(255, 255, 255, 0.88) 100%)',
+                boxShadow: 'inset 0 0 60px 18px rgba(255, 255, 255, 0.85)',
+                backdropFilter: 'brightness(1.12) contrast(1.02)',
               }}
             />
           )}
@@ -4806,7 +4834,7 @@ const CreatePage = () => {
         </div>
 
         {/* Bottom Black Navigation Footer Bar (Outside Camera Card) */}
-        {recordStatus !== 'recorded' && activeCameraTool !== 'filters' && (
+        {recordStatus !== 'recorded' && recordStatus !== 'recording' && activeCameraTool !== 'filters' && (
           <div className="bg-black text-white h-20 pt-2 pb-4 w-full flex items-center justify-between px-6 z-40 shrink-0 border-t border-white/10 select-none">
             {/* Left: Gallery Thumbnail Stack Button */}
             <div className="w-12 flex items-center justify-start">
@@ -4936,8 +4964,8 @@ const CreatePage = () => {
     const timeSpan = document.getElementById('editor-playback-time');
     if (timeSpan) {
       const formatted = formatPlaybackTime(newGlobalTime, videoDuration);
-      if (timeSpan.innerText !== formatted) {
-        timeSpan.innerText = formatted;
+      if (timeSpan.innerHTML !== formatted) {
+        timeSpan.innerHTML = formatted;
       }
     }
 
@@ -4969,9 +4997,20 @@ const CreatePage = () => {
         const timeSpan = document.getElementById('editor-playback-time');
         if (timeSpan) {
           const formatted = formatPlaybackTime(globalTime, videoDuration);
-          if (timeSpan.innerText !== formatted) {
-            timeSpan.innerText = formatted;
+          if (timeSpan.innerHTML !== formatted) {
+            timeSpan.innerHTML = formatted;
           }
+        }
+
+        // Update fullscreen progress bar and timestamp in real-time
+        const fsTimeSpan = document.getElementById('fullscreen-playback-time');
+        if (fsTimeSpan) {
+          fsTimeSpan.innerText = formatElapsed(Math.round(globalTime));
+        }
+        const fsFill = document.getElementById('fullscreen-progress-fill');
+        if (fsFill && videoDuration > 0) {
+          const pct = Math.min(100, Math.max(0, (globalTime / videoDuration) * 100));
+          fsFill.style.width = `${pct}%`;
         }
 
         // Show/hide text overlays based on globalTime vs text timing
@@ -4993,42 +5032,563 @@ const CreatePage = () => {
     return () => cancelAnimationFrame(rafId);
   }, [stage, isEditorPlaying, currentClipIndex, clipSequence]);
 
+  const renderMediaWithEffects = ({
+    isVideo,
+    mediaUrl,
+    videoRef,
+    videoProps = {},
+    imageProps = {},
+    mediaPreviewComponent = null,
+    className = ""
+  }) => {
+    const isSplitFour = selectedVideoEffect === 'four';
+    const isSplitSix = selectedVideoEffect === 'six';
+    const isSplitNine = selectedVideoEffect === 'nine';
+    const isSplitEffect = isSplitFour || isSplitSix || isSplitNine;
+
+    const effectClassMap = {
+      shake: 'animate-video-shake',
+      sway: 'animate-video-sway',
+      zoom: 'animate-video-zoom',
+      glitch: 'animate-video-glitch',
+      neon: 'animate-video-neon',
+      illusion: 'animate-video-illusion',
+    };
+
+    const activeEffectClass = effectClassMap[selectedVideoEffect] || '';
+    const tileCount = isSplitFour ? 4 : isSplitSix ? 6 : (isSplitNine ? 9 : 1);
+    const gridColsClass = isSplitFour ? 'grid-cols-2 grid-rows-2' : (isSplitSix ? 'grid-cols-3 grid-rows-2' : 'grid-cols-3 grid-rows-3');
+
+    const renderSingleItem = (tileIndex = 0) => {
+      if (!mediaUrl && mediaPreviewComponent) {
+        return mediaPreviewComponent;
+      }
+
+      if (!isVideo) {
+        return (
+          <img
+            src={mediaUrl}
+            alt="Preview"
+            className={`h-full w-full object-cover transition-all duration-300 ${className}`}
+            style={{
+              transform: `rotate(${editorSettings.rotation + cropRotation}deg)`,
+              transformOrigin: 'center center',
+              filter: getCombinedFilter(),
+              ...(imageProps?.style || {})
+            }}
+            {...imageProps}
+          />
+        );
+      }
+
+      const { muted: primaryMuted, style: videoStyle, ...restVideoProps } = videoProps;
+
+      return (
+        <video
+          ref={tileIndex === 0 ? videoRef : null}
+          src={mediaUrl}
+          className={`h-full w-full object-cover transition-all duration-300 ${className}`}
+          muted={tileIndex === 0 ? primaryMuted : true}
+          playsInline
+          style={{
+            transform: `rotate(${editorSettings.rotation + cropRotation}deg)`,
+            transformOrigin: 'center center',
+            filter: getCombinedFilter(),
+            ...(videoStyle || {})
+          }}
+          {...restVideoProps}
+        />
+      );
+    };
+
+    return (
+      <div className={`relative w-full h-full overflow-hidden ${activeEffectClass}`}>
+        {isSplitEffect ? (
+          <div className={`w-full h-full grid ${gridColsClass} gap-0.5 bg-black overflow-hidden`}>
+            {Array.from({ length: tileCount }).map((_, i) => (
+              <div key={i} className="w-full h-full relative overflow-hidden bg-black flex items-center justify-center">
+                {renderSingleItem(i)}
+              </div>
+            ))}
+          </div>
+        ) : (
+          renderSingleItem(0)
+        )}
+
+        {/* Soul Ghost Aura Layer */}
+        {selectedVideoEffect === 'soul' && (
+          <div className="absolute inset-0 pointer-events-none opacity-40 mix-blend-screen scale-105 animate-video-soul overflow-hidden z-10">
+            {renderSingleItem(99)}
+          </div>
+        )}
+
+        {/* Glitch Scanline Overlay */}
+        {selectedVideoEffect === 'glitch' && (
+          <div className="absolute inset-0 pointer-events-none z-10 bg-[linear-gradient(to_bottom,transparent_50%,rgba(0,0,0,0.5)_51%)] bg-[length:100%_4px] opacity-75 animate-pulse" />
+        )}
+
+        {/* Gold Powder Sparkles Overlay */}
+        {selectedVideoEffect === 'gold_powder' && (
+          <div className="absolute inset-0 pointer-events-none z-10 overflow-hidden">
+            <div className="absolute inset-0 bg-amber-500/10 mix-blend-color-dodge" />
+            {[12, 35, 58, 72, 85, 20, 45, 63, 90, 15, 50, 78].map((left, i) => (
+              <div
+                key={i}
+                className="absolute rounded-full bg-amber-300 animate-float-sparkle shadow-[0_0_8px_#fde047]"
+                style={{
+                  width: `${(i % 3) * 2 + 4}px`,
+                  height: `${(i % 3) * 2 + 4}px`,
+                  left: `${left}%`,
+                  top: `${(i * 17) % 90 + 5}%`,
+                  animationDelay: `${(i * 0.3) % 2}s`,
+                  animationDuration: `${(i % 2) + 2}s`
+                }}
+              />
+            ))}
+          </div>
+        )}
+
+        {/* Heart Floating Hearts Overlay */}
+        {selectedVideoEffect === 'heart' && (
+          <div className="absolute inset-0 pointer-events-none z-10 overflow-hidden">
+            <div className="absolute inset-0 bg-pink-500/10 mix-blend-overlay" />
+            {[10, 25, 42, 60, 78, 88, 30, 50, 70].map((left, i) => (
+              <div
+                key={i}
+                className="absolute text-pink-400 text-lg animate-float-up opacity-85 drop-shadow-[0_2px_4px_rgba(255,105,180,0.6)]"
+                style={{
+                  left: `${left}%`,
+                  bottom: `-25px`,
+                  animationDelay: `${(i * 0.4) % 3}s`,
+                  animationDuration: `${(i % 3) + 3}s`
+                }}
+              >
+                💖
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Bling Sparkling Stars Overlay */}
+        {selectedVideoEffect === 'bling' && (
+          <div className="absolute inset-0 pointer-events-none z-10 overflow-hidden">
+            {[15, 38, 55, 75, 85, 22, 68, 48, 88, 32].map((left, i) => (
+              <div
+                key={i}
+                className="absolute text-white text-xs animate-twinkle opacity-90 drop-shadow-[0_0_8px_#fff]"
+                style={{
+                  left: `${left}%`,
+                  top: `${(i * 21) % 85 + 8}%`,
+                  animationDelay: `${(i * 0.3) % 2}s`,
+                  animationDuration: `${(i % 2) + 1.2}s`
+                }}
+              >
+                ✨
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Window Vintage Vignette Frame Overlay */}
+        {selectedVideoEffect === 'window' && (
+          <div className="absolute inset-0 pointer-events-none z-10 shadow-[inset_0_0_90px_35px_rgba(0,0,0,0.88)] border-[10px] border-black/70 rounded-[28px]" />
+        )}
+      </div>
+    );
+  };
+
+  const renderEffectsSheet = () => {
+    const sampleDemoImage = "https://images.unsplash.com/photo-1551698618-1dfe5d97d256?w=200&q=80";
+    const activeThumbSrc = filterPreviewFrame || selectedMedia?.image || (videoFile?.type?.startsWith('image/') ? previewUrl : null);
+
+    const renderThumbnailMedia = (customClass = "w-full h-full object-cover") => {
+      if (activeThumbSrc) {
+        return <img src={activeThumbSrc} className={customClass} alt="preview" />;
+      }
+      if (previewUrl && !videoFile?.type?.startsWith('image/')) {
+        return <video src={previewUrl} className={customClass} muted playsInline autoPlay loop />;
+      }
+      return <img src={sampleDemoImage} className={customClass} alt="sample preview" />;
+    };
+
+    const visualEffects = [
+      { id: 'glitch', label: 'Glitch', bg: 'from-purple-600 via-pink-500 to-cyan-400' },
+      { id: 'gold_powder', label: 'Gold Powder', bg: 'from-amber-400 via-yellow-500 to-orange-500' },
+      { id: 'neon', label: 'Neon', bg: 'from-cyan-400 via-blue-500 to-purple-600' },
+      { id: 'heart', label: 'Heart', bg: 'from-rose-400 via-pink-500 to-red-500' },
+      { id: 'bling', label: 'Bling', bg: 'from-sky-300 via-indigo-400 to-purple-400' },
+      { id: 'soul', label: 'Soul', bg: 'from-emerald-400 via-teal-500 to-cyan-600' },
+      { id: 'shake', label: 'Shake', bg: 'from-orange-400 via-amber-500 to-yellow-400' },
+      { id: 'sway', label: 'Sway', bg: 'from-violet-400 via-purple-500 to-indigo-600' },
+      { id: 'illusion', label: 'Illusion', bg: 'from-fuchsia-500 via-purple-600 to-pink-500' },
+      { id: 'window', label: 'Window', bg: 'from-slate-700 via-slate-800 to-slate-900' },
+      { id: 'zoom', label: 'Zoom', bg: 'from-red-500 via-rose-600 to-pink-600' },
+    ];
+
+    const splitEffects = [
+      { id: 'four', label: 'Four', tiles: 4, cols: 2 },
+      { id: 'six', label: 'Six', tiles: 6, cols: 3 },
+      { id: 'nine', label: 'Nine', tiles: 9, cols: 3 },
+    ];
+
+    return (
+      <div className="absolute inset-x-0 bottom-0 z-50 animate-in slide-in-from-bottom duration-300">
+        <div className="bg-[#121214]/95 backdrop-blur-2xl border-t border-white/10 rounded-t-[28px] pt-3 pb-8 shadow-[0_-20px_50px_rgba(0,0,0,0.8)]">
+          {/* Top Search Bar & Checkmark Confirm */}
+          <div className="flex items-center gap-3 px-4 pt-1 pb-2">
+            <div className="relative flex-1 flex items-center bg-[#222226] rounded-full px-3.5 py-2.5 text-white/80 border border-white/5">
+              <BiSearch size={18} className="text-white/40 mr-2.5 shrink-0" />
+              <input
+                type="text"
+                value={effectSearchQuery}
+                onChange={(e) => setEffectSearchQuery(e.target.value)}
+                placeholder="Search for effects"
+                className="w-full bg-transparent text-white text-[13.5px] font-medium outline-none placeholder:text-white/40"
+              />
+              {effectSearchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setEffectSearchQuery('')}
+                  className="text-white/40 hover:text-white mr-1"
+                >
+                  <BiX size={16} />
+                </button>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => setActiveSheet(null)}
+              className="w-9 h-9 flex items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20 active:scale-90 transition-all"
+              title="Apply & Close"
+            >
+              <BiCheck size={26} />
+            </button>
+          </div>
+
+          {/* Navigation Tabs (None, Bookmarks, Visual, Split) */}
+          <div className="flex items-center gap-6 px-5 border-b border-white/10 text-[14px] font-semibold pt-1 pb-1 select-none">
+            {/* None / Clear effect */}
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedVideoEffect(null);
+                showToast('Effect removed');
+              }}
+              className={`p-1.5 rounded-lg transition-colors flex items-center justify-center ${
+                !selectedVideoEffect ? 'text-white bg-white/15' : 'text-white/40 hover:text-white'
+              }`}
+              title="Remove Effect"
+            >
+              <BiBlock size={20} />
+            </button>
+
+            {/* Visual tab */}
+            <button
+              type="button"
+              onClick={() => setEffectsCategoryTab('visual')}
+              className={`relative py-2 transition-colors ${
+                effectsCategoryTab === 'visual' ? 'text-white font-bold' : 'text-white/50 hover:text-white/80'
+              }`}
+            >
+              Visual
+              {effectsCategoryTab === 'visual' && (
+                <div className="absolute bottom-0 left-0 right-0 h-[2.5px] bg-white rounded-full" />
+              )}
+            </button>
+
+            {/* Split tab */}
+            <button
+              type="button"
+              onClick={() => setEffectsCategoryTab('split')}
+              className={`relative py-2 transition-colors ${
+                effectsCategoryTab === 'split' ? 'text-white font-bold' : 'text-white/50 hover:text-white/80'
+              }`}
+            >
+              Split
+              {effectsCategoryTab === 'split' && (
+                <div className="absolute bottom-0 left-0 right-0 h-[2.5px] bg-white rounded-full" />
+              )}
+            </button>
+          </div>
+
+          {/* Effects Items Grid */}
+          <div className="grid grid-cols-4 gap-3.5 px-5 py-4 max-h-[300px] overflow-y-auto no-scrollbar">
+            {effectsCategoryTab === 'visual' ? (
+              visualEffects
+                .filter((eff) => eff.label.toLowerCase().includes(effectSearchQuery.toLowerCase()))
+                .map((eff) => {
+                  const isSelected = selectedVideoEffect === eff.id;
+                  return (
+                    <button
+                      key={eff.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedVideoEffect(eff.id);
+                        showToast(`${eff.label} effect applied`);
+                      }}
+                      className="flex flex-col items-center gap-2 group"
+                    >
+                      <div
+                        className={`relative h-20 w-20 rounded-2xl overflow-hidden transition-all duration-200 flex items-center justify-center ${
+                          isSelected
+                            ? 'ring-2 ring-white scale-105 shadow-[0_0_20px_rgba(255,255,255,0.3)]'
+                            : 'opacity-80 group-hover:opacity-100 group-hover:scale-105 border border-white/10'
+                        }`}
+                      >
+                        {/* Effect Mini Thumbnail */}
+                        <div className="w-full h-full relative overflow-hidden bg-black">
+                          {renderThumbnailMedia("w-full h-full object-cover opacity-90")}
+                          <div className={`absolute inset-0 bg-gradient-to-tr ${eff.bg} opacity-40 mix-blend-overlay`} />
+                        </div>
+
+                        {isSelected && (
+                          <div className="absolute inset-0 bg-black/20 flex items-center justify-center">
+                            <div className="w-6 h-6 rounded-full bg-white flex items-center justify-center shadow-lg">
+                              <BiCheck size={18} className="text-black" />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                      <span
+                        className={`text-[11.5px] font-medium tracking-tight text-center transition-colors ${
+                          isSelected ? 'text-white font-bold' : 'text-white/70'
+                        }`}
+                      >
+                        {eff.label}
+                      </span>
+                    </button>
+                  );
+                })
+            ) : (
+              splitEffects
+                .filter((eff) => eff.label.toLowerCase().includes(effectSearchQuery.toLowerCase()))
+                .map((eff) => {
+                  const isSelected = selectedVideoEffect === eff.id;
+                  return (
+                    <button
+                      key={eff.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedVideoEffect(eff.id);
+                        showToast(`${eff.label} split applied`);
+                      }}
+                      className="flex flex-col items-center gap-2 group"
+                    >
+                      <div
+                        className={`relative h-20 w-20 rounded-2xl overflow-hidden transition-all duration-200 p-1 bg-[#1a1a1e] ${
+                          isSelected
+                            ? 'ring-2 ring-white scale-105 shadow-[0_0_20px_rgba(255,255,255,0.3)]'
+                            : 'opacity-80 group-hover:opacity-100 group-hover:scale-105 border border-white/10'
+                        }`}
+                      >
+                        {/* Mini Split Grid Preview Thumbnail */}
+                        <div
+                          className={`w-full h-full grid ${
+                            eff.id === 'four'
+                              ? 'grid-cols-2 grid-rows-2'
+                              : eff.id === 'six'
+                              ? 'grid-cols-3 grid-rows-2'
+                              : 'grid-cols-3 grid-rows-3'
+                          } gap-0.5 rounded-xl overflow-hidden bg-black`}
+                        >
+                          {Array.from({ length: eff.tiles }).map((_, i) => (
+                            <div key={i} className="w-full h-full bg-[#2a2a2e] relative overflow-hidden">
+                              {renderThumbnailMedia("w-full h-full object-cover")}
+                            </div>
+                          ))}
+                        </div>
+
+                        {isSelected && (
+                          <div className="absolute inset-0 bg-black/20 flex items-center justify-center">
+                            <div className="w-6 h-6 rounded-full bg-white flex items-center justify-center shadow-lg">
+                              <BiCheck size={18} className="text-black" />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                      <span
+                        className={`text-[11.5px] font-medium tracking-tight text-center transition-colors ${
+                          isSelected ? 'text-white font-bold' : 'text-white/70'
+                        }`}
+                      >
+                        {eff.label}
+                      </span>
+                    </button>
+                  );
+                })
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   const renderEditorStage = () => {
     const timelineWidth = videoDuration * PIXELS_PER_SECOND;
 
+    if (isEditorFullscreen) {
+      return (
+        <div className="fixed inset-0 z-50 bg-black flex flex-col justify-between p-3 select-none">
+          {/* Top Section / Video Preview Container */}
+          <div className="relative flex-1 w-full rounded-[24px] overflow-hidden bg-black flex items-center justify-center">
+            {/* Floating Back Button (Top Left) */}
+            <button
+              type="button"
+              onClick={() => setIsEditorFullscreen(false)}
+              className="absolute top-4 left-4 z-40 h-11 w-11 flex items-center justify-center rounded-full bg-black/40 text-white backdrop-blur-md active:scale-95 transition-transform"
+              title="Back to Editor"
+            >
+              <BiChevronLeft size={26} />
+            </button>
+
+            {/* Fullscreen Video / Image View */}
+            <div
+              onClick={toggleEditorPlay}
+              className="w-full h-full relative cursor-pointer flex items-center justify-center"
+            >
+              {renderMediaWithEffects({
+                isVideo: previewUrl && !(clipSequence.length > 0 ? clipSequence[currentClipIndex]?.isImage : videoFile?.type?.startsWith('image/')),
+                mediaUrl: clipSequence.length > 0 ? clipSequence[currentClipIndex]?.url : previewUrl,
+                videoRef: editorVideoRef,
+                className: "rounded-[24px]",
+                videoProps: {
+                  loop: clipSequence.length <= 1,
+                  onTimeUpdate: handleEditorTimeUpdate,
+                  onEnded: () => {
+                    if (clipSequence && clipSequence.length > 1) {
+                      if (currentClipIndex < clipSequence.length - 1) {
+                        setCurrentClipIndex(currentClipIndex + 1);
+                      } else {
+                        setCurrentClipIndex(0);
+                      }
+                    } else {
+                      const startTime = clipSequence[0]?.startOffset || 0;
+                      if (editorVideoRef.current) {
+                        editorVideoRef.current.currentTime = startTime;
+                        editorVideoRef.current.play().catch(() => { });
+                      }
+                    }
+                  },
+                  onClick: toggleEditorPlay
+                }
+              })}
+
+              {/* Center Overlay Play Button (when paused) */}
+              {!isEditorPlaying && (
+                <div className="absolute inset-0 flex items-center justify-center bg-black/20 pointer-events-none">
+                  <div className="w-16 h-16 rounded-full bg-black/40 backdrop-blur-sm flex items-center justify-center text-white">
+                    <BiPlay size={44} className="fill-current text-white ml-1" />
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Bottom Progress Controls Bar */}
+          <div className="px-3 pt-3 pb-2 flex items-center gap-3 bg-black z-40">
+            {/* Elapsed Time */}
+            <span id="fullscreen-playback-time" className="text-[12px] font-sans font-medium text-white/90 shrink-0 min-w-[36px]">
+              {formatElapsed(Math.round(editorVideoRef.current?.currentTime || 0))}
+            </span>
+
+            {/* Progress Scrubber Line */}
+            <div
+              className="flex-1 h-2 bg-white/20 rounded-full cursor-pointer relative flex items-center py-2"
+              onPointerDown={(e) => {
+                const rect = e.currentTarget.getBoundingClientRect();
+                const seek = (clientX) => {
+                  const clickX = clientX - rect.left;
+                  const ratio = Math.max(0, Math.min(1, clickX / rect.width));
+                  const newTime = ratio * videoDuration;
+                  if (editorVideoRef.current) {
+                    editorVideoRef.current.currentTime = newTime;
+                    const fsTimeSpan = document.getElementById('fullscreen-playback-time');
+                    if (fsTimeSpan) fsTimeSpan.innerText = formatElapsed(Math.round(newTime));
+                    const fsFill = document.getElementById('fullscreen-progress-fill');
+                    if (fsFill && videoDuration > 0) {
+                      fsFill.style.width = `${Math.min(100, (newTime / videoDuration) * 100)}%`;
+                    }
+                  }
+                };
+                seek(e.clientX);
+                const moveHandler = (mE) => seek(mE.clientX);
+                const upHandler = () => {
+                  window.removeEventListener('pointermove', moveHandler);
+                  window.removeEventListener('pointerup', upHandler);
+                };
+                window.addEventListener('pointermove', moveHandler);
+                window.addEventListener('pointerup', upHandler);
+              }}
+            >
+              <div
+                id="fullscreen-progress-fill"
+                className="h-1.5 bg-white rounded-full relative flex items-center justify-end"
+                style={{
+                  width: `${videoDuration > 0 ? Math.min(100, ((editorVideoRef.current?.currentTime || 0) / videoDuration) * 100) : 0}%`
+                }}
+              >
+                <div className="w-3.5 h-3.5 bg-white rounded-full shadow-lg transform translate-x-1/2 shrink-0" />
+              </div>
+            </div>
+
+            {/* Total Duration */}
+            <span className="text-[12px] font-sans font-medium text-white/90 shrink-0 min-w-[36px]">
+              {formatElapsed(Math.round(videoDuration || 0))}
+            </span>
+
+            {/* Collapse / Exit Fullscreen White Circular Button */}
+            <button
+              type="button"
+              onClick={() => setIsEditorFullscreen(false)}
+              className="w-10 h-10 rounded-full bg-white text-black flex items-center justify-center shadow-lg active:scale-90 transition-transform shrink-0 ml-1"
+              title="Exit Fullscreen"
+            >
+              <BiExitFullscreen size={20} className="text-black" />
+            </button>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="flex h-full flex-col bg-black text-white overflow-hidden">
-        {/* Top Header */}
-        <div
-          className="flex items-center justify-between px-4 pb-4"
-          style={{ paddingTop: 'max(env(safe-area-inset-top), 14px)' }}
-        >
-          <button
-            type="button"
-            onClick={handleCloseOrBack}
-            className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white backdrop-blur-md active:opacity-70"
-          >
-            <BiChevronDown size={28} />
-          </button>
-          <button
-            type="button"
-            onClick={() => popStage()}
-            className="flex h-10 w-10 items-center justify-center rounded-full bg-[#4d70ff] text-white shadow-lg active:scale-95"
-          >
-            <BiChevronRight size={24} />
-          </button>
-        </div>
-
-        {/* Video Preview */}
-        <div className="flex-1 flex flex-col items-center justify-center px-4 min-h-0">
+        {/* Sticky Fixed Video Preview Stage (Header + Video Preview + Playback Bar) */}
+        <div className="shrink-0 flex flex-col items-center justify-between relative bg-black pt-3 pb-1 border-b border-white/10" style={{ height: '52vh', minHeight: '400px', maxHeight: '490px' }}>
+          {/* Top Header Buttons */}
           <div
-            onClick={() => setFocusedTrack('video')}
-            className="relative h-full max-h-[380px] overflow-hidden rounded-[16px] bg-black shadow-2xl border border-white/5 transition-all duration-300 cursor-pointer"
-            style={{
-              aspectRatio: cropAspectRatio === '9:16' ? '9/16' : (cropAspectRatio === '1:1' ? '1/1' : (cropAspectRatio === '16:9' ? '16/9' : (cropAspectRatio === '4:5' ? '4/5' : '9/16'))),
-              height: '100%',
-            }}
+            className="w-full flex items-center justify-between z-30 select-none absolute top-3 left-0 right-0 pointer-events-none px-2"
+            style={{ paddingTop: 'max(env(safe-area-inset-top), 0px)' }}
           >
+            {/* Left: Back Chevron */}
+            <button
+              type="button"
+              onClick={handleCloseOrBack}
+              className="flex h-11 w-11 items-center justify-center rounded-full bg-white/20 text-white active:scale-90 transition-transform shadow-md pointer-events-auto ml-3"
+              title="Back"
+            >
+              <BiChevronLeft size={28} />
+            </button>
+
+            {/* Right: Vibrant Pink/Red Arrow */}
+            <button
+              type="button"
+              onClick={() => popStage()}
+              className="flex h-11 w-11 items-center justify-center rounded-full bg-[#fe2c55] text-white shadow-lg shadow-[#fe2c55]/40 active:scale-95 transition-transform pointer-events-auto mr-3"
+              title="Next"
+            >
+              <BiChevronRight size={26} />
+            </button>
+          </div>
+
+          {/* Video Preview Box */}
+          <div className="flex-1 flex flex-col items-center justify-center px-4 min-h-0 py-1 w-full">
+            <div
+              onClick={() => setFocusedTrack('video')}
+              className="relative w-full max-w-[255px] h-full max-h-full overflow-hidden rounded-[12px] bg-black shadow-2xl transition-all duration-300 cursor-pointer flex items-center justify-center"
+              style={{
+                aspectRatio: cropAspectRatio === '9:16' ? '9/16' : (cropAspectRatio === '1:1' ? '1/1' : (cropAspectRatio === '16:9' ? '16/9' : (cropAspectRatio === '4:5' ? '4/5' : '9/16'))),
+              }}
+            >
 
             {/* Inner container wrapper that applies zoom and pan */}
             <div
@@ -5040,71 +5600,53 @@ const CreatePage = () => {
               }}
               onPointerDown={handleCropPointerDown}
             >
-              {previewUrl ? (
-                (clipSequence.length > 0 ? clipSequence[currentClipIndex]?.isImage : videoFile?.type?.startsWith('image/')) ? (
-                  <img
-                    src={clipSequence.length > 0 ? clipSequence[currentClipIndex].url : previewUrl}
-                    className="h-full w-full object-cover"
-                    alt="Preview"
-                    style={{
-                      transform: `rotate(${editorSettings.rotation + cropRotation}deg)`,
-                      transformOrigin: 'center center',
-                      filter: getCombinedFilter()
-                    }}
-                  />
-                ) : (
-                  <video
-                    key={`editor-video-${currentClipIndex}-${clipSequence[currentClipIndex]?.url || 'none'}`}
-                    ref={editorVideoRef}
-                    src={clipSequence.length > 0 ? clipSequence[currentClipIndex].url : previewUrl}
-                    className="h-full w-full object-cover"
-                    muted={isVideoMuted}
-                    playsInline
-                    onTimeUpdate={handleEditorTimeUpdate}
-                    onLoadedMetadata={(e) => {
-                      const video = e.currentTarget;
-                      const currentClip = clipSequence[currentClipIndex];
-                      const startOffset = currentClip?.startOffset || 0;
-                      video.currentTime = startOffset;
-                      video.playbackRate = currentClip?.speed || editorSpeed || 1;
-                    }}
-                    onError={() => {
-                      console.log("Video error, attempting re-hydration...");
-                      const currentClip = clipSequence[currentClipIndex];
-                      if (currentClip && currentClip.file) {
-                        const newUrl = URL.createObjectURL(currentClip.file);
-                        setClipSequence(prev => {
-                          const next = [...prev];
-                          next[currentClipIndex] = { ...next[currentClipIndex], url: newUrl };
-                          return next;
-                        });
-                      }
-                    }}
-                    onEnded={() => {
-                      if (clipSequence && clipSequence.length > 1) {
-                        if (currentClipIndex < clipSequence.length - 1) {
-                          setCurrentClipIndex(currentClipIndex + 1);
-                        } else {
-                          setCurrentClipIndex(0);
-                        }
+              {renderMediaWithEffects({
+                isVideo: previewUrl && !(clipSequence.length > 0 ? clipSequence[currentClipIndex]?.isImage : videoFile?.type?.startsWith('image/')),
+                mediaUrl: clipSequence.length > 0 ? clipSequence[currentClipIndex]?.url : previewUrl,
+                videoRef: editorVideoRef,
+                videoProps: {
+                  key: `editor-video-${currentClipIndex}-${clipSequence[currentClipIndex]?.url || 'none'}`,
+                  muted: isVideoMuted,
+                  onTimeUpdate: handleEditorTimeUpdate,
+                  onLoadedMetadata: (e) => {
+                    const video = e.currentTarget;
+                    const currentClip = clipSequence[currentClipIndex];
+                    const startOffset = currentClip?.startOffset || 0;
+                    video.currentTime = startOffset;
+                    video.playbackRate = currentClip?.speed || editorSpeed || 1;
+                  },
+                  onError: () => {
+                    console.log("Video error, attempting re-hydration...");
+                    const currentClip = clipSequence[currentClipIndex];
+                    if (currentClip && currentClip.file) {
+                      const newUrl = URL.createObjectURL(currentClip.file);
+                      setClipSequence(prev => {
+                        const next = [...prev];
+                        next[currentClipIndex] = { ...next[currentClipIndex], url: newUrl };
+                        return next;
+                      });
+                    }
+                  },
+                  onEnded: () => {
+                    if (clipSequence && clipSequence.length > 1) {
+                      if (currentClipIndex < clipSequence.length - 1) {
+                        setCurrentClipIndex(currentClipIndex + 1);
                       } else {
-                        const startTime = clipSequence[0]?.startOffset || 0;
-                        if (editorVideoRef.current) {
-                          editorVideoRef.current.currentTime = startTime;
-                          editorVideoRef.current.play().catch(() => { });
-                        }
+                        setCurrentClipIndex(0);
                       }
-                    }}
-                    style={{
-                      transform: `rotate(${editorSettings.rotation + cropRotation}deg)`,
-                      transformOrigin: 'center center',
-                      filter: getCombinedFilter()
-                    }}
-                  />
+                    } else {
+                      const startTime = clipSequence[0]?.startOffset || 0;
+                      if (editorVideoRef.current) {
+                        editorVideoRef.current.currentTime = startTime;
+                        editorVideoRef.current.play().catch(() => { });
+                      }
+                    }
+                  }
+                },
+                mediaPreviewComponent: (
+                  <MediaPreview image={selectedMedia.image} rotation={editorSettings.rotation + cropRotation} filter={selectedFilter} className="h-full w-full" />
                 )
-              ) : (
-                <MediaPreview image={selectedMedia.image} rotation={editorSettings.rotation + cropRotation} filter={selectedFilter} className="h-full w-full" />
-              )}
+              })}
             </div>
 
             {/* Crop guide lines & corners overlay */}
@@ -5294,180 +5836,124 @@ const CreatePage = () => {
               </div>
             ))}
           </div>
-
         </div>
-
-        {/* Quick-Trim Button Groups below the preview, above playback controls */}
-        {clipSequence.length > 0 && currentClipIndex >= 0 && focusedTrack === 'video' && !clipSequence[currentClipIndex]?.isImage && (
-          <div
-            className="flex justify-between items-center px-6 pt-2 pb-1 w-full"
-          >
-            {/* Left Corner Quick-Trim Button Group */}
-            <div className="flex items-center gap-1 bg-black/60 border border-white/10 p-1 rounded-full backdrop-blur-md">
-              <button
-                type="button"
-                onClick={() => { setFocusedTrack('video'); handleLeftQuickRevert(); }}
-                className="flex h-7 w-7 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20 active:scale-90 transition-all"
-                title="Revert Left Trim"
-              >
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="3" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
-                </svg>
-              </button>
-              <button
-                type="button"
-                onClick={() => { setFocusedTrack('video'); handleLeftQuickTrim(); }}
-                className="flex h-7 w-7 items-center justify-center rounded-full bg-[#ffcc00] text-black hover:bg-[#ffe066] active:scale-90 transition-all"
-                title="Trim Left"
-              >
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="3" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
-                </svg>
-              </button>
-            </div>
-
-            {/* Center clip indicator */}
-            <button
-              type="button"
-              onClick={() => setFocusedTrack('video')}
-              className="px-2.5 py-1 rounded-full bg-white/8 border border-white/10 text-[11px] font-semibold text-[#ffcc00]/80 tabular-nums backdrop-blur-sm active:scale-95 transition-all"
-            >
-              Clip {currentClipIndex + 1}/{clipSequence.length}
-            </button>
-
-            {/* Right Corner Quick-Trim Button Group */}
-            <div className="flex items-center gap-1 bg-black/60 border border-white/10 p-1 rounded-full backdrop-blur-md">
-              <button
-                type="button"
-                onClick={() => { setFocusedTrack('video'); handleRightQuickRevert(); }}
-                className="flex h-7 w-7 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20 active:scale-90 transition-all"
-                title="Extend End"
-              >
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="3" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
-                </svg>
-              </button>
-              <button
-                type="button"
-                onClick={() => { setFocusedTrack('video'); handleRightQuickTrim(); }}
-                className="flex h-7 w-7 items-center justify-center rounded-full bg-[#ffcc00] text-black hover:bg-[#ffe066] active:scale-90 transition-all"
-                title="Trim End"
-              >
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="3" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
-                </svg>
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Playback Controls */}
-        <div className="px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={toggleEditorPlay}
-              className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-black active:scale-95 shadow-md"
-            >
-              {isEditorPlaying ? <BiPause size={24} /> : <BiPlay size={24} className="ml-0.5" />}
-            </button>
-
-            <div className="text-[13px] font-medium text-white/80">
-              <span id="editor-playback-time">
-                {(() => {
-                  if (clipSequence.length === 0) {
-                    return formatPlaybackTime(editorVideoRef.current?.currentTime || 0, videoDuration);
-                  }
+      </div>
+        <div className="px-5 py-3 flex items-center justify-between z-20 select-none">
+          {/* Left: Playback Time display */}
+          <div className="text-[13px] font-sans tracking-tight font-medium">
+            <span id="editor-playback-time" dangerouslySetInnerHTML={{
+              __html: (() => {
+                let currentSecs = 0;
+                let totalSecs = videoDuration || 0;
+                if (clipSequence.length === 0) {
+                  currentSecs = editorVideoRef.current?.currentTime || 0;
+                } else {
                   const currentClip = clipSequence[currentClipIndex];
                   const startOffset = currentClip?.startOffset || 0;
                   const speed = currentClip?.speed || 1;
                   const pastDuration = clipSequence.slice(0, currentClipIndex).reduce((sum, c) => sum + c.duration, 0);
                   const currentOffset = editorVideoRef.current ? Math.max(0, (editorVideoRef.current.currentTime - startOffset) / speed) : 0;
-                  const elapsed = Math.min(videoDuration, pastDuration + currentOffset);
-                  return formatPlaybackTime(elapsed, videoDuration);
-                })()}
-              </span>
-            </div>
+                  currentSecs = Math.min(totalSecs, pastDuration + currentOffset);
+                }
+                return formatPlaybackTime(currentSecs, totalSecs);
+              })()
+            }} />
           </div>
 
+          {/* Center: Play/Pause Button */}
+          <button
+            type="button"
+            onClick={toggleEditorPlay}
+            className="flex items-center justify-center text-white active:scale-90 transition-transform"
+          >
+            {isEditorPlaying ? <BiPause size={28} /> : <BiPlay size={28} className="fill-current text-white" />}
+          </button>
+
+          {/* Right: Undo, Redo, Fullscreen Icons */}
           <div className="flex items-center gap-4">
             <button
               type="button"
               disabled={historyIndex <= 0}
-              className={`transition-colors ${historyIndex > 0 ? 'text-white active:scale-95 cursor-pointer' : 'text-white/20 cursor-default'}`}
+              className={`transition-colors ${historyIndex > 0 ? 'text-white active:scale-90 cursor-pointer' : 'text-white/20 cursor-default'}`}
               onClick={handleUndo}
               title="Undo"
             >
-              <BiUndo size={24} />
+              <BiUndo size={22} />
             </button>
             <button
               type="button"
               disabled={historyIndex >= history.length - 1 || history.length === 0}
-              className={`transition-colors ${historyIndex < history.length - 1 && history.length > 0 ? 'text-white active:scale-95 cursor-pointer' : 'text-white/20 cursor-default'}`}
+              className={`transition-colors ${historyIndex < history.length - 1 && history.length > 0 ? 'text-white active:scale-90 cursor-pointer' : 'text-white/20 cursor-default'}`}
               onClick={handleRedo}
               title="Redo"
             >
-              <BiRedo size={24} />
+              <BiRedo size={22} />
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsEditorFullscreen(true)}
+              className="text-white/90 hover:text-white active:scale-90 transition-transform"
+              title="Fullscreen"
+            >
+              <BiExpand size={20} />
             </button>
           </div>
         </div>
 
         {/* Timeline Section */}
-        <div className="relative bg-[#1a1a1c] py-2 border-t border-white/5">
-          {/* Playhead line */}
-          <div className="absolute left-1/2 top-0 bottom-0 w-[2.5px] bg-white z-20 shadow-[0_0_15px_rgba(255,255,255,0.6)] rounded-full" />
+        <div className="relative bg-black flex-1 min-h-0 border-t border-white/10 flex flex-col">
+          {/* Fixed Centered Playhead line */}
+          <div className="absolute left-1/2 -translate-x-1/2 top-0 bottom-0 w-[2px] bg-white z-30 pointer-events-none" />
 
           {/* Tracks Container */}
           <div
             id="editor-timeline"
             onScroll={handleTimelineScroll}
             onClick={() => { setFocusedTrack(null); setIsTextTrackSelected(false); }}
-            className="relative overflow-x-auto no-scrollbar pb-10"
+            className="relative overflow-x-auto no-scrollbar pb-10 bg-black"
           >
-            {/* Centered Playhead Line */}
-            <div className="absolute left-1/2 top-0 bottom-0 w-[2px] bg-white z-40 pointer-events-none" />
-
             {/* Timeline Ruler Row */}
-            <div className={`flex h-8 items-center border-b border-white/5 transition-opacity ${focusedTrack ? 'opacity-30' : 'opacity-100'}`}>
-              <div className="sticky left-0 w-[60px] h-full border-r border-white/5 flex items-center justify-center shrink-0 bg-[#121214] z-30">
-                {/* Empty corner for ruler */}
-              </div>
+            <div className={`flex h-7 items-center border-b border-white/5 transition-opacity ${focusedTrack ? 'opacity-30' : 'opacity-100'}`}>
               <div
-                className="flex ml-[calc(50%-30px)] pr-[50%] pointer-events-none"
+                className="flex ml-[50%] pr-[50%] pointer-events-none"
                 style={{ width: timelineWidth + window.innerWidth }}
               >
-                {Array.from({ length: Math.ceil(videoDuration || 3) + 1 }).map((_, i) => (
-                  <div
-                    key={i}
-                    className="flex flex-col items-center shrink-0"
-                    style={{ width: PIXELS_PER_SECOND }}
-                  >
-                    <div className={`h-1 w-[1px] mb-1 ${i % 2 === 0 ? 'bg-white/40' : 'bg-white/10'}`} />
-                    {i % 2 === 0 && <span className="text-[10px] text-white/40">{i}s</span>}
-                  </div>
-                ))}
+                {Array.from({ length: Math.ceil(videoDuration || 3) + 1 }).map((_, i) => {
+                  const mm = String(Math.floor(i / 60)).padStart(2, '0');
+                  const ss = String(i % 60).padStart(2, '0');
+                  return (
+                    <div
+                      key={i}
+                      className="flex flex-col items-center shrink-0"
+                      style={{ width: PIXELS_PER_SECOND }}
+                    >
+                      <span className="text-[12px] font-sans font-semibold tracking-tight text-white/50">{`${mm}:${ss}`}</span>
+                    </div>
+                  );
+                })}
               </div>
             </div>
 
             {/* Video Track Row */}
-            <div className="flex h-16 group/row">
-              <div className={`sticky left-0 w-[60px] h-full bg-[#121214] border-r border-white/5 flex items-center justify-center z-30 shrink-0 transition-opacity ${focusedTrack && focusedTrack !== 'video' ? 'opacity-30' : 'opacity-100'}`}>
-                <button
-                  onClick={() => setIsVideoMuted(!isVideoMuted)}
-                  className={`${isVideoMuted ? 'text-[#fe2c55]' : 'text-white/40'} hover:text-white transition-colors`}
-                >
-                  {isVideoMuted ? <BiVolumeMute size={20} /> : <IoVolumeHighOutline size={20} />}
-                </button>
-              </div>
+            <div className="flex h-20 group/row relative">
+              {/* Speaker Mute Icon (positioned to left of playhead) */}
+              <button
+                type="button"
+                onClick={() => setIsVideoMuted(!isVideoMuted)}
+                className="absolute left-[calc(50%-42px)] top-1/2 -translate-y-1/2 z-30 p-1 text-white/70 hover:text-white transition-all active:scale-90"
+                title={isVideoMuted ? 'Unmute video' : 'Mute video'}
+              >
+                {isVideoMuted ? <BiVolumeMute size={20} className="text-[#fe2c55]" /> : <IoVolumeHighOutline size={20} />}
+              </button>
               <div
-                className={`flex ml-[calc(50%-30px)] items-center transition-all duration-300 ${focusedTrack && focusedTrack !== 'video' ? 'opacity-30' : 'opacity-100'}`}
+                className={`flex ml-[50%] items-center transition-all duration-300 ${focusedTrack && focusedTrack !== 'video' ? 'opacity-30' : 'opacity-100'}`}
               >
                 <div
                   onClick={(e) => {
                     e.stopPropagation();
                     setFocusedTrack('video');
                   }}
-                  className="relative h-12 flex rounded-[4px] bg-white/5 cursor-pointer transition-all"
+                  className="relative h-[60px] flex rounded-xl overflow-hidden bg-white/5 cursor-pointer transition-all"
                   style={{
                     width: timelineWidth,
                     marginLeft: 0
@@ -5497,15 +5983,15 @@ const CreatePage = () => {
                               setIsTextTrackSelected(false);
                             }}
                             className={`h-full flex shrink-0 relative transition-all ${focusedTrack === 'video' && currentClipIndex === idx
-                                ? 'border-y-4 border-[#ffcc00] z-10 bg-white/5 shadow-lg'
-                                : 'border-r-2 border-black/90 opacity-80'
+                                ? 'border-[3px] border-white rounded-[18px] z-10 bg-black/20 shadow-xl'
+                                : 'border-r-2 border-black/90 opacity-80 rounded-xl overflow-hidden'
                               }`}
                             style={{ width: clipWidth }}
                           >
                             {Array.from({ length: thumbCount }).map((_, i) => {
                               const thumbIdx = startThumbIdx + i;
                               return (
-                                <div key={i} className="h-full border-r border-white/5 shrink-0" style={{ width: Math.min(clipWidth - i * PIXELS_PER_SECOND * 2, PIXELS_PER_SECOND * 2) }}>
+                                <div key={i} className="h-full border-r border-white/5 shrink-0 overflow-hidden" style={{ width: Math.min(clipWidth - i * PIXELS_PER_SECOND * 2, PIXELS_PER_SECOND * 2) }}>
                                   <TimelineThumbnail
                                     src={videoThumbnails.length > thumbIdx ? videoThumbnails[thumbIdx] : (selectedMedia.image || previewUrl)}
                                     isVideo={videoThumbnails.length === 0 && !selectedMedia.image && !!previewUrl}
@@ -5517,7 +6003,7 @@ const CreatePage = () => {
                             })}
 
                             {/* Duration badge overlay */}
-                            <div className={`clip-duration-badge absolute top-1 bg-black/60 px-1.5 py-0.5 rounded text-[9px] font-black text-white pointer-events-none select-none z-20 ${focusedTrack === 'video' && currentClipIndex === idx ? 'left-[22px]' : 'left-2'
+                            <div className={`clip-duration-badge absolute top-1.5 bg-[#1c1c1e]/80 border border-white/10 px-2 py-0.5 rounded-[6px] text-[11px] font-sans font-medium text-white pointer-events-none select-none z-20 ${focusedTrack === 'video' && currentClipIndex === idx ? 'left-[26px]' : 'left-2'
                               }`}>
                               {clip.duration.toFixed(1)}s
                             </div>
@@ -5525,8 +6011,8 @@ const CreatePage = () => {
                             {/* Trimmer Handles */}
                             <div
                               className={`absolute z-50 cursor-col-resize flex items-center justify-center transition-all duration-150 ${focusedTrack === 'video' && currentClipIndex === idx
-                                  ? '-top-[4px] -bottom-[4px] -left-[4px] w-[18px] bg-[#ffcc00] rounded-l-[8px] opacity-100 pointer-events-auto'
-                                  : 'top-0 bottom-0 left-0 w-[18px] bg-transparent opacity-0 hover:opacity-20 hover:bg-[#ffcc00] rounded-l-[8px] pointer-events-auto'
+                                  ? '-top-[3px] -bottom-[3px] -left-[3px] w-[22px] bg-white text-black rounded-l-[18px] opacity-100 pointer-events-auto shadow-md'
+                                  : 'top-0 bottom-0 left-0 w-[22px] bg-transparent opacity-0 hover:opacity-20 hover:bg-white rounded-l-[18px] pointer-events-auto'
                                 }`}
                               onPointerDown={(e) => {
                                 e.stopPropagation();
@@ -5552,10 +6038,10 @@ const CreatePage = () => {
 
                                 // Instantly style clip + handle as active via DOM (no re-render)
                                 if (clipEl) {
-                                  clipEl.classList.add('border-y-4', 'border-[#ffcc00]', 'z-10', 'shadow-lg');
+                                  clipEl.classList.add('border-[3px]', 'border-white', 'rounded-[18px]', 'z-10', 'shadow-xl');
                                   clipEl.classList.remove('border-r-2', 'border-black/90', 'opacity-80');
                                 }
-                                targetHandle.style.cssText = 'top:-4px;bottom:-4px;left:-4px;width:18px;background:#ffcc00;border-radius:8px 0 0 8px;opacity:1;';
+                                targetHandle.style.cssText = 'top:-3px;bottom:-3px;left:-3px;width:22px;background:#ffffff;border-radius:18px 0 0 18px;opacity:1;';
 
                                 // Pause playback so the playhead-follow scroll loop doesn't fight the drag
                                 setIsEditorPlaying(false);
@@ -5565,60 +6051,69 @@ const CreatePage = () => {
                                 }
 
                                 document.body.style.cursor = 'col-resize';
+                                document.body.style.userSelect = 'none';
 
                                 let finalStartOffset = initialStartOffset;
                                 let finalOriginalDuration = initialOriginalDuration;
                                 let finalDuration = clip.duration;
 
+                                let pendingRaf = null;
                                 const moveHandler = (moveEvent) => {
-                                  const deltaX = moveEvent.clientX - startX;
-                                  const deltaTimeline = deltaX / PIXELS_PER_SECOND;
-                                  const deltaRaw = deltaTimeline * speed;
+                                  moveEvent.preventDefault();
+                                  if (pendingRaf) return;
+                                  const clientX = moveEvent.clientX;
+                                  pendingRaf = requestAnimationFrame(() => {
+                                    pendingRaf = null;
+                                    const deltaX = clientX - startX;
+                                    const deltaTimeline = deltaX / PIXELS_PER_SECOND;
+                                    const deltaRaw = deltaTimeline * speed;
 
-                                  let newStartOffset = initialStartOffset + deltaRaw;
-                                  newStartOffset = Math.max(limitStart, Math.min((initialStartOffset + initialOriginalDuration) - (0.5 * speed), newStartOffset));
-                                  const newOriginalDuration = (initialStartOffset + initialOriginalDuration) - newStartOffset;
-                                  const newDuration = newOriginalDuration / speed;
+                                    let newStartOffset = initialStartOffset + deltaRaw;
+                                    newStartOffset = Math.max(limitStart, Math.min((initialStartOffset + initialOriginalDuration) - (0.5 * speed), newStartOffset));
+                                    const newOriginalDuration = (initialStartOffset + initialOriginalDuration) - newStartOffset;
+                                    const newDuration = newOriginalDuration / speed;
 
-                                  finalStartOffset = newStartOffset;
-                                  finalOriginalDuration = newOriginalDuration;
-                                  finalDuration = newDuration;
+                                    finalStartOffset = newStartOffset;
+                                    finalOriginalDuration = newOriginalDuration;
+                                    finalDuration = newDuration;
 
-                                  // 1. Seek the video player
-                                  if (editorVideoRef.current) {
-                                    editorVideoRef.current.currentTime = newStartOffset;
-                                  }
+                                    // 1. Seek the video player smoothly
+                                    if (editorVideoRef.current && Math.abs(editorVideoRef.current.currentTime - newStartOffset) > 0.01) {
+                                      editorVideoRef.current.currentTime = newStartOffset;
+                                    }
 
-                                  // 2. Update playback time display in DOM
-                                  const otherClipsDurationLeft = clipSequence.reduce((sum, c, i) => i !== idx ? sum + c.duration : sum, 0);
-                                  const totalDurLeft = otherClipsDurationLeft + newDuration;
-                                  const elapsed = pastDuration + (newStartOffset - limitStart) / speed;
-                                  if (timeSpan) timeSpan.innerText = formatPlaybackTime(elapsed, totalDurLeft);
+                                    // 2. Update playback time display in DOM
+                                    const otherClipsDurationLeft = clipSequence.reduce((sum, c, i) => i !== idx ? sum + c.duration : sum, 0);
+                                    const totalDurLeft = otherClipsDurationLeft + newDuration;
+                                    const elapsed = pastDuration + (newStartOffset - limitStart) / speed;
+                                    if (timeSpan) timeSpan.innerHTML = formatPlaybackTime(elapsed, totalDurLeft);
 
-                                  // 3. Update clip width & marginLeft in DOM
-                                  const clampedDeltaRaw = newStartOffset - initialStartOffset;
-                                  const clampedDeltaTimeline = clampedDeltaRaw / speed;
-                                  const clampedDeltaX = clampedDeltaTimeline * PIXELS_PER_SECOND;
-                                  if (clipEl) {
-                                    clipEl.style.width = (newDuration * PIXELS_PER_SECOND) + 'px';
-                                    clipEl.style.marginLeft = clampedDeltaX + 'px';
-                                  }
+                                    // 3. Update clip width & marginLeft in DOM
+                                    const clampedDeltaRaw = newStartOffset - initialStartOffset;
+                                    const clampedDeltaTimeline = clampedDeltaRaw / speed;
+                                    const clampedDeltaX = clampedDeltaTimeline * PIXELS_PER_SECOND;
+                                    if (clipEl) {
+                                      clipEl.style.width = (newDuration * PIXELS_PER_SECOND) + 'px';
+                                      clipEl.style.marginLeft = clampedDeltaX + 'px';
+                                    }
 
-                                  // 4. Update duration badge in DOM
-                                  if (badgeEl) badgeEl.innerText = newDuration.toFixed(1) + 's';
+                                    // 4. Update duration badge in DOM
+                                    if (badgeEl) badgeEl.innerText = newDuration.toFixed(1) + 's';
 
-                                  // 5. Update flex container & track width in DOM
-                                  const otherClipsDuration = clipSequence.reduce((sum, c, i) => i !== idx ? sum + c.duration : sum, 0);
-                                  const totalDur = otherClipsDuration + newDuration;
-                                  if (flexContainerEl) flexContainerEl.style.width = (totalDur * PIXELS_PER_SECOND) + 'px';
-                                  if (outerTrackEl) outerTrackEl.style.width = (totalDur * PIXELS_PER_SECOND) + 'px';
+                                    // 5. Update flex container & track width in DOM
+                                    const otherClipsDuration = clipSequence.reduce((sum, c, i) => i !== idx ? sum + c.duration : sum, 0);
+                                    const totalDur = otherClipsDuration + newDuration;
+                                    if (flexContainerEl) flexContainerEl.style.width = (totalDur * PIXELS_PER_SECOND) + 'px';
+                                    if (outerTrackEl) outerTrackEl.style.width = (totalDur * PIXELS_PER_SECOND) + 'px';
+                                  });
                                 };
 
-                                const upHandler = () => {
+                                const upHandler = (upEvent) => {
                                   document.body.style.cursor = '';
+                                  document.body.style.userSelect = '';
                                   try {
-                                    if (targetHandle.hasPointerCapture(e.pointerId)) {
-                                      targetHandle.releasePointerCapture(e.pointerId);
+                                    if (targetHandle.hasPointerCapture(upEvent.pointerId)) {
+                                      targetHandle.releasePointerCapture(upEvent.pointerId);
                                     }
                                   } catch (err) {
                                     console.warn("Failed to release pointer capture:", err);
@@ -5628,6 +6123,7 @@ const CreatePage = () => {
                                   targetHandle.style.cssText = '';
                                   window.removeEventListener('pointermove', moveHandler);
                                   window.removeEventListener('pointerup', upHandler);
+                                  window.removeEventListener('pointercancel', upHandler);
 
                                   // NOW commit React state (safe — drag is over, element is stable)
                                   setCurrentClipIndex(idx);
@@ -5646,22 +6142,21 @@ const CreatePage = () => {
                                   });
                                 };
 
-                                window.addEventListener('pointermove', moveHandler);
+                                window.addEventListener('pointermove', moveHandler, { passive: false });
                                 window.addEventListener('pointerup', upHandler);
+                                window.addEventListener('pointercancel', upHandler);
                               }}
                             >
                               {focusedTrack === 'video' && currentClipIndex === idx && (
-                                <svg className="w-3 h-3 text-white font-black" fill="none" stroke="currentColor" strokeWidth="4.5" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
-                                </svg>
+                                <BiChevronLeft size={20} className="text-black font-extrabold -ml-0.5" />
                               )}
                             </div>
 
                             {/* Right Trimmer Handle */}
                             <div
                               className={`absolute z-50 cursor-col-resize flex items-center justify-center transition-all duration-150 ${focusedTrack === 'video' && currentClipIndex === idx
-                                  ? '-top-[4px] -bottom-[4px] -right-[4px] w-[18px] bg-[#ffcc00] rounded-r-[8px] opacity-100 pointer-events-auto'
-                                  : 'top-0 bottom-0 right-0 w-[18px] bg-transparent opacity-0 hover:opacity-20 hover:bg-[#ffcc00] rounded-r-[8px] pointer-events-auto'
+                                  ? '-top-[3px] -bottom-[3px] -right-[3px] w-[22px] bg-white text-black rounded-r-[18px] opacity-100 pointer-events-auto shadow-md'
+                                  : 'top-0 bottom-0 right-0 w-[22px] bg-transparent opacity-0 hover:opacity-20 hover:bg-white rounded-r-[18px] pointer-events-auto'
                                 }`}
                               onPointerDown={(e) => {
                                 e.stopPropagation();
@@ -5687,10 +6182,10 @@ const CreatePage = () => {
 
                                 // Instantly style clip + handle as active via DOM (no re-render)
                                 if (clipEl) {
-                                  clipEl.classList.add('border-y-4', 'border-[#ffcc00]', 'z-10', 'shadow-lg');
+                                  clipEl.classList.add('border-[3px]', 'border-white', 'rounded-[18px]', 'z-10', 'shadow-xl');
                                   clipEl.classList.remove('border-r-2', 'border-black/90', 'opacity-80');
                                 }
-                                targetHandle.style.cssText = 'top:-4px;bottom:-4px;right:-4px;width:18px;background:#ffcc00;border-radius:0 8px 8px 0;opacity:1;';
+                                targetHandle.style.cssText = 'top:-3px;bottom:-3px;right:-3px;width:22px;background:#ffffff;border-radius:0 18px 18px 0;opacity:1;';
 
                                 // Pause playback so the playhead-follow scroll loop doesn't fight the drag
                                 setIsEditorPlaying(false);
@@ -5700,51 +6195,61 @@ const CreatePage = () => {
                                 }
 
                                 document.body.style.cursor = 'col-resize';
+                                document.body.style.userSelect = 'none';
 
                                 let finalOriginalDuration = initialOriginalDuration;
                                 let finalDuration = clip.duration;
 
+                                let pendingRaf = null;
                                 const moveHandler = (moveEvent) => {
-                                  const deltaX = moveEvent.clientX - startX;
-                                  const deltaTimeline = deltaX / PIXELS_PER_SECOND;
-                                  const deltaRaw = deltaTimeline * speed;
+                                  moveEvent.preventDefault();
+                                  if (pendingRaf) return;
+                                  const clientX = moveEvent.clientX;
+                                  pendingRaf = requestAnimationFrame(() => {
+                                    pendingRaf = null;
+                                    const deltaX = clientX - startX;
+                                    const deltaTimeline = deltaX / PIXELS_PER_SECOND;
+                                    const deltaRaw = deltaTimeline * speed;
 
-                                  let newOriginalDuration = initialOriginalDuration + deltaRaw;
-                                  newOriginalDuration = Math.max(0.5 * speed, Math.min(limitEnd - startOffset, newOriginalDuration));
-                                  const newDuration = newOriginalDuration / speed;
+                                    let newOriginalDuration = initialOriginalDuration + deltaRaw;
+                                    newOriginalDuration = Math.max(0.5 * speed, Math.min(limitEnd - startOffset, newOriginalDuration));
+                                    const newDuration = newOriginalDuration / speed;
 
-                                  finalOriginalDuration = newOriginalDuration;
-                                  finalDuration = newDuration;
+                                    finalOriginalDuration = newOriginalDuration;
+                                    finalDuration = newDuration;
 
-                                  // 1. Seek the video player
-                                  if (editorVideoRef.current) {
-                                    editorVideoRef.current.currentTime = startOffset + newOriginalDuration;
-                                  }
+                                    // 1. Seek the video player smoothly
+                                    const targetSeekTime = startOffset + newOriginalDuration;
+                                    if (editorVideoRef.current && Math.abs(editorVideoRef.current.currentTime - targetSeekTime) > 0.01) {
+                                      editorVideoRef.current.currentTime = targetSeekTime;
+                                    }
 
-                                  // 2. Update playback time display in DOM
-                                  const otherClipsDurationRight = clipSequence.reduce((sum, c, i) => i !== idx ? sum + c.duration : sum, 0);
-                                  const totalDurRight = otherClipsDurationRight + newDuration;
-                                  const elapsed = pastDuration + (startOffset + newOriginalDuration - (clip.limitStart || 0)) / speed;
-                                  if (timeSpan) timeSpan.innerText = formatPlaybackTime(elapsed, totalDurRight);
+                                    // 2. Update playback time display in DOM
+                                    const otherClipsDurationRight = clipSequence.reduce((sum, c, i) => i !== idx ? sum + c.duration : sum, 0);
+                                    const totalDurRight = otherClipsDurationRight + newDuration;
+                                    const elapsed = pastDuration + (startOffset + newOriginalDuration - (clip.limitStart || 0)) / speed;
+                                    if (timeSpan) timeSpan.innerHTML = formatPlaybackTime(elapsed, totalDurRight);
 
-                                  // 3. Update clip width in DOM
-                                  if (clipEl) clipEl.style.width = (newDuration * PIXELS_PER_SECOND) + 'px';
+                                    // 3. Update clip width in DOM
+                                    if (clipEl) clipEl.style.width = (newDuration * PIXELS_PER_SECOND) + 'px';
 
-                                  // 4. Update duration badge in DOM
-                                  if (badgeEl) badgeEl.innerText = newDuration.toFixed(1) + 's';
+                                    // 4. Update duration badge in DOM
+                                    if (badgeEl) badgeEl.innerText = newDuration.toFixed(1) + 's';
 
-                                  // 5. Update flex container & track width in DOM
-                                  const otherClipsDuration = clipSequence.reduce((sum, c, i) => i !== idx ? sum + c.duration : sum, 0);
-                                  const totalDur = otherClipsDuration + newDuration;
-                                  if (flexContainerEl) flexContainerEl.style.width = (totalDur * PIXELS_PER_SECOND) + 'px';
-                                  if (outerTrackEl) outerTrackEl.style.width = (totalDur * PIXELS_PER_SECOND) + 'px';
+                                    // 5. Update flex container & track width in DOM
+                                    const otherClipsDuration = clipSequence.reduce((sum, c, i) => i !== idx ? sum + c.duration : sum, 0);
+                                    const totalDur = otherClipsDuration + newDuration;
+                                    if (flexContainerEl) flexContainerEl.style.width = (totalDur * PIXELS_PER_SECOND) + 'px';
+                                    if (outerTrackEl) outerTrackEl.style.width = (totalDur * PIXELS_PER_SECOND) + 'px';
+                                  });
                                 };
 
-                                const upHandler = () => {
+                                const upHandler = (upEvent) => {
                                   document.body.style.cursor = '';
+                                  document.body.style.userSelect = '';
                                   try {
-                                    if (targetHandle.hasPointerCapture(e.pointerId)) {
-                                      targetHandle.releasePointerCapture(e.pointerId);
+                                    if (targetHandle.hasPointerCapture(upEvent.pointerId)) {
+                                      targetHandle.releasePointerCapture(upEvent.pointerId);
                                     }
                                   } catch (err) {
                                     console.warn("Failed to release pointer capture:", err);
@@ -5753,6 +6258,7 @@ const CreatePage = () => {
                                   targetHandle.style.cssText = '';
                                   window.removeEventListener('pointermove', moveHandler);
                                   window.removeEventListener('pointerup', upHandler);
+                                  window.removeEventListener('pointercancel', upHandler);
 
                                   // NOW commit React state (safe - drag is over)
                                   setCurrentClipIndex(idx);
@@ -5770,14 +6276,13 @@ const CreatePage = () => {
                                   });
                                 };
 
-                                window.addEventListener('pointermove', moveHandler);
+                                window.addEventListener('pointermove', moveHandler, { passive: false });
                                 window.addEventListener('pointerup', upHandler);
+                                window.addEventListener('pointercancel', upHandler);
                               }}
                             >
                               {focusedTrack === 'video' && currentClipIndex === idx && (
-                                <svg className="w-3 h-3 text-white font-black" fill="none" stroke="currentColor" strokeWidth="4.5" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
-                                </svg>
+                                <BiChevronRight size={20} className="text-black font-extrabold -mr-0.5" />
                               )}
                             </div>
                           </div>
@@ -5801,10 +6306,10 @@ const CreatePage = () => {
                 {/* Add Clip Button */}
                 <button
                   onClick={() => triggerFilePicker()}
-                  className="h-10 px-4 ml-2 rounded-[4px] bg-white/5 border border-white/5 flex items-center shrink-0 active:bg-white/10 transition-colors"
+                  className="w-12 h-[52px] ml-2 rounded-2xl bg-white text-black font-extrabold flex items-center justify-center shrink-0 shadow-lg active:scale-95 transition-transform"
+                  title="Add clip"
                 >
-                  <BiPlus size={18} className="text-white/60 mr-1" />
-                  <span className="text-[11px] font-medium text-white/60">Add</span>
+                  <BiPlus size={28} className="text-black stroke-[1.5]" />
                 </button>
 
                 {/* Scroll Spacer */}
@@ -5813,16 +6318,8 @@ const CreatePage = () => {
             </div>
 
             {/* Audio Track Row */}
-            <div className="flex h-12 mt-2">
-              <div className="sticky left-0 w-[60px] h-full bg-[#121214] border-r border-white/5 flex items-center justify-center z-30 shrink-0">
-                <button
-                  onClick={() => setIsMusicMuted(!isMusicMuted)}
-                  className={`${isMusicMuted ? 'text-[#fe2c55]' : 'text-white/40'} hover:text-white transition-colors`}
-                >
-                  {isMusicMuted ? <BiVolumeMute size={20} /> : <IoVolumeHighOutline size={20} />}
-                </button>
-              </div>
-              <div className="flex ml-[calc(50%-30px)] items-center">
+            <div className="flex h-14 mt-2">
+              <div className="flex ml-[50%] items-center">
                 {selectedSounds.length > 0 ? (
                   <div className="flex items-center gap-3">
                     {selectedSounds.map((sound, idx) => (
@@ -5870,253 +6367,254 @@ const CreatePage = () => {
                     </button>
                   </div>
                 ) : (
-                  <button
+                  <div
                     onClick={() => {
                       setEditingSoundIndex(-1);
                       setActiveSheet('music-library');
                     }}
-                    className="h-10 flex items-center gap-2 text-white/40 px-3 bg-white/5 rounded-[4px] hover:text-white hover:bg-white/10 transition-all border border-transparent hover:border-white/10"
+                    className="h-12 bg-[#222224] hover:bg-[#2a2a2c] rounded-2xl flex items-center shadow-md select-none shrink-0 relative"
+                    style={{ width: Math.max(timelineWidth, window.innerWidth) }}
                   >
-                    <BiPlus size={18} />
-                    <span className="text-[11px] font-medium">Add music</span>
-                  </button>
+                    <div className="sticky left-[calc(50%+12px)] flex items-center gap-3 px-2 z-10 pointer-events-none">
+                      <BiMusic size={18} className="text-white shrink-0" />
+                      <span className="text-[14px] font-bold text-white tracking-wide whitespace-nowrap">Add sound</span>
+                    </div>
+                  </div>
                 )}
               </div>
             </div>
 
-            {/* Text Track Row */}
-            <div className="flex h-12 mt-2" onClick={(e) => {
-              // Clicking outside text clip deselects
-              if (e.target === e.currentTarget) {
-                setIsTextTrackSelected(false);
-                setSelectedTextId(null);
-              }
-            }}>
-              <div className="sticky left-0 w-[60px] h-full bg-[#121214] border-r border-white/5 flex items-center justify-center z-30 shrink-0">
-                {/* Text Icon */}
-                <IoTextOutline size={18} className={isTextTrackSelected ? 'text-white' : 'text-white/20'} />
-              </div>
-              <div className="flex ml-[calc(50%-30px)] items-center relative h-full">
-                {textList.map((item) => {
-                  const isSelected = selectedTextId === item.id;
-                  return (
-                    <div key={item.id} className="relative">
-                      {/* Clip Bar */}
-                      <div
-                        className={`absolute h-10 rounded-[4px] flex items-center px-3 shadow-lg cursor-pointer transition-all ${
-                          isSelected && isTextTrackSelected
-                            ? 'border-y-4 border-[#ffcc00] z-10 bg-white/5 shadow-lg animate-pulse-subtle'
-                            : 'bg-white/20 border border-white/30'
-                        }`}
-                        style={{
-                          left: item.startTime * PIXELS_PER_SECOND,
-                          width: (item.endTime - item.startTime) * PIXELS_PER_SECOND,
-                          top: '-20px'
-                        }}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          // Ignore click if it was a drag gesture
-                          if (e.currentTarget.dataset.dragged === 'true') {
-                            e.currentTarget.removeAttribute('data-dragged');
-                            return;
-                          }
-
-                          // Select this item and sync states
-                          setSelectedTextId(item.id);
-                          setOverlayText(item.text);
-                          setTextStartTime(item.startTime);
-                          setTextEndTime(item.endTime);
-                          textStartTimeRef.current = item.startTime;
-                          textEndTimeRef.current = item.endTime;
-                          setTextPos({ x: item.x, y: item.y });
-                          setTextRotation(item.rotation || 0);
-                          setOverlayColor(item.color || '#ffffff');
-                          setOverlayFont(item.font || 'Standard');
-                          setOverlayFontSize(item.fontSize || 28);
-
-                          setIsTextTrackSelected(prev => {
-                            const next = !prev || selectedTextId !== item.id;
-                            if (next) {
-                              setFocusedTrack('text');
-                            } else {
-                              setFocusedTrack(null);
-                            }
-                            return next;
-                          });
-                        }}
-                        onPointerDown={(e) => {
-                          const target = e.currentTarget;
-                          target.setPointerCapture(e.pointerId);
-                          const startX = e.clientX;
-                          const initialStart = item.startTime;
-                          const initialEnd = item.endTime;
-                          const width = initialEnd - initialStart;
-                          let hasMoved = false;
-
-                          const moveHandler = (mE) => {
-                            const dx = Math.abs(mE.clientX - startX);
-                            if (dx > 4) {
-                              hasMoved = true;
-                              target.dataset.dragged = 'true';
-                            }
-                            if (!hasMoved) return;
-                            const delta = (mE.clientX - startX) / PIXELS_PER_SECOND;
-                            const newStart = Math.max(0, Math.min(videoDuration - width, initialStart + delta));
-                            const newEnd = newStart + width;
-                            
-                            // Update this item directly in state
-                            setTextList(prev => prev.map(t => {
-                              if (t.id === item.id) {
-                                return { ...t, startTime: newStart, endTime: newEnd };
-                              }
-                              return t;
-                            }));
-
-                            if (isSelected) {
-                              textStartTimeRef.current = newStart;
-                              textEndTimeRef.current = newEnd;
-                              setTextStartTime(newStart);
-                              setTextEndTime(newEnd);
-                            }
-                          };
-
-                          const upHandler = () => {
-                            try {
-                              if (target.hasPointerCapture(e.pointerId)) {
-                                target.releasePointerCapture(e.pointerId);
-                              }
-                            } catch (err) {}
-                            window.removeEventListener('pointermove', moveHandler);
-                            window.removeEventListener('pointerup', upHandler);
-                          };
-
-                          window.addEventListener('pointermove', moveHandler);
-                          window.addEventListener('pointerup', upHandler);
-                        }}
-                      >
-                        <span className={`text-[10px] font-bold text-white truncate pointer-events-none flex-1 transition-all ${isSelected && isTextTrackSelected ? 'pl-4' : ''}`}>
-                          {item.text}
-                        </span>
-                        <span className={`text-[9px] text-white/50 pointer-events-none ml-1 shrink-0 transition-all ${isSelected && isTextTrackSelected ? 'pr-4' : ''}`}>
-                          {(item.endTime - item.startTime).toFixed(1)}s
-                        </span>
-
-                        {/* Start Handle */}
+            {/* Text Track Row (Only rendered when text items exist) */}
+            {textList.length > 0 && (
+              <div className="flex h-12 mt-2" onClick={(e) => {
+                // Clicking outside text clip deselects
+                if (e.target === e.currentTarget) {
+                  setIsTextTrackSelected(false);
+                  setSelectedTextId(null);
+                }
+              }}>
+                <div className="flex ml-[50%] items-center relative h-full">
+                  {textList.map((item) => {
+                    const isSelected = selectedTextId === item.id;
+                    return (
+                      <div key={item.id} className="relative">
+                        {/* Clip Bar */}
                         <div
-                          className={`absolute z-50 cursor-col-resize flex items-center justify-center transition-all duration-150 ${isSelected && isTextTrackSelected
-                              ? '-top-[4px] -bottom-[4px] -left-[4px] w-[18px] bg-[#ffcc00] rounded-l-[8px] opacity-100 pointer-events-auto'
-                              : 'top-0 bottom-0 left-0 w-[18px] bg-transparent opacity-0 hover:opacity-20 hover:bg-[#ffcc00] rounded-l-[8px] pointer-events-auto'
-                            }`}
-                          onPointerDown={(e) => {
+                          className={`absolute h-10 rounded-[4px] flex items-center px-3 shadow-lg cursor-pointer transition-all ${
+                            isSelected && isTextTrackSelected
+                              ? 'border-y-4 border-[#ffcc00] z-10 bg-white/5 shadow-lg animate-pulse-subtle'
+                              : 'bg-white/20 border border-white/30'
+                          }`}
+                          style={{
+                            left: item.startTime * PIXELS_PER_SECOND,
+                            width: (item.endTime - item.startTime) * PIXELS_PER_SECOND,
+                            top: '-20px'
+                          }}
+                          onClick={(e) => {
                             e.stopPropagation();
+                            // Ignore click if it was a drag gesture
+                            if (e.currentTarget.dataset.dragged === 'true') {
+                              e.currentTarget.removeAttribute('data-dragged');
+                              return;
+                            }
+
+                            // Select this item and sync states
+                            setSelectedTextId(item.id);
+                            setOverlayText(item.text);
+                            setTextStartTime(item.startTime);
+                            setTextEndTime(item.endTime);
+                            textStartTimeRef.current = item.startTime;
+                            textEndTimeRef.current = item.endTime;
+                            setTextPos({ x: item.x, y: item.y });
+                            setTextRotation(item.rotation || 0);
+                            setOverlayColor(item.color || '#ffffff');
+                            setOverlayFont(item.font || 'Standard');
+                            setOverlayFontSize(item.fontSize || 28);
+
+                            setIsTextTrackSelected(prev => {
+                              const next = !prev || selectedTextId !== item.id;
+                              if (next) {
+                                setFocusedTrack('text');
+                              } else {
+                                setFocusedTrack(null);
+                              }
+                              return next;
+                            });
+                          }}
+                          onPointerDown={(e) => {
                             const target = e.currentTarget;
                             target.setPointerCapture(e.pointerId);
                             const startX = e.clientX;
                             const initialStart = item.startTime;
+                            const initialEnd = item.endTime;
+                            const width = initialEnd - initialStart;
+                            let hasMoved = false;
+
                             const moveHandler = (mE) => {
+                              const dx = Math.abs(mE.clientX - startX);
+                              if (dx > 4) {
+                                hasMoved = true;
+                                target.dataset.dragged = 'true';
+                              }
+                              if (!hasMoved) return;
                               const delta = (mE.clientX - startX) / PIXELS_PER_SECOND;
-                              const newStart = Math.max(0, Math.min(item.endTime - 0.5, initialStart + delta));
+                              const newStart = Math.max(0, Math.min(videoDuration - width, initialStart + delta));
+                              const newEnd = newStart + width;
                               
+                              // Update this item directly in state
                               setTextList(prev => prev.map(t => {
                                 if (t.id === item.id) {
-                                  return { ...t, startTime: newStart };
+                                  return { ...t, startTime: newStart, endTime: newEnd };
                                 }
                                 return t;
                               }));
 
                               if (isSelected) {
                                 textStartTimeRef.current = newStart;
-                                setTextStartTime(newStart);
-                              }
-                            };
-                            const upHandler = () => {
-                              target.removeEventListener('pointermove', moveHandler);
-                              target.removeEventListener('pointerup', upHandler);
-                            };
-                            target.addEventListener('pointermove', moveHandler);
-                            target.addEventListener('pointerup', upHandler);
-                          }}
-                        >
-                          {isSelected && isTextTrackSelected && (
-                            <svg className="w-3 h-3 text-white font-black" fill="none" stroke="currentColor" strokeWidth="4.5" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
-                            </svg>
-                          )}
-                        </div>
-
-                        {/* End Handle */}
-                        <div
-                          className={`absolute z-50 cursor-col-resize flex items-center justify-center transition-all duration-150 ${isSelected && isTextTrackSelected
-                              ? '-top-[4px] -bottom-[4px] -right-[4px] w-[18px] bg-[#ffcc00] rounded-r-[8px] opacity-100 pointer-events-auto'
-                              : 'top-0 bottom-0 right-0 w-[18px] bg-transparent opacity-0 hover:opacity-20 hover:bg-[#ffcc00] rounded-r-[8px] pointer-events-auto'
-                            }`}
-                          onPointerDown={(e) => {
-                            e.stopPropagation();
-                            const target = e.currentTarget;
-                            target.setPointerCapture(e.pointerId);
-                            const startX = e.clientX;
-                            const initialEnd = item.endTime;
-                            const moveHandler = (mE) => {
-                              const delta = (mE.clientX - startX) / PIXELS_PER_SECOND;
-                              const newEnd = Math.min(videoDuration, Math.max(item.startTime + 0.5, initialEnd + delta));
-                              
-                              setTextList(prev => prev.map(t => {
-                                if (t.id === item.id) {
-                                  return { ...t, endTime: newEnd };
-                                }
-                                return t;
-                              }));
-
-                              if (isSelected) {
                                 textEndTimeRef.current = newEnd;
+                                setTextStartTime(newStart);
                                 setTextEndTime(newEnd);
                               }
                             };
+
                             const upHandler = () => {
-                              target.removeEventListener('pointermove', moveHandler);
-                              target.removeEventListener('pointerup', upHandler);
+                              try {
+                                if (target.hasPointerCapture(e.pointerId)) {
+                                  target.releasePointerCapture(e.pointerId);
+                                }
+                              } catch (err) {}
+                              window.removeEventListener('pointermove', moveHandler);
+                              window.removeEventListener('pointerup', upHandler);
                             };
-                            target.addEventListener('pointermove', moveHandler);
-                            target.addEventListener('pointerup', upHandler);
+
+                            window.addEventListener('pointermove', moveHandler);
+                            window.addEventListener('pointerup', upHandler);
                           }}
                         >
-                          {isSelected && isTextTrackSelected && (
-                            <svg className="w-3 h-3 text-white font-black" fill="none" stroke="currentColor" strokeWidth="4.5" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
-                            </svg>
-                          )}
+                          <span className={`text-[10px] font-bold text-white truncate pointer-events-none flex-1 transition-all ${isSelected && isTextTrackSelected ? 'pl-4' : ''}`}>
+                            {item.text}
+                          </span>
+                          <span className={`text-[9px] text-white/50 pointer-events-none ml-1 shrink-0 transition-all ${isSelected && isTextTrackSelected ? 'pr-4' : ''}`}>
+                            {(item.endTime - item.startTime).toFixed(1)}s
+                          </span>
+
+                          {/* Start Handle */}
+                          <div
+                            className={`absolute z-50 cursor-col-resize flex items-center justify-center transition-all duration-150 ${isSelected && isTextTrackSelected
+                                ? '-top-[4px] -bottom-[4px] -left-[4px] w-[18px] bg-[#ffcc00] rounded-l-[8px] opacity-100 pointer-events-auto'
+                                : 'top-0 bottom-0 left-0 w-[18px] bg-transparent opacity-0 hover:opacity-20 hover:bg-[#ffcc00] rounded-l-[8px] pointer-events-auto'
+                              }`}
+                            onPointerDown={(e) => {
+                              e.stopPropagation();
+                              const target = e.currentTarget;
+                              target.setPointerCapture(e.pointerId);
+                              const startX = e.clientX;
+                              const initialStart = item.startTime;
+                              const moveHandler = (mE) => {
+                                const delta = (mE.clientX - startX) / PIXELS_PER_SECOND;
+                                const newStart = Math.max(0, Math.min(item.endTime - 0.5, initialStart + delta));
+                                
+                                setTextList(prev => prev.map(t => {
+                                  if (t.id === item.id) {
+                                    return { ...t, startTime: newStart };
+                                  }
+                                  return t;
+                                }));
+
+                                if (isSelected) {
+                                  textStartTimeRef.current = newStart;
+                                  setTextStartTime(newStart);
+                                }
+                              };
+                              const upHandler = () => {
+                                target.removeEventListener('pointermove', moveHandler);
+                                target.removeEventListener('pointerup', upHandler);
+                              };
+                              target.addEventListener('pointermove', moveHandler);
+                              target.addEventListener('pointerup', upHandler);
+                            }}
+                          >
+                            {isSelected && isTextTrackSelected && (
+                              <svg className="w-3 h-3 text-white font-black" fill="none" stroke="currentColor" strokeWidth="4.5" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+                              </svg>
+                            )}
+                          </div>
+
+                          {/* End Handle */}
+                          <div
+                            className={`absolute z-50 cursor-col-resize flex items-center justify-center transition-all duration-150 ${isSelected && isTextTrackSelected
+                                ? '-top-[4px] -bottom-[4px] -right-[4px] w-[18px] bg-[#ffcc00] rounded-r-[8px] opacity-100 pointer-events-auto'
+                                : 'top-0 bottom-0 right-0 w-[18px] bg-transparent opacity-0 hover:opacity-20 hover:bg-[#ffcc00] rounded-r-[8px] pointer-events-auto'
+                              }`}
+                            onPointerDown={(e) => {
+                              e.stopPropagation();
+                              const target = e.currentTarget;
+                              target.setPointerCapture(e.pointerId);
+                              const startX = e.clientX;
+                              const initialEnd = item.endTime;
+                              const moveHandler = (mE) => {
+                                const delta = (mE.clientX - startX) / PIXELS_PER_SECOND;
+                                const newEnd = Math.min(videoDuration, Math.max(item.startTime + 0.5, initialEnd + delta));
+                                
+                                setTextList(prev => prev.map(t => {
+                                  if (t.id === item.id) {
+                                    return { ...t, endTime: newEnd };
+                                  }
+                                  return t;
+                                }));
+
+                                if (isSelected) {
+                                  textEndTimeRef.current = newEnd;
+                                  setTextEndTime(newEnd);
+                                }
+                              };
+                              const upHandler = () => {
+                                target.removeEventListener('pointermove', moveHandler);
+                                target.removeEventListener('pointerup', upHandler);
+                              };
+                              target.addEventListener('pointermove', moveHandler);
+                              target.addEventListener('pointerup', upHandler);
+                            }}
+                          >
+                            {isSelected && isTextTrackSelected && (
+                              <svg className="w-3 h-3 text-white font-black" fill="none" stroke="currentColor" strokeWidth="4.5" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+                              </svg>
+                            )}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
 
-                {/* Add text button - always positioned after the last text clip */}
-                <button
-                  onClick={() => {
-                    const maxEndTime = textList.reduce((max, t) => Math.max(max, t.endTime), 0);
-                    const start = Math.min(videoDuration, maxEndTime);
-                    const end = Math.min(videoDuration, start + 5);
-                    setOverlayText('');
-                    setTextStartTime(start);
-                    setTextEndTime(end);
-                    textStartTimeRef.current = start;
-                    textEndTimeRef.current = end;
-                    setSelectedTextId(null);
-                    setIsTextTrackSelected(false);
-                    setIsEditingText(true);
-                  }}
-                  className="absolute h-10 flex items-center gap-2 text-white/40 px-3 bg-white/5 rounded-[4px] hover:text-white hover:bg-white/10 transition-all border border-transparent hover:border-white/10 shrink-0 pointer-events-auto whitespace-nowrap"
-                  style={{
-                    left: (textList.reduce((max, t) => Math.max(max, t.endTime), 0) * PIXELS_PER_SECOND) + 12,
-                    top: '4px'
-                  }}
-                >
-                  <BiPlus size={18} />
-                  <span className="text-[11px] font-medium">Add text</span>
-                </button>
+                  {/* Add text button - always positioned after the last text clip */}
+                  <button
+                    onClick={() => {
+                      const maxEndTime = textList.reduce((max, t) => Math.max(max, t.endTime), 0);
+                      const start = Math.min(videoDuration, maxEndTime);
+                      const end = Math.min(videoDuration, start + 5);
+                      setOverlayText('');
+                      setTextStartTime(start);
+                      setTextEndTime(end);
+                      textStartTimeRef.current = start;
+                      textEndTimeRef.current = end;
+                      setSelectedTextId(null);
+                      setIsTextTrackSelected(false);
+                      setIsEditingText(true);
+                    }}
+                    className="absolute h-10 flex items-center gap-2 text-white/40 px-3 bg-white/5 rounded-[4px] hover:text-white hover:bg-white/10 transition-all border border-transparent hover:border-white/10 shrink-0 pointer-events-auto whitespace-nowrap"
+                    style={{
+                      left: (textList.reduce((max, t) => Math.max(max, t.endTime), 0) * PIXELS_PER_SECOND) + 12,
+                      top: '4px'
+                    }}
+                  >
+                    <BiPlus size={18} />
+                    <span className="text-[11px] font-medium">Add text</span>
+                  </button>
+                </div>
               </div>
-            </div>
+            )}
           </div>
         </div>
 
@@ -6274,25 +6772,36 @@ const CreatePage = () => {
               )}
             </div>
           ) : (
-            <div className="flex gap-6 overflow-x-auto px-6 no-scrollbar">
+            <div className="flex gap-3 overflow-x-auto px-4 no-scrollbar">
               {[
-                { id: 'text', label: 'Text', icon: <IoTextOutline size={26} /> },
-                { id: 'stickers', label: 'Stickers', icon: <IoSparklesOutline size={26} /> },
-                { id: 'audio', label: 'Voice', icon: <BiMicrophone size={26} /> },
-                { id: 'filters', label: 'Filters', icon: <IoOptionsOutline size={26} /> },
-                { id: 'adjust', label: 'Adjust', icon: <BiSlider size={26} /> },
-                { id: 'save', label: 'Save', icon: <BiDownload size={26} /> },
+                { id: 'edit', label: 'Edit', icon: <FiScissors size={22} /> },
+                { id: 'sound', label: 'Sound', icon: <BiMusic size={22} /> },
+                { id: 'text', label: 'Text', icon: <IoTextOutline size={22} /> },
+                { id: 'effects', label: 'Effects', icon: <IoSparklesOutline size={22} /> },
+                { id: 'magic', label: 'Magic', icon: <IoColorWandOutline size={22} /> },
+                { id: 'captions', label: 'Captions', icon: <BiCaptions size={22} /> },
+                { id: 'audio', label: 'Voice', icon: <BiMicrophone size={22} /> },
+                { id: 'stickers', label: 'Stickers', icon: <IoSparklesOutline size={22} /> },
+                { id: 'filters', label: 'Filters', icon: <IoOptionsOutline size={22} /> },
+                { id: 'adjust', label: 'Adjust', icon: <BiSlider size={22} /> },
+                { id: 'save', label: 'Save', icon: <BiDownload size={22} /> },
               ].map((tool) => (
                 <button
                   key={tool.id}
                   type="button"
-                  onClick={() => handlePreviewToolClick(tool.id)}
-                  className="flex shrink-0 flex-col items-center gap-2 active:opacity-70"
+                  onClick={() => {
+                    if (tool.id === 'edit') {
+                      setFocusedTrack('video');
+                    } else {
+                      handlePreviewToolClick(tool.id);
+                    }
+                  }}
+                  className="flex shrink-0 flex-col items-center gap-1.5 active:scale-95 transition-transform select-none"
                 >
-                  <div className="flex h-12 w-12 items-center justify-center rounded-[12px] bg-white/5 border border-white/5">
+                  <div className="flex h-14 w-14 items-center justify-center rounded-[18px] bg-[#1c1c1e] border border-white/10 text-white shadow-md hover:bg-white/10 transition-colors">
                     {tool.icon}
                   </div>
-                  <span className="text-[11px] font-medium text-white/60">{tool.label}</span>
+                  <span className="text-[11px] font-semibold text-white/90">{tool.label}</span>
                 </button>
               ))}
             </div>
@@ -6395,63 +6904,45 @@ const CreatePage = () => {
                 transformOrigin: 'center center'
               }}
             >
-              {previewUrl ? (
-                videoFile?.type?.startsWith('image/') ? (
-                  <img
-                    src={previewUrl}
-                    className="h-full w-full object-cover transition-all duration-500"
-                    alt="Preview"
-                    style={{
-                      transform: `rotate(${editorSettings.rotation + cropRotation}deg)`,
-                      transformOrigin: 'center center',
-                      filter: getCombinedFilter()
-                    }}
-                  />
-                ) : (
-                  <video
-                    key={`preview-video-${currentPreviewClipIndex}-${clipSequence[currentPreviewClipIndex]?.url || 'none'}`}
-                    ref={(el) => {
-                      previewVideoRef.current = el;
-                      if (el && stage === 'preview') {
-                        const currentClip = clipSequence[currentPreviewClipIndex];
-                        const startOffset = currentClip?.startOffset || 0;
-                        const speed = currentClip?.speed || 1;
-                        if (el.currentTime !== startOffset) {
-                          el.currentTime = startOffset;
-                        }
-                        el.playbackRate = speed;
-                        el.play().catch(() => { });
-                      }
-                    }}
-                    src={clipSequence.length > 0 ? clipSequence[currentPreviewClipIndex]?.url : previewUrl}
-                    className="h-full w-full object-cover transition-all duration-500"
-                    muted={isVideoMuted || isMuted}
-                    playsInline
-                    autoPlay
-                    onTimeUpdate={handlePreviewTimeUpdate}
-                    onLoadedMetadata={(e) => {
-                      const video = e.currentTarget;
-                      const currentClip = clipSequence[currentPreviewClipIndex];
-                      const startOffset = currentClip?.startOffset || 0;
-                      video.currentTime = startOffset;
-                      video.playbackRate = currentClip?.speed || 1;
-                    }}
-                    style={{
-                      transform: `rotate(${editorSettings.rotation + cropRotation}deg)`,
-                      transformOrigin: 'center center',
-                      filter: getCombinedFilter()
-                    }}
+              {renderMediaWithEffects({
+                isVideo: previewUrl && !videoFile?.type?.startsWith('image/'),
+                mediaUrl: clipSequence.length > 0 ? clipSequence[currentPreviewClipIndex]?.url : previewUrl,
+                videoRef: (el) => {
+                  previewVideoRef.current = el;
+                  if (el && stage === 'preview') {
+                    const currentClip = clipSequence[currentPreviewClipIndex];
+                    const startOffset = currentClip?.startOffset || 0;
+                    const speed = currentClip?.speed || 1;
+                    if (el.currentTime !== startOffset) {
+                      el.currentTime = startOffset;
+                    }
+                    el.playbackRate = speed;
+                    el.play().catch(() => { });
+                  }
+                },
+                videoProps: {
+                  key: `preview-video-${currentPreviewClipIndex}-${clipSequence[currentPreviewClipIndex]?.url || 'none'}`,
+                  muted: isVideoMuted || isMuted,
+                  autoPlay: true,
+                  onTimeUpdate: handlePreviewTimeUpdate,
+                  onLoadedMetadata: (e) => {
+                    const video = e.currentTarget;
+                    const currentClip = clipSequence[currentPreviewClipIndex];
+                    const startOffset = currentClip?.startOffset || 0;
+                    video.currentTime = startOffset;
+                    video.playbackRate = currentClip?.speed || 1;
+                  }
+                },
+                mediaPreviewComponent: (
+                  <MediaPreview
+                    image={selectedMedia.image}
+                    rotation={editorSettings.rotation + cropRotation}
+                    filter={selectedFilter}
+                    className="h-full w-full"
+                    adjustments={imageAdjustments}
                   />
                 )
-              ) : (
-                <MediaPreview
-                  image={selectedMedia.image}
-                  rotation={editorSettings.rotation + cropRotation}
-                  filter={selectedFilter}
-                  className="h-full w-full"
-                  adjustments={imageAdjustments}
-                />
-              )}
+              })}
             </div>
           </div>
         )}
@@ -6725,6 +7216,7 @@ const CreatePage = () => {
         <div className="mb-6 flex gap-6 overflow-x-auto px-6 no-scrollbar">
           {[
             { id: 'text', label: 'Text', icon: <IoTextOutline size={26} /> },
+            { id: 'effects', label: 'Effects', icon: <IoSparklesOutline size={26} /> },
             { id: 'stickers', label: 'Stickers', icon: <IoSparklesOutline size={26} /> },
             { id: 'audio', label: 'Voice', icon: <BiMicrophone size={26} /> },
             { id: 'filters', label: 'Filters', icon: <IoOptionsOutline size={26} /> },
@@ -8376,6 +8868,7 @@ const CreatePage = () => {
           </div>
         </BottomSheet>
       )}
+      {activeSheet === 'effects-preview' && renderEffectsSheet()}
       {activeSheet === 'filters-preview' && (
         <div className="absolute inset-x-0 bottom-0 z-50 animate-in slide-in-from-bottom duration-500">
           <div className="bg-black/60 backdrop-blur-xl border-t border-white/10 rounded-t-[32px] pt-4 pb-10 shadow-[0_-20px_50px_rgba(0,0,0,0.5)]">

@@ -152,7 +152,7 @@ export const getUserProfile = asyncHandler(async (req, res) => {
  * @access  Private
  */
 export const updateProfile = asyncHandler(async (req, res) => {
-  const { username, fullName, bio, email, isPrivate, socialLinks, interests, commentPrivacy, mentionPrivacy, messagePrivacy, downloadPrivacy, notificationSettings } = req.body;
+  const { username, fullName, bio, email, isPrivate, socialLinks, interests, commentPrivacy, mentionPrivacy, messagePrivacy, downloadPrivacy, activeStatusPrivacy, notificationSettings } = req.body;
 
   const user = req.user;
 
@@ -241,6 +241,7 @@ export const updateProfile = asyncHandler(async (req, res) => {
   if (mentionPrivacy !== undefined) user.mentionPrivacy = mentionPrivacy;
   if (messagePrivacy !== undefined) user.messagePrivacy = messagePrivacy;
   if (downloadPrivacy !== undefined) user.downloadPrivacy = downloadPrivacy;
+  if (activeStatusPrivacy !== undefined) user.activeStatusPrivacy = activeStatusPrivacy;
   if (notificationSettings !== undefined) {
     user.notificationSettings = {
       ...user.notificationSettings,

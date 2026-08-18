@@ -6,6 +6,7 @@ import userService from '../../../../services/userService';
 import notificationService from '../../../../services/notificationService';
 import { useAuth } from '../../../../context/AuthContext';
 import { useSocket } from '../../../../context/SocketContext';
+import ActiveStatusSheet from '../../components/modals/ActiveStatusSheet';
 
 const formatTime = (isoString) => {
   if (!isoString) return '';
@@ -21,7 +22,7 @@ const formatTime = (isoString) => {
   return date.toLocaleDateString([], { day: 'numeric', month: 'short' });
 };
 
-const ConversationItem = ({ conv, currentUser, navigate, onAction }) => {
+const ConversationItem = ({ conv, currentUser, navigate, onAction, isOnline }) => {
   const [swipeX, setSwipeX] = useState(0);
   const startX = useRef(0);
   const isSwiping = useRef(false);
@@ -90,13 +91,21 @@ const ConversationItem = ({ conv, currentUser, navigate, onAction }) => {
             />
           </div>
         </div>
+        <span
+          className={`absolute bottom-0.5 right-0.5 w-3.5 h-3.5 rounded-full border-2 border-white dark:border-[#161616] transition-colors duration-300 z-10 ${
+            isOnline
+              ? 'bg-[#00E676] shadow-[0_0_6px_#00E676]'
+              : 'bg-gray-400 dark:bg-gray-500'
+          }`}
+          title={isOnline ? 'Online' : 'Offline'}
+        />
         {conv.unreadCount > 0 && (
-          <div className="absolute -top-0.5 -right-0.5 min-w-[20px] h-[20px] px-1 bg-[#FE2C55] rounded-full border-2 border-[#161616] flex items-center justify-center text-[10px] font-black text-white shadow-sm">
+          <div className="absolute -top-0.5 -right-0.5 min-w-[20px] h-[20px] px-1 bg-[#FE2C55] rounded-full border-2 border-[#161616] flex items-center justify-center text-[10px] font-black text-white shadow-sm z-10">
             {conv.unreadCount}
           </div>
         )}
         {conv.isPinned && (
-          <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-[#242424] rounded-full shadow-md flex items-center justify-center text-white/40">
+          <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-[#242424] rounded-full shadow-md flex items-center justify-center text-white/40 z-10">
             <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="currentColor" viewBox="0 0 24 24">
               <path d="M16 12V4h1V2H7v2h1v8l-2 3v2h5v7l1 1 1-1v-7h5v-2l-2-3z"/>
             </svg>
@@ -134,7 +143,7 @@ const ConversationItem = ({ conv, currentUser, navigate, onAction }) => {
   );
 };
 
-const UserSuggestionItem = ({ user, navigate }) => {
+const UserSuggestionItem = ({ user, navigate, isOnline }) => {
   return (
     <div
       className="flex items-center gap-4 px-4 py-3 cursor-pointer active:bg-white/5 transition-all duration-200"
@@ -150,6 +159,14 @@ const UserSuggestionItem = ({ user, navigate }) => {
             />
           </div>
         </div>
+        <span
+          className={`absolute bottom-0 right-0 w-3.5 h-3.5 rounded-full border-2 border-white dark:border-[#161616] transition-colors duration-300 z-10 ${
+            isOnline
+              ? 'bg-[#00E676] shadow-[0_0_6px_#00E676]'
+              : 'bg-gray-400 dark:bg-gray-500'
+          }`}
+          title={isOnline ? 'Online' : 'Offline'}
+        />
       </div>
 
       <div className="flex-1 min-w-0">
@@ -183,6 +200,9 @@ const InboxPage = () => {
   const [loading, setLoading] = useState(true);
   const [menuConfig, setMenuConfig] = useState(null); // { conv, x, y }
   const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0);
+  const [isActiveStatusSheetOpen, setIsActiveStatusSheetOpen] = useState(false);
+  const [onlineUserIds, setOnlineUserIds] = useState(new Set());
+  const searchInputRef = useRef(null);
 
   const fetchCounts = async () => {
     try {
@@ -245,12 +265,30 @@ const InboxPage = () => {
     if (socket) {
       socket.on('new_message', () => fetchConversations());
       socket.on('conversation_read', () => fetchConversations());
+      socket.on('user_online', ({ userId }) => {
+        if (userId) setOnlineUserIds(prev => new Set(prev).add(userId));
+      });
+      socket.on('user_offline', ({ userId }) => {
+        if (userId) setOnlineUserIds(prev => {
+          const next = new Set(prev);
+          next.delete(userId);
+          return next;
+        });
+      });
       return () => {
         socket.off('new_message');
         socket.off('conversation_read');
+        socket.off('user_online');
+        socket.off('user_offline');
       };
     }
   }, [socket]);
+
+  const getIsOnline = (conv) => {
+    if (!conv?.participant) return false;
+    if (onlineUserIds.has(conv.participant._id)) return true;
+    return !!conv.participant.isOnline;
+  };
 
   const fetchConversations = async () => {
     try {
@@ -359,8 +397,37 @@ const InboxPage = () => {
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-4 shrink-0 theme-panel-card backdrop-blur-md sticky top-0 z-[60] border-b theme-panel-divider">
         <div className="w-10" />
-        <h2 className="text-[18px] font-black tracking-tight theme-text-primary">Inbox</h2>
-        <div className="w-10" />
+
+        <div className="flex items-center gap-1.5">
+          <h2 className="text-[18px] font-black tracking-tight theme-text-primary">Inbox</h2>
+          <button
+            onClick={() => setIsActiveStatusSheetOpen(true)}
+            className="flex items-center gap-1 px-2 py-0.5 bg-gray-200/60 dark:bg-white/10 hover:bg-gray-300/60 dark:hover:bg-white/15 rounded-md transition-all cursor-pointer active:scale-95"
+            title="Active Status Settings"
+          >
+            <span
+              className={`w-2.5 h-2.5 rounded-full transition-colors duration-300 ${
+                currentUser?.activeStatusPrivacy !== 'no_one'
+                  ? 'bg-[#00E676] shadow-[0_0_6px_#00E676]'
+                  : 'bg-gray-400'
+              }`}
+            />
+            <svg className="w-3 h-3 text-gray-500 dark:text-gray-300" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M7 10l5 5 5-5z" />
+            </svg>
+          </button>
+        </div>
+
+        <div 
+          onClick={() => searchInputRef.current?.focus()}
+          className="w-10 h-10 flex items-center justify-end cursor-pointer theme-text-primary active:scale-95 transition-transform"
+          title="Search messages"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.2" viewBox="0 0 24 24">
+            <circle cx="11" cy="11" r="8" />
+            <path d="M21 21l-4.35-4.35" />
+          </svg>
+        </div>
       </div>
 
       <div className="px-4 mb-4 shrink-0">
@@ -372,6 +439,7 @@ const InboxPage = () => {
             </svg>
           </div>
           <input
+            ref={searchInputRef}
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
@@ -436,6 +504,7 @@ const InboxPage = () => {
                           currentUser={currentUser} 
                           navigate={navigate} 
                           onAction={handleAction}
+                          isOnline={getIsOnline(conv)}
                         />
                       ))}
                     </div>
@@ -484,6 +553,7 @@ const InboxPage = () => {
                     currentUser={currentUser} 
                     navigate={navigate} 
                     onAction={handleAction}
+                    isOnline={getIsOnline(conv)}
                   />
                 ))}
               </div>
@@ -501,6 +571,11 @@ const InboxPage = () => {
           </>
         )}
       </div>
+
+      <ActiveStatusSheet
+        isOpen={isActiveStatusSheetOpen}
+        onClose={() => setIsActiveStatusSheetOpen(false)}
+      />
     </div>
   );
 };

@@ -5,7 +5,7 @@ import Reel from '../../../models/Reel.model.js';
 import Follow from '../../../models/Follow.model.js';
 import { asyncHandler } from '../../../middleware/errorHandler.js';
 import { uploadImage, uploadVideo, deleteFile } from '../../../config/cloudinary.js';
-import { getIO } from '../../../config/socket.js';
+import { getIO, isUserOnline } from '../../../config/socket.js';
 import fs from 'fs';
 
 /**
@@ -25,7 +25,7 @@ export const getConversations = asyncHandler(async (req, res) => {
     deletedBy: { $ne: userId },
     'lastMessage.sender': { $exists: true }
   })
-    .populate('participants', 'username fullName profilePicture isVerified')
+    .populate('participants', 'username fullName profilePicture isVerified activeStatusPrivacy')
     .populate('lastMessage.sender', 'username')
     .sort({ 'lastMessage.timestamp': -1 })
     .skip(skip)
@@ -36,9 +36,19 @@ export const getConversations = asyncHandler(async (req, res) => {
       p => p._id.toString() !== userId.toString()
     );
 
+    let isOnline = false;
+    if (otherParticipant) {
+      const userOnlineInSocket = isUserOnline(otherParticipant._id.toString());
+      const privacy = otherParticipant.activeStatusPrivacy || 'friends';
+      isOnline = userOnlineInSocket && privacy !== 'no_one';
+    }
+
     return {
       _id: conv._id,
-      participant: otherParticipant,
+      participant: otherParticipant ? {
+        ...otherParticipant.toObject(),
+        isOnline
+      } : null,
       lastMessage: conv.lastMessage,
       unreadCount: conv.getUnreadCount(userId),
       isPinned: conv.pinnedBy?.includes(userId) || false,

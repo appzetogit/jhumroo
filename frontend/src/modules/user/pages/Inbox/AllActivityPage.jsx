@@ -36,6 +36,11 @@ const ActivityItem = ({ item }) => {
   if (!actionText) return null;
   const isSystem = item.type === 'report_status';
 
+  // Do not render notifications for deleted / non-existent users
+  if (!isSystem && (!item.sender || !item.sender.username || item.sender.username === '404' || item.sender.username === 'deleted')) {
+    return null;
+  }
+
   const getTimeAgo = (date) => {
     const seconds = Math.floor((new Date() - new Date(date)) / 1000);
     if (seconds < 60) return 'now';
@@ -75,10 +80,10 @@ const ActivityItem = ({ item }) => {
       {/* Video thumbnail (for reel interactions) */}
       {item.reel && (
         <div className="w-10 h-14 rounded bg-white/10 overflow-hidden shrink-0 border border-white/5">
-          <img 
-            src={item.reel.video?.thumbnail || item.reel.video?.url} 
-            alt="thumb" 
-            className="w-full h-full object-cover opacity-90" 
+          <img
+            src={item.reel.video?.thumbnail || item.reel.video?.url}
+            alt="thumb"
+            className="w-full h-full object-cover opacity-90"
           />
         </div>
       )}
@@ -99,7 +104,11 @@ const AllActivityPage = () => {
     try {
       const res = await notificationService.getNotifications();
       if (res.success) {
-        setNotifications(res.notifications);
+        const validNotifications = (res.notifications || []).filter(n => {
+          if (n.type === 'report_status') return true;
+          return n.sender && n.sender.username && n.sender.username !== '404' && n.sender.username !== 'deleted';
+        });
+        setNotifications(validNotifications);
       }
     } catch (error) {
       console.error('Failed to fetch notifications:', error);
@@ -140,14 +149,11 @@ const AllActivityPage = () => {
       <div className="flex items-center justify-between px-4 py-4 border-b border-white/10 shrink-0">
         <button onClick={() => navigate(-1)} className="text-white active:opacity-60 w-8">
           <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
-            <path d="M15 18l-6-6 6-6"/>
+            <path d="M15 18l-6-6 6-6" />
           </svg>
         </button>
         <button className="flex items-center gap-1 text-[15px] font-bold text-white active:opacity-70">
           All activity
-          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
-            <path d="M6 9l6 6 6-6"/>
-          </svg>
         </button>
         <div className="w-8" />
       </div>
@@ -160,9 +166,9 @@ const AllActivityPage = () => {
           </div>
         ) : notifications.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-white/30">
-             <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24" className="opacity-20 mb-4">
-                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>
-              </svg>
+            <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24" className="opacity-20 mb-4">
+              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 0 1-3.46 0" />
+            </svg>
             <p className="text-sm">Notifications will appear here</p>
           </div>
         ) : (

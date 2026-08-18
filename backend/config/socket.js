@@ -86,8 +86,24 @@ export const initSocket = (server) => {
     // Join user's personal room (for private messages)
     socket.join(userId);
 
-    // Broadcast user is online to their contacts
-    socket.broadcast.emit('user_online', { userId });
+    // Broadcast user is online to their contacts if active status is enabled
+    if (socket.user?.activeStatusPrivacy !== 'no_one') {
+      socket.broadcast.emit('user_online', { userId });
+    }
+
+    /**
+     * Handle active status privacy change in real-time
+     */
+    socket.on('update_active_status_privacy', ({ activeStatusPrivacy }) => {
+      if (socket.user) {
+        socket.user.activeStatusPrivacy = activeStatusPrivacy;
+      }
+      if (activeStatusPrivacy === 'no_one') {
+        socket.broadcast.emit('user_offline', { userId, lastSeen: new Date() });
+      } else {
+        socket.broadcast.emit('user_online', { userId });
+      }
+    });
 
     /**
      * Handle typing indicator

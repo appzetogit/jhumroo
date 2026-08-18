@@ -97,6 +97,24 @@ export const getNotifications = asyncHandler(async (req, res) => {
     }
   }
 
+  // Filter out notifications where sender no longer exists in DB or is deleted/invalid
+  const invalidSenderNotificationIds = [];
+  finalNotifications = finalNotifications.filter(n => {
+    if (n.type === 'report_status') return true;
+    const isValidSender = n.sender && n.sender._id && n.sender.username && n.sender.username !== '404' && n.sender.username !== 'deleted';
+    if (!isValidSender) {
+      invalidSenderNotificationIds.push(n._id);
+      return false;
+    }
+    return true;
+  });
+
+  if (invalidSenderNotificationIds.length > 0) {
+    Notification.deleteMany({ _id: { $in: invalidSenderNotificationIds } }).exec().catch(err => {
+      console.error('Failed to delete notifications with invalid senders:', err);
+    });
+  }
+
   const total = await Notification.countDocuments({ 
     recipient: req.user._id,
     type: { $ne: 'follow_request' }
