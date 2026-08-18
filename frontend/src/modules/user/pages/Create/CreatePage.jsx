@@ -35,6 +35,7 @@ import {
   BiExpand,
   BiExitFullscreen,
   BiCaptions,
+  BiSmile,
 } from 'react-icons/bi';
 import {
   IoCameraReverseOutline,
@@ -2411,6 +2412,32 @@ const CreatePage = () => {
     navigate('/');
   };
 
+  const handleTakePhoto = () => {
+    if (canvasRef.current) {
+      try {
+        const dataUrl = canvasRef.current.toDataURL('image/jpeg', 0.95);
+        fetch(dataUrl)
+          .then((res) => res.blob())
+          .then((blob) => {
+            const file = new File([blob], 'photo.jpg', { type: 'image/jpeg' });
+            setVideoFile(file);
+            setPreviewUrl(dataUrl);
+            showToast('Photo captured');
+            pushStage('preview');
+          })
+          .catch((err) => {
+            console.error('Failed to create photo blob:', err);
+            showToast('Failed to capture photo');
+          });
+      } catch (err) {
+        console.error('Failed to capture photo:', err);
+        showToast('Camera error');
+      }
+    } else {
+      showToast('Camera not ready');
+    }
+  };
+
   const handleRecordPressStart = (e) => {
     if (e && e.type === 'touchstart') {
       lastTouchTimeRef.current = Date.now();
@@ -2418,6 +2445,11 @@ const CreatePage = () => {
 
     // Ignore emulated mouse events on touch devices
     if (e && e.type === 'mousedown' && Date.now() - lastTouchTimeRef.current < 500) {
+      return;
+    }
+
+    if (captureMode === 'photo') {
+      handleTakePhoto();
       return;
     }
 
@@ -3365,85 +3397,127 @@ const CreatePage = () => {
 
 
   const handleFileChange = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      if (file.type.startsWith('video/') || file.type.startsWith('image/')) {
+    const rawFiles = Array.from(e.target.files || []);
+    if (!rawFiles || rawFiles.length === 0) return;
+
+    const validFiles = rawFiles.filter(f => f.type.startsWith('video/') || f.type.startsWith('image/'));
+    if (validFiles.length === 0) {
+      showToast('Please select valid video or image files');
+      e.target.value = '';
+      return;
+    }
+
+    // Multi-file selection handling from gallery
+    if (validFiles.length > 1) {
+      const newClips = [];
+      let totalDur = 0;
+      const thumbnails = [];
+
+      validFiles.forEach((file) => {
         const url = URL.createObjectURL(file);
+        const isImage = file.type.startsWith('image/');
+        const clipDur = isImage ? 5 : 15;
+        totalDur += clipDur;
 
-        if (stage === 'editor' || stage === 'preview') {
-          const isImage = file.type.startsWith('image/');
-          const addClip = (actualDuration) => {
-            setVideoDuration(prev => prev + actualDuration);
-            setClipSequence(prev => [...prev, { file, url, duration: actualDuration, isImage, startOffset: 0, limitStart: 0, limitEnd: actualDuration }]);
-            showToast('Clip added to sequence');
+        newClips.push({
+          file,
+          url,
+          duration: clipDur,
+          isImage,
+          startOffset: 0,
+          limitStart: 0,
+          limitEnd: clipDur,
+        });
 
-            if (isImage) {
-              setVideoThumbnails(prev => {
-                const newThumbs = Array(Math.ceil(actualDuration / 2)).fill(url);
-                return [...prev, ...newThumbs];
-              });
-            } else {
-              const video = document.createElement('video');
-              video.src = url;
-              video.muted = true;
-              video.playsInline = true;
-              video.onloadedmetadata = () => {
-                const count = Math.ceil(actualDuration / 2);
-                const canvas = document.createElement('canvas');
-                canvas.width = 160;
-                canvas.height = (video.videoHeight / video.videoWidth) * 160 || 284;
-                const ctx = canvas.getContext('2d');
+        if (isImage) {
+          thumbnails.push(url, url, url);
+        }
+      });
 
-                const newThumbs = [];
-                let i = 0;
-                const captureNext = () => {
-                  if (i >= count) {
-                    setVideoThumbnails(prev => [...prev, ...newThumbs]);
-                    return;
-                  }
-                  video.currentTime = i * 2;
-                  video.onseeked = () => {
-                    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-                    newThumbs.push(canvas.toDataURL('image/jpeg', 0.6));
-                    i++;
-                    captureNext();
-                  };
-                };
+      setVideoFile(validFiles[0]);
+      setPreviewUrl(newClips[0].url);
+      setClipSequence(newClips);
+      setVideoDuration(totalDur);
+      setVideoThumbnails(thumbnails);
+      showToast(`${validFiles.length} items selected`);
+      pushStage('preview');
+      e.target.value = '';
+      return;
+    }
+
+    // Single file selection handling
+    const file = validFiles[0];
+    const url = URL.createObjectURL(file);
+
+    if (stage === 'editor' || stage === 'preview') {
+      const isImage = file.type.startsWith('image/');
+      const addClip = (actualDuration) => {
+        setVideoDuration(prev => prev + actualDuration);
+        setClipSequence(prev => [...prev, { file, url, duration: actualDuration, isImage, startOffset: 0, limitStart: 0, limitEnd: actualDuration }]);
+        showToast('Clip added to sequence');
+
+        if (isImage) {
+          setVideoThumbnails(prev => {
+            const newThumbs = Array(Math.ceil(actualDuration / 2)).fill(url);
+            return [...prev, ...newThumbs];
+          });
+        } else {
+          const video = document.createElement('video');
+          video.src = url;
+          video.muted = true;
+          video.playsInline = true;
+          video.onloadedmetadata = () => {
+            const count = Math.ceil(actualDuration / 2);
+            const canvas = document.createElement('canvas');
+            canvas.width = 160;
+            canvas.height = (video.videoHeight / video.videoWidth) * 160 || 284;
+            const ctx = canvas.getContext('2d');
+
+            const newThumbs = [];
+            let i = 0;
+            const captureNext = () => {
+              if (i >= count) {
+                setVideoThumbnails(prev => [...prev, ...newThumbs]);
+                return;
+              }
+              video.currentTime = i * 2;
+              video.onseeked = () => {
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                newThumbs.push(canvas.toDataURL('image/jpeg', 0.6));
+                i++;
                 captureNext();
               };
-            }
-          };
-
-          if (!isImage) {
-            const tempVideo = document.createElement('video');
-            tempVideo.src = url;
-            tempVideo.onloadedmetadata = () => {
-              let dur = tempVideo.duration;
-              if (!dur || dur === Infinity || isNaN(dur)) {
-                dur = 15; // Safe fallback for blobs without duration
-              }
-              addClip(dur);
             };
-          } else {
-            addClip(15);
-          }
-          e.target.value = '';
-          return;
+            captureNext();
+          };
         }
+      };
 
-        setVideoFile(file);
-        setPreviewUrl(url);
-
-        if (file.type.startsWith('image/')) {
-          setVideoDuration(15); // Default 15s duration for image clips
-        }
-
-        // Direct to preview/editor since we skipped the custom gallery page
-        pushStage('preview');
+      if (!isImage) {
+        const tempVideo = document.createElement('video');
+        tempVideo.src = url;
+        tempVideo.onloadedmetadata = () => {
+          let dur = tempVideo.duration;
+          if (!dur || dur === Infinity || isNaN(dur)) dur = 15;
+          addClip(dur);
+        };
       } else {
-        showToast('Please select a video or image file');
+        addClip(5);
       }
+      e.target.value = '';
+      return;
     }
+
+    setVideoFile(file);
+    setPreviewUrl(url);
+    const isImage = file.type.startsWith('image/');
+    if (isImage) {
+      setVideoDuration(5);
+      setClipSequence([{ file, url, duration: 5, isImage: true, startOffset: 0, limitStart: 0, limitEnd: 5 }]);
+      setVideoThumbnails([url, url, url]);
+    }
+
+    pushStage('preview');
     e.target.value = '';
   };
 
@@ -4094,7 +4168,7 @@ const CreatePage = () => {
     { id: 'speed', label: '' },
   ];
 
-  const cameraDurationModes = ['10m', '60s', '15s'];
+  const cameraDurationModes = ['10m', '60s', '15s', 'Photo'];
 
   const renderCameraHeader = () => {
     if (recordStatus === 'recording') return null;
@@ -4460,16 +4534,16 @@ const CreatePage = () => {
                     {cameraDurationModes.map((modeOpt) => {
                       const isSelected =
                         (modeOpt === selectedDuration && captureMode === 'camera') ||
-                        (modeOpt === 'PHOTO' && captureMode === 'photo') ||
-                        (modeOpt === 'TEXT' && captureMode === 'text');
+                        (modeOpt.toUpperCase() === 'PHOTO' && captureMode === 'photo') ||
+                        (modeOpt.toUpperCase() === 'TEXT' && captureMode === 'text');
                       return (
                         <button
                           key={modeOpt}
                           type="button"
                           onClick={() => {
-                            if (modeOpt === 'PHOTO') {
+                            if (modeOpt.toUpperCase() === 'PHOTO') {
                               setCaptureMode('photo');
-                            } else if (modeOpt === 'TEXT') {
+                            } else if (modeOpt.toUpperCase() === 'TEXT') {
                               setCaptureMode('text');
                               setStageStack((prev) => [...prev, 'text-overlay']);
                             } else {
@@ -4515,7 +4589,7 @@ const CreatePage = () => {
                       onTouchEnd={handleRecordPressEnd}
                       className="absolute left-1/2 -translate-x-1/2 z-20 w-[78px] h-[78px] sm:w-[84px] sm:h-[84px] rounded-full flex items-center justify-center pointer-events-auto active:scale-95 transition-all"
                       style={{
-                        border: '4px solid #ffffff',
+                        border: captureMode === 'photo' ? '4px solid #8e8e93' : '4px solid #ffffff',
                         boxShadow: '0 0 0 1px rgba(0,0,0,0.3), 0 4px 20px rgba(0,0,0,0.8)',
                       }}
                     >
@@ -4546,7 +4620,7 @@ const CreatePage = () => {
                           <span className="w-3 h-3 rounded-[2px] bg-white animate-pulse" />
                         </div>
                       ) : activeFaceEffect === null ? (
-                        <div className="w-full h-full rounded-full bg-[#fe2c55] shadow-lg flex items-center justify-center transition-all duration-200" />
+                        <div className={`w-full h-full rounded-full ${captureMode === 'photo' ? 'bg-white' : 'bg-[#fe2c55]'} shadow-lg flex items-center justify-center transition-all duration-200`} />
                       ) : (
                         <div className="w-full h-full rounded-full bg-transparent transition-all duration-200" />
                       )}
@@ -6781,7 +6855,7 @@ const CreatePage = () => {
                 { id: 'magic', label: 'Magic', icon: <IoColorWandOutline size={22} /> },
                 { id: 'captions', label: 'Captions', icon: <BiCaptions size={22} /> },
                 { id: 'audio', label: 'Voice', icon: <BiMicrophone size={22} /> },
-                { id: 'stickers', label: 'Stickers', icon: <IoSparklesOutline size={22} /> },
+                { id: 'stickers', label: 'Stickers', icon: <BiSmile size={22} /> },
                 { id: 'filters', label: 'Filters', icon: <IoOptionsOutline size={22} /> },
                 { id: 'adjust', label: 'Adjust', icon: <BiSlider size={22} /> },
                 { id: 'save', label: 'Save', icon: <BiDownload size={22} /> },
@@ -7208,54 +7282,67 @@ const CreatePage = () => {
       </div>
 
       {/* Bottom Tools & Buttons */}
-      <div
-        className={`absolute inset-x-0 bottom-0 z-20 pb-[max(1.2rem,env(safe-area-inset-bottom))] pt-32 ${isDarkMode ? 'bg-gradient-to-t from-black via-black/60 to-transparent' : 'bg-gradient-to-t from-black/80 via-black/40 to-transparent'
-          }`}
-      >
-        {/* Horizontal Tools List */}
-        <div className="mb-6 flex gap-6 overflow-x-auto px-6 no-scrollbar">
-          {[
-            { id: 'text', label: 'Text', icon: <IoTextOutline size={26} /> },
-            { id: 'effects', label: 'Effects', icon: <IoSparklesOutline size={26} /> },
-            { id: 'stickers', label: 'Stickers', icon: <IoSparklesOutline size={26} /> },
-            { id: 'audio', label: 'Voice', icon: <BiMicrophone size={26} /> },
-            { id: 'filters', label: 'Filters', icon: <IoOptionsOutline size={26} /> },
-            { id: 'volume-preview', label: 'Volume', icon: <BiVolumeFull size={26} /> },
-            { id: 'save', label: 'Save', icon: <BiDownload size={26} /> },
-          ].map((tool) => (
-            <button
-              key={tool.id}
-              type="button"
-              onClick={() => handlePreviewToolClick(tool.id)}
-              className="flex shrink-0 flex-col items-center gap-2 active:opacity-70"
-            >
-              <div className="flex h-12 w-12 items-center justify-center rounded-[12px] bg-white/10 backdrop-blur-md">
-                {tool.icon}
-              </div>
-              <span className="text-[11px] font-medium text-white/90">{tool.label}</span>
-            </button>
-          ))}
-        </div>
+      {(() => {
+        const isPhotoMedia = captureMode === 'photo' || videoFile?.type?.startsWith('image/') || previewUrl?.startsWith('data:image/');
 
-        {/* Bottom Actions */}
-        <div className="flex items-center justify-between px-6">
-          <button
-            type="button"
-            onClick={() => pushStage('editor')}
-            className="flex h-[48px] items-center justify-center rounded-full bg-white/10 px-6 text-[15px] font-bold text-white backdrop-blur-md transition-all active:scale-95"
+        return (
+          <div
+            className={`absolute inset-x-0 bottom-0 z-20 pb-[max(1.2rem,env(safe-area-inset-bottom))] pt-32 ${
+              isDarkMode
+                ? 'bg-gradient-to-t from-black via-black/60 to-transparent'
+                : 'bg-gradient-to-t from-black/80 via-black/40 to-transparent'
+            }`}
           >
-            Edit video
-          </button>
-          <button
-            type="button"
-            onClick={handleNextClick}
-            className="flex h-[48px] items-center justify-center gap-2 rounded-full bg-[#4d70ff] px-8 text-[15px] font-bold text-white shadow-lg transition-all active:scale-95"
-          >
-            <span>Next</span>
-            <BiChevronRight size={20} />
-          </button>
-        </div>
-      </div>
+            {/* Horizontal Tools List */}
+            <div className="mb-6 flex gap-6 overflow-x-auto px-6 no-scrollbar">
+              {[
+                { id: 'text', label: 'Text', icon: <IoTextOutline size={26} /> },
+                { id: 'effects', label: 'Effects', icon: <IoSparklesOutline size={26} /> },
+                { id: 'stickers', label: 'Stickers', icon: <BiSmile size={26} /> },
+                ...(!isPhotoMedia ? [{ id: 'audio', label: 'Voice', icon: <BiMicrophone size={26} /> }] : []),
+                { id: 'filters', label: 'Filters', icon: <IoOptionsOutline size={26} /> },
+                ...(!isPhotoMedia ? [{ id: 'volume-preview', label: 'Volume', icon: <BiVolumeFull size={26} /> }] : []),
+                { id: 'save', label: 'Save', icon: <BiDownload size={26} /> },
+              ].map((tool) => (
+                <button
+                  key={tool.id}
+                  type="button"
+                  onClick={() => handlePreviewToolClick(tool.id)}
+                  className="flex shrink-0 flex-col items-center gap-2 active:opacity-70"
+                >
+                  <div className="flex h-12 w-12 items-center justify-center rounded-[12px] bg-white/10 backdrop-blur-md">
+                    {tool.icon}
+                  </div>
+                  <span className="text-[11px] font-medium text-white/90">{tool.label}</span>
+                </button>
+              ))}
+            </div>
+
+            {/* Bottom Actions */}
+            <div className={`flex items-center ${isPhotoMedia ? 'justify-end' : 'justify-between'} px-6 gap-3`}>
+              {!isPhotoMedia && (
+                <button
+                  type="button"
+                  onClick={() => pushStage('editor')}
+                  className="flex h-[48px] items-center justify-center rounded-full bg-white/10 px-6 text-[15px] font-bold text-white backdrop-blur-md transition-all active:scale-95 shrink-0"
+                >
+                  Edit video
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={handleNextClick}
+                className={`flex h-[48px] items-center justify-center gap-2 rounded-full bg-[#4d70ff] ${
+                  isPhotoMedia ? 'w-full' : 'px-8 flex-1'
+                } text-[15px] font-bold text-white shadow-lg transition-all active:scale-95`}
+              >
+                <span>Next</span>
+                <BiChevronRight size={20} />
+              </button>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 
@@ -9495,6 +9582,15 @@ const CreatePage = () => {
           50% { height: 16px; }
         }
       `}</style>
+      {/* Hidden File Picker Input */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="video/*,image/*"
+        multiple
+        className="hidden"
+        onChange={handleFileChange}
+      />
     </div>
   );
 };

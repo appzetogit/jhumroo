@@ -1,149 +1,59 @@
-import React, { useDeferredValue, useMemo, useRef, useState } from 'react';
-import { BiMicrophone, BiSearch, BiX } from 'react-icons/bi';
+import React, { useDeferredValue, useState, useEffect } from 'react';
+import { BiSearch, BiX, BiChevronLeft } from 'react-icons/bi';
+import { FiPlus } from 'react-icons/fi';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { getSearchResults, normalizeSearchQuery } from '../../../../utils/searchUtils';
-import { useAppContent } from '../../../../hooks/useAppContent';
+import { useAuth } from '../../../../context/AuthContext';
 import userService from '../../../../services/userService';
 import followService from '../../../../services/followService';
 
-const SEARCH_HISTORY_KEY = 'searchHistory';
-
-const readSearchHistory = () => {
-  try {
-    const storedValue = localStorage.getItem(SEARCH_HISTORY_KEY);
-    const parsedValue = storedValue ? JSON.parse(storedValue) : [];
-    return Array.isArray(parsedValue) ? parsedValue : [];
-  } catch {
-    return [];
-  }
-};
-
-const persistSearchHistory = (query) => {
-  const normalizedQuery = normalizeSearchQuery(query);
-  if (!normalizedQuery) {
-    return;
-  }
-
-  const nextHistory = [
-    normalizedQuery,
-    ...readSearchHistory().filter((item) => item.toLowerCase() !== normalizedQuery.toLowerCase()),
-  ].slice(0, 8);
-
-  localStorage.setItem(SEARCH_HISTORY_KEY, JSON.stringify(nextHistory));
-};
-
-const removeSearchHistoryEntry = (query) => {
-  const loweredQuery = query.toLowerCase();
-  const nextHistory = readSearchHistory().filter((item) => item.toLowerCase() !== loweredQuery);
-  localStorage.setItem(SEARCH_HISTORY_KEY, JSON.stringify(nextHistory));
-};
-
-const ResultsEmptyState = ({ title, subtitle }) => (
-  <div className="px-5 py-16 text-center">
-    <p className="theme-text-primary text-[15px] font-semibold">{title}</p>
-    <p className="theme-text-muted text-[12px] mt-2">{subtitle}</p>
+// Default silhouette avatar SVG component matching image 2 & zoomed crop screenshot
+const DefaultAvatar = () => (
+  <div className="w-full h-full bg-[#d6d9df] flex items-center justify-center">
+    <svg className="w-full h-full" viewBox="0 0 100 100" fill="none">
+      <circle cx="50" cy="37" r="18" fill="#ffffff" />
+      <path d="M18 88 C 18 64, 32 54, 50 54 C 68 54, 82 64, 82 88 Z" fill="#ffffff" />
+    </svg>
   </div>
 );
 
-const UsersResultList = ({ users, onToggleFollow, onOpenUser, isLoading }) => {
-  if (isLoading) {
-    return (
-      <div className="flex flex-col items-center justify-center py-24 gap-4">
-        <div className="flex items-center gap-2">
-          <span className="w-2.5 h-2.5 rounded-full bg-[#fe2c55] animate-bounce [animation-delay:-0.12s]" />
-          <span className="w-2.5 h-2.5 rounded-full bg-[#25f4ee] animate-bounce [animation-delay:0s]" />
-        </div>
-      </div>
-    );
-  }
-
-  if (users.length === 0) {
-    return (
-      <ResultsEmptyState
-        title="No users found"
-        subtitle="Try a different username or display name."
-      />
-    );
-  }
-
-  return (
-    <div className="pb-24">
-      {users.map((user) => {
-        const isFollowing = user.isFollowing;
-        const isFollowPending = user.followStatus === 'pending';
-        
-        return (
-          <div
-            key={user.id}
-            className="flex items-center gap-3 px-4 py-3 cursor-pointer active:bg-white/5 transition-colors"
-            onClick={() => onOpenUser(user.username)}
-          >
-            <img
-              src={user.avatar}
-              alt={user.displayName}
-              className="w-12 h-12 rounded-full object-cover shrink-0"
-            />
-            <div className="min-w-0 flex-1">
-              <p className="theme-text-primary text-[14px] font-semibold truncate">{user.username}</p>
-              <p className="theme-text-muted text-[12px] truncate">{user.displayName}</p>
-              <p className="theme-text-muted text-[12px] truncate">
-                {user.followers} followers · {user.videos} videos
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={(event) => {
-                event.stopPropagation();
-                onToggleFollow(user);
-              }}
-              className={`min-w-[76px] px-4 py-2 text-[13px] font-semibold transition-all duration-200 ${
-                isFollowPending
-                  ? 'bg-gray-100 text-gray-700 border border-gray-300 rounded-lg shadow-sm'
-                  : isFollowing
-                  ? 'bg-white/5 text-white/70 border border-white/10 rounded-[3px]'
-                  : 'bg-[#fe2c55] text-white rounded-[3px]'
-              }`}
-            >
-              {isFollowPending ? 'Requested' : (isFollowing ? 'Following' : 'Follow')}
-            </button>
-          </div>
-        );
-      })}
-    </div>
-  );
-};
-
 const SearchPage = () => {
   const navigate = useNavigate();
-  const { config } = useAppContent();
-  const searchConfig = config?.search || {};
+  const { user: currentUser } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [searchHistory, setSearchHistory] = useState(() => readSearchHistory());
-  const [isUsersLoading, setIsUsersLoading] = useState(false);
-  const usersLoaderTimeoutRef = useRef(null);
+
   const searchQuery = searchParams.get('q') || '';
   const deferredQuery = useDeferredValue(searchQuery);
-  const normalizedQuery = normalizeSearchQuery(searchQuery);
-  const isResultsState = normalizedQuery.length > 0;
+
+  const [isSearchActive, setIsSearchActive] = useState(() => !!searchQuery.trim());
+  const [isUsersLoading, setIsUsersLoading] = useState(false);
 
   const [dbSuggestedUsers, setDbSuggestedUsers] = useState([]);
   const [dbSearchResults, setDbSearchResults] = useState([]);
+  const [removedUserIds, setRemovedUserIds] = useState(new Set());
+
+  // Sync isSearchActive with query
+  useEffect(() => {
+    if (searchQuery.trim()) {
+      setIsSearchActive(true);
+    }
+  }, [searchQuery]);
 
   // Fetch suggested users from DB
-  React.useEffect(() => {
+  useEffect(() => {
     const fetchSuggested = async () => {
       try {
-        const res = await userService.getSuggestedUsers(10);
+        const res = await userService.getSuggestedUsers(15);
         if (res.success && res.users) {
           const formatted = res.users.map((u) => ({
             id: u._id || u.id,
             username: u.username,
             displayName: u.fullName || u.username,
-            avatar: u.profilePicture?.url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${u.username}&style=circle`,
+            avatar: u.profilePicture?.url || null,
             followers: u.stats?.followersCount || 0,
             videos: u.stats?.reelsCount || 0,
             isFollowing: u.isFollowing,
-            followStatus: u.followStatus
+            followStatus: u.followStatus,
+            subtext: u.bio || (u.fullName ? `You may know ${u.fullName}` : 'Suggested for you'),
           }));
           setDbSuggestedUsers(formatted);
         }
@@ -155,7 +65,7 @@ const SearchPage = () => {
   }, []);
 
   // Fetch search results from DB
-  React.useEffect(() => {
+  useEffect(() => {
     const fetchSearchResults = async () => {
       if (!deferredQuery.trim()) {
         setDbSearchResults([]);
@@ -169,11 +79,12 @@ const SearchPage = () => {
             id: u._id || u.id,
             username: u.username,
             displayName: u.fullName || u.username,
-            avatar: u.profilePicture?.url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${u.username}&style=circle`,
+            avatar: u.profilePicture?.url || null,
             followers: u.stats?.followersCount || 0,
             videos: u.stats?.reelsCount || 0,
             isFollowing: u.isFollowing,
-            followStatus: u.followStatus
+            followStatus: u.followStatus,
+            subtext: u.bio || `${u.stats?.followersCount || 0} followers`,
           }));
           setDbSearchResults(formatted);
         }
@@ -186,23 +97,34 @@ const SearchPage = () => {
     fetchSearchResults();
   }, [deferredQuery]);
 
-  const searchResults = { users: dbSearchResults.length > 0 ? dbSearchResults : [] };
-  const suggestedUsers = dbSuggestedUsers;
-
-  const handleToggleFollow = async (user) => {
+  const handleToggleFollow = async (targetUser) => {
     try {
-      if (user.isFollowing || user.followStatus === 'pending') {
-        const res = await followService.unfollowUser(user.id);
+      if (targetUser.isFollowing || targetUser.followStatus === 'pending') {
+        const res = await followService.unfollowUser(targetUser.id);
         if (res.success) {
-          const updateFn = (list) => list.map(u => u.id === user.id ? { ...u, isFollowing: false, followStatus: null } : u);
+          const updateFn = (list) =>
+            list.map((u) =>
+              u.id === targetUser.id
+                ? { ...u, isFollowing: false, followStatus: null }
+                : u
+            );
           setDbSearchResults(updateFn);
           setDbSuggestedUsers(updateFn);
         }
       } else {
-        const res = await followService.followUser(user.id);
+        const res = await followService.followUser(targetUser.id);
         if (res.success) {
           const newStatus = res.status || 'accepted';
-          const updateFn = (list) => list.map(u => u.id === user.id ? { ...u, isFollowing: newStatus === 'accepted', followStatus: newStatus } : u);
+          const updateFn = (list) =>
+            list.map((u) =>
+              u.id === targetUser.id
+                ? {
+                    ...u,
+                    isFollowing: newStatus === 'accepted',
+                    followStatus: newStatus,
+                  }
+                : u
+            );
           setDbSearchResults(updateFn);
           setDbSuggestedUsers(updateFn);
         }
@@ -212,147 +134,237 @@ const SearchPage = () => {
     }
   };
 
-  const clearUsersLoader = () => {
-    if (usersLoaderTimeoutRef.current) {
-      window.clearTimeout(usersLoaderTimeoutRef.current);
-      usersLoaderTimeoutRef.current = null;
-    }
+  const handleRemoveUser = (userId, e) => {
+    e.stopPropagation();
+    setRemovedUserIds((prev) => {
+      const next = new Set(prev);
+      next.add(userId);
+      return next;
+    });
   };
 
-
-
-  const handleDraftChange = (nextValue) => {
-    clearUsersLoader();
-    setIsUsersLoading(false);
-    const trimmedValue = nextValue.trim();
-    if (!trimmedValue) {
+  const handleSearchInputChange = (val) => {
+    if (!val) {
       setSearchParams(new URLSearchParams(), { replace: true });
-      return;
+    } else {
+      const nextParams = new URLSearchParams();
+      nextParams.set('q', val);
+      setSearchParams(nextParams, { replace: true });
     }
-    const nextParams = new URLSearchParams();
-    nextParams.set('q', normalizeSearchQuery(nextValue));
-    setSearchParams(nextParams, { replace: true });
   };
 
-  const handleSubmitSearch = (nextValue = searchQuery) => {
-    const normalizedValue = normalizeSearchQuery(nextValue);
-    if (!normalizedValue) return;
-    persistSearchHistory(normalizedValue);
-    setSearchHistory(readSearchHistory());
-    const nextParams = new URLSearchParams();
-    nextParams.set('q', normalizedValue);
-    setSearchParams(nextParams);
-  };
-
-  const handleClearSearch = () => {
-    clearUsersLoader();
-    setIsUsersLoading(false);
+  const handleCloseSearch = () => {
+    setIsSearchActive(false);
     setSearchParams(new URLSearchParams(), { replace: true });
   };
 
-  return (
-    <div className="page-container theme-surface-page flex flex-col overflow-hidden">
-      <div className="theme-page-header flex items-center gap-3 px-4 pt-[max(0.35rem,var(--safe-area-top))] pb-2 shrink-0">
-        <div className="theme-input-shell flex-1 min-w-0 rounded-[6px] flex items-center gap-2 px-3 py-2">
-          <button
-            type="button"
-            onClick={() => handleSubmitSearch(searchQuery)}
-            disabled={!normalizedQuery}
-            className={`shrink-0 ${normalizedQuery ? 'theme-text-primary active:opacity-70' : 'theme-text-muted/60'}`}
-            aria-label="Search users"
-          >
-            <BiSearch size={18} />
-          </button>
-          <input
-            type="text"
-            value={searchQuery}
-            autoFocus
-            onChange={(event) => handleDraftChange(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') {
-                handleSubmitSearch(event.currentTarget.value);
-              }
-            }}
-            placeholder="Search users"
-            className="flex-1 min-w-0 bg-transparent text-[15px] outline-none"
-          />
-          {normalizedQuery && (
-            <button
-              type="button"
-              onClick={handleClearSearch}
-              className="theme-text-muted shrink-0 active:opacity-60"
-              aria-label="Clear search"
-            >
-              <BiX size={18} />
-            </button>
-          )}
-        </div>
+  const visibleSuggestedUsers = dbSuggestedUsers.filter(
+    (u) => !removedUserIds.has(u.id)
+  );
 
-        <button
-          type="button"
-          onClick={() => handleSubmitSearch(searchQuery)}
-          disabled={!normalizedQuery}
-          className={`text-[15px] font-semibold shrink-0 ${
-            normalizedQuery ? 'text-[#fe2c55]' : 'text-[#fe2c55]/40'
-          }`}
-        >
-          Search
-        </button>
+  const currentUserAvatar = currentUser?.profilePicture?.url;
+
+  return (
+    <div className="relative w-full h-full min-h-screen bg-black text-white flex flex-col overflow-x-hidden select-none">
+      {/* Background stylized dark geometric curves (TikTok style line overlay) */}
+      <div className="pointer-events-none absolute inset-0 overflow-hidden z-0 opacity-20">
+        <svg className="absolute -right-24 -top-12 w-[460px] h-[700px]" viewBox="0 0 300 500" fill="none">
+          <path d="M30 0 C 160 120, 240 300, 140 500" stroke="#25f4ee" strokeWidth="1.8" />
+          <path d="M60 0 C 190 140, 270 320, 170 500" stroke="#fe2c55" strokeWidth="1.8" />
+          <path d="M90 0 C 220 160, 300 340, 200 500" stroke="#fe2c55" strokeWidth="1" opacity="0.5" />
+        </svg>
       </div>
 
-      <div className="scrollable flex-1">
-        {!isResultsState && (
-          <div className="px-4 pt-3 pb-24">
-            {searchHistory.length > 0 ? (
-              <div className="mb-4">
-                <h2 className="theme-text-primary text-[15px] font-bold mb-2">Recent searches</h2>
-                <div className="space-y-1">
-                  {searchHistory.map((item) => (
-                    <div key={item} className="flex items-center justify-between py-1.5">
-                      <button
-                        type="button"
-                        className="theme-text-primary text-[14px] text-left truncate"
-                        onClick={() => handleSubmitSearch(item)}
-                      >
-                        {item}
-                      </button>
-                      <button
-                        type="button"
-                        className="theme-text-muted text-[12px]"
-                        onClick={() => {
-                          removeSearchHistoryEntry(item);
-                          setSearchHistory(readSearchHistory());
-                        }}
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ) : null}
+      {/* Top Header Bar */}
+      <div className="relative z-10 flex items-center justify-between px-4 pt-[max(0.75rem,var(--safe-area-top))] pb-3 bg-black">
+        {isSearchActive ? (
+          <div className="flex items-center gap-3 w-full">
+            <button
+              onClick={handleCloseSearch}
+              className="text-white/90 active:opacity-60 p-1"
+              aria-label="Back"
+            >
+              <BiChevronLeft size={28} />
+            </button>
 
-            <h2 className="theme-text-primary text-[15px] font-bold mb-3">Suggested users</h2>
-            <UsersResultList
-              users={suggestedUsers}
-              onToggleFollow={handleToggleFollow}
-              onOpenUser={(username) => navigate(`/user/${username}`)}
-              isLoading={false}
-            />
+            <div className="flex-1 bg-[#1c1c1e] rounded-full flex items-center px-3.5 py-1.5">
+              <BiSearch size={18} className="text-white/50 shrink-0 mr-2" />
+              <input
+                type="text"
+                value={searchQuery}
+                autoFocus
+                onChange={(e) => handleSearchInputChange(e.target.value)}
+                placeholder="Search users"
+                className="w-full bg-transparent text-white text-[14px] outline-none placeholder-white/40"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => handleSearchInputChange('')}
+                  className="text-white/50 hover:text-white p-0.5"
+                >
+                  <BiX size={18} />
+                </button>
+              )}
+            </div>
+
+            <button
+              onClick={handleCloseSearch}
+              className="text-white text-[15px] font-medium shrink-0 active:opacity-70"
+            >
+              Cancel
+            </button>
           </div>
-        )}
+        ) : (
+          <>
+            {/* Left Spacer to keep Friends centered */}
+            <div className="w-8 h-8" />
 
-        {isResultsState && (
-          <UsersResultList
-            users={searchResults.users}
-            onToggleFollow={handleToggleFollow}
-            onOpenUser={(username) => navigate(`/user/${username}`)}
-            isLoading={isUsersLoading}
-          />
+            {/* Center Header Title */}
+            <h1 className="text-white font-extrabold text-[20px] tracking-tight">
+              Friends
+            </h1>
+
+            {/* Right: Search Magnifying Glass Icon */}
+            <button
+              onClick={() => setIsSearchActive(true)}
+              className="text-white p-1 active:opacity-60 transition-opacity"
+              aria-label="Search"
+            >
+              <BiSearch size={24} />
+            </button>
+          </>
+        )}
+      </div>
+
+      {/* Main Content Area */}
+      <div className="relative z-10 flex-1 overflow-y-auto pb-24 scrollbar-none">
+        {/* If performing search */}
+        {isSearchActive && searchQuery.trim() ? (
+          <div>
+            {isUsersLoading ? (
+              <div className="flex justify-center py-12">
+                <div className="w-6 h-6 border-2 border-[#fe2c55] border-t-transparent rounded-full animate-spin" />
+              </div>
+            ) : dbSearchResults.length === 0 ? (
+              <div className="text-center py-16 text-white/50 text-[14px]">
+                No users found for "{searchQuery}"
+              </div>
+            ) : (
+              <div className="flex flex-col">
+                {dbSearchResults.map((user) => (
+                  <UserRow
+                    key={user.id}
+                    user={user}
+                    onOpenUser={() => navigate(`/user/${user.username}`)}
+                    onToggleFollow={() => handleToggleFollow(user)}
+                    onRemove={(e) => handleRemoveUser(user.id, e)}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        ) : (
+          /* Main Friends / Suggested view matching Image 2 */
+          <div>
+            {/* Hero Banner Text */}
+            <div className="px-5 pt-3 pb-5">
+              <h2 className="text-white text-[27px] font-extrabold leading-[1.15] tracking-tight max-w-[300px]">
+                Follow your friends to watch their videos
+              </h2>
+            </div>
+
+            {/* Users List */}
+            <div className="flex flex-col">
+              {visibleSuggestedUsers.map((user) => (
+                <UserRow
+                  key={user.id}
+                  user={user}
+                  onOpenUser={() => navigate(`/user/${user.username}`)}
+                  onToggleFollow={() => handleToggleFollow(user)}
+                  onRemove={(e) => handleRemoveUser(user.id, e)}
+                />
+              ))}
+            </div>
+          </div>
         )}
       </div>
     </div>
   );
 };
 
+// Single User Row Component matching Image 2 & zoomed crop screenshot
+const UserRow = ({ user, onOpenUser, onToggleFollow, onRemove }) => {
+  const isFollowing = user.isFollowing;
+  const isPending = user.followStatus === 'pending';
+
+  return (
+    <div
+      onClick={onOpenUser}
+      className="flex items-start px-4 py-3.5 cursor-pointer active:bg-white/5 transition-colors"
+    >
+      {/* Left: Avatar (Exact 82px size & silhouette) */}
+      <div className="w-[82px] h-[82px] rounded-full shrink-0 overflow-hidden bg-[#d6d9df] flex items-center justify-center">
+        {user.avatar ? (
+          <img
+            src={user.avatar}
+            alt={user.displayName}
+            className="w-full h-full object-cover"
+            onError={(e) => {
+              e.currentTarget.style.display = 'none';
+              if (e.currentTarget.nextSibling) {
+                e.currentTarget.nextSibling.style.display = 'flex';
+              }
+            }}
+          />
+        ) : null}
+        <div
+          className="w-full h-full flex items-center justify-center"
+          style={{ display: user.avatar ? 'none' : 'flex' }}
+        >
+          <DefaultAvatar />
+        </div>
+      </div>
+
+      {/* Middle/Right Container: Name, Subtext, Buttons */}
+      <div className="flex-1 min-w-0 ml-4">
+        <h3 className="text-white font-bold text-[17px] leading-tight truncate">
+          {user.displayName}
+        </h3>
+        <p className="text-[#7d7e83] text-[14px] mt-1 truncate font-normal">
+          {user.subtext || `You may know ${user.username}`}
+        </p>
+
+        {/* Buttons Row under the text */}
+        <div className="flex items-center gap-2.5 mt-2.5">
+          <button
+            type="button"
+            onClick={onRemove}
+            className="w-[115px] h-[38px] rounded-full bg-[#202023] hover:bg-[#2c2c30] active:scale-95 text-white text-[14px] font-bold flex items-center justify-center transition-all duration-150 shrink-0"
+          >
+            Remove
+          </button>
+
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleFollow();
+            }}
+            className={`w-[145px] h-[38px] rounded-full text-[14px] font-bold flex items-center justify-center transition-all duration-150 shrink-0 ${
+              isPending
+                ? 'bg-[#202023] text-white/70 font-semibold'
+                : isFollowing
+                ? 'bg-[#202023] text-white/70 font-semibold'
+                : 'bg-[#fe2c55] active:bg-[#e0264b] active:scale-95 text-white shadow-md'
+            }`}
+          >
+            {isPending ? 'Requested' : isFollowing ? 'Following' : 'Follow'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 export default SearchPage;
+

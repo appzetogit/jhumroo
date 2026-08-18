@@ -19,16 +19,16 @@ const storage = multer.diskStorage({
   }
 });
 
-// File filter for videos
+// File filter for videos & photos
 const videoFilter = (req, file, cb) => {
-  const allowedTypes = /mp4|mov|avi|mkv|webm/;
+  const allowedTypes = /mp4|mov|avi|mkv|webm|jpeg|jpg|png|gif|webp/;
   const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
   const mimetype = allowedTypes.test(file.mimetype);
 
   if (mimetype && extname) {
     return cb(null, true);
   } else {
-    cb(new Error('Only video files are allowed (mp4, mov, avi, mkv, webm)'));
+    cb(new Error('Only video or image files are allowed'));
   }
 };
 

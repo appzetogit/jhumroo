@@ -379,6 +379,33 @@ const VideoOverlay = ({ reelId, username, caption, musicName, isLiked, likes, co
     if (typeof onScrubStateChange === 'function') onScrubStateChange(scrubbing);
   };
 
+  const isImageAdInternal = isAd && (videoData?.video?.type === 'image' || videoData?.media?.type === 'image');
+  const videoUrl = videoData?.video?.url || videoData?.url || videoData?.rawVideoUrl;
+  const isPhotoMedia = Boolean(
+    isImageAdInternal ||
+    videoData?.video?.type === 'image' ||
+    videoData?.mediaType === 'photo' ||
+    videoData?.isPhoto ||
+    (videoUrl && (videoUrl.match(/\.(jpeg|jpg|png|webp)($|\?)/i) || videoUrl.includes('photo')))
+  );
+
+  const getTimeAgo = (dateStr) => {
+    if (!dateStr) return '';
+    const date = new Date(dateStr);
+    const now = new Date();
+    const seconds = Math.floor((now - date) / 1000);
+    if (isNaN(seconds) || seconds < 0) return '';
+    if (seconds < 60) return `${Math.max(1, seconds)}s ago`;
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `${minutes}m ago`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours}h ago`;
+    const days = Math.floor(hours / 24);
+    return `${days}d ago`;
+  };
+
+  const timeAgo = getTimeAgo(videoData?.createdAt);
+
   return (
     <>
       <div className="absolute inset-0 pointer-events-none flex flex-col justify-end bg-gradient-to-t from-black/80 via-black/20 to-transparent z-[30]">
@@ -408,14 +435,30 @@ const VideoOverlay = ({ reelId, username, caption, musicName, isLiked, likes, co
             )}
 
             {/* Username — clickable → user profile */}
-            <div className="flex items-center gap-2 mb-1">
+            <div className="flex items-center gap-2 mb-1 flex-nowrap max-w-full whitespace-nowrap overflow-hidden">
               {(!isAd || (isAd && videoData.onModel === 'User')) && (
                 <h3
-                  className="text-[17px] font-bold cursor-pointer active:opacity-70 pointer-events-auto text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.8)] tracking-wide"
+                  className="text-[17px] font-bold cursor-pointer active:opacity-70 pointer-events-auto text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.8)] tracking-wide truncate shrink min-w-0"
                   onClick={() => navigate(`/user/${username}`)}
                 >
                   @{username}
                 </h3>
+              )}
+              {isPhotoMedia && (
+                <div className="flex items-center gap-1.5 pointer-events-auto shrink-0">
+                  <span className="bg-black/35 backdrop-blur-md px-2.5 py-1 rounded-[7px] text-[13px] font-bold text-white flex items-center gap-1.5 border border-white/10 drop-shadow-sm">
+                    <svg width="15" height="15" viewBox="0 0 18 18" fill="none" className="shrink-0">
+                      <rect x="5.5" y="5.5" width="10" height="10" rx="3" fill="#FFFFFF" fillOpacity="0.55" />
+                      <rect x="2.5" y="2.5" width="10" height="10" rx="3" fill="#FFFFFF" />
+                    </svg>
+                    <span>Photo</span>
+                  </span>
+                  {timeAgo && (
+                    <span className="text-[13px] text-white/80 font-normal drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
+                      · {timeAgo}
+                    </span>
+                  )}
+                </div>
               )}
               {isAd && (
                 <span className="bg-white/20 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider backdrop-blur-sm">
@@ -428,6 +471,8 @@ const VideoOverlay = ({ reelId, username, caption, musicName, isLiked, likes, co
                 </span>
               )}
             </div>
+
+
 
             {/* Caption */}
             <div className="text-[14px] leading-snug text-white font-normal drop-shadow-[0_1px_3px_rgba(0,0,0,0.8)]">
@@ -452,6 +497,16 @@ const VideoOverlay = ({ reelId, username, caption, musicName, isLiked, likes, co
                 </>
               )}
             </div>
+
+            {/* Views Count for Photo Posts */}
+            {isPhotoMedia && (
+              <div className="mt-2.5 flex items-center gap-1.5 text-white/90 font-medium text-[13px] drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)] pointer-events-auto">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-white">
+                  <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                </svg>
+                <span>{formatTikTokCount(videoData?.stats?.viewsCount ?? videoData?.views ?? videoData?.viewsCount ?? 0)} views</span>
+              </div>
+            )}
           </div>
 
           {/* Right: Floating TikTok Action Sidebar */}
@@ -619,8 +674,8 @@ const VideoOverlay = ({ reelId, username, caption, musicName, isLiked, likes, co
           </div>
         </div>
 
-        {/* 6. Interactive Video Progress Seek Bar & Drag Overlay */}
-        {!isAd && (
+        {/* Interactive Video Progress Seek Bar for Videos only */}
+        {!isAd && !isPhotoMedia && (
           <VideoSeekBar
             currentTime={currentTime}
             duration={duration}

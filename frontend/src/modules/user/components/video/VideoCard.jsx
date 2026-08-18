@@ -25,11 +25,10 @@ const VideoCard = ({ videoData, isActive, preload = 'none', compactBottom = fals
   const duetVideoRef = useRef(null);
   const isDuet = localVideoData.isRemix && localVideoData.originalReel;
 
-  // Determine if this ad contains an image instead of a video
-  const isImageAd = localVideoData.isAd && (
-    localVideoData.video?.type === 'image' ||
-    localVideoData.media?.type === 'image'
-  );
+  // Determine if this post/ad contains an image instead of a video
+  const isImageAd = localVideoData.isAd && (localVideoData.video?.type === 'image' || localVideoData.media?.type === 'image');
+  const videoUrl = localVideoData.video?.url || localVideoData.url || localVideoData.rawVideoUrl;
+  const isImagePost = isImageAd || Boolean(videoUrl && (videoUrl.match(/\.(jpeg|jpg|png|webp)($|\?)/i) || localVideoData.video?.type === 'image' || localVideoData.mediaType === 'photo' || localVideoData.isImage));
 
   // Sync data — always adopt a fresh videoData prop (e.g. refetch bringing
   // updated follow/stats info); only reset view-tracking when it's actually
@@ -106,17 +105,35 @@ const VideoCard = ({ videoData, isActive, preload = 'none', compactBottom = fals
     };
   }, [socket, reelId]);
 
-  // Track view for image ads (no video playback)
+  // Universal 1-Time View Tracking per user (for videos, photos, and ads)
   useEffect(() => {
-    if (!isImageAd || !isActive || viewTrackedRef.current) return;
+    if (!isActive || !reelId || viewTrackedRef.current) return;
+
     const timer = setTimeout(() => {
-      if (isActive) {
+      if (isActive && !viewTrackedRef.current) {
         viewTrackedRef.current = true;
-        adService.trackView(reelId);
+        if (localVideoData.isAd) {
+          adService.trackView(reelId);
+        } else {
+          reelService.recordView(reelId).then((response) => {
+            if (response && response.success && typeof response.viewsCount === 'number') {
+              setLocalVideoData((prev) => ({
+                ...prev,
+                stats: {
+                  ...(prev?.stats || {}),
+                  viewsCount: response.viewsCount,
+                },
+              }));
+            }
+          }).catch((err) => {
+            console.warn('View recording error:', err);
+          });
+        }
       }
-    }, 3000);
+    }, 1000);
+
     return () => clearTimeout(timer);
-  }, [isActive, isImageAd, reelId]);
+  }, [isActive, reelId, localVideoData.isAd]);
 
   // HLS and Playback Logic (video only — skipped for image ads)
   useEffect(() => {
@@ -153,15 +170,6 @@ const VideoCard = ({ videoData, isActive, preload = 'none', compactBottom = fals
         playPromise.then(() => {
           setPlaying(true);
           watchStartTimeRef.current = Date.now();
-          if (!viewTrackedRef.current) {
-            setTimeout(() => {
-              if (isActive) {
-                viewTrackedRef.current = true;
-                if (localVideoData.isAd) adService.trackView(reelId);
-                else reelService.recordView(reelId);
-              }
-            }, 3000);
-          }
         }).catch((err) => {
           // If browser blocked unmuted autoplay, retry muted so video plays smoothly
           if (video && !video.muted) {
@@ -539,6 +547,16 @@ const VideoCard = ({ videoData, isActive, preload = 'none', compactBottom = fals
             />
           </div>
         </div>
+      ) : isImagePost ? (
+        <img
+          src={videoUrl}
+          alt={localVideoData.caption || 'Photo'}
+          className="absolute inset-0 w-full h-full object-cover bg-black"
+          onClick={(e) => {
+            if (e.detail === 2) handleDoubleClick();
+            else handleScreenTap();
+          }}
+        />
       ) : (
         <video
           ref={videoRef}
@@ -587,7 +605,8 @@ const VideoCard = ({ videoData, isActive, preload = 'none', compactBottom = fals
         isMuted={isMuted}
         onMuteToggle={handleMuteToggle}
         isPlaying={playing}
-        isImageAd={isImageAd}
+        isImageAd={isImagePost}
+        isImagePost={isImagePost}
         compactBottom={compactBottom}
         currentTime={currentTime}
         duration={duration}
@@ -595,7 +614,7 @@ const VideoCard = ({ videoData, isActive, preload = 'none', compactBottom = fals
         onScrubStateChange={setIsScrubbing}
       />
 
-      {showMuteOverlay && !isImageAd && (
+      {showMuteOverlay && !isImagePost && (
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[35] bg-black/40 rounded-full p-6 flex items-center justify-center pointer-events-none animate-scale-in">
           {isMuted ? (
             <svg width="60" height="60" viewBox="0 0 24 24" fill="white"><path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/></svg>
@@ -605,7 +624,7 @@ const VideoCard = ({ videoData, isActive, preload = 'none', compactBottom = fals
         </div>
       )}
 
-      {!playing && isActive && !showMuteOverlay && !isImageAd && (
+      {!playing && isActive && !showMuteOverlay && !isImagePost && (
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[35] bg-black/30 rounded-full p-3 flex items-center justify-center pointer-events-none transition-opacity duration-200">
           <svg width="36" height="36" viewBox="0 0 24 24" fill="rgba(255,255,255,0.7)"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
         </div>

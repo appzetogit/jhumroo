@@ -63,6 +63,14 @@ const LazyVideo = ({ src, className }) => {
   );
 };
 
+const formatTikTokCount = (num) => {
+  if (num === undefined || num === null || num === '') return '0';
+  if (typeof num === 'string') return num;
+  if (num >= 1000000) return (num / 1000000).toFixed(1).replace(/\.0$/, '') + 'M';
+  if (num >= 1000) return (num / 1000).toFixed(1).replace(/\.0$/, '') + 'K';
+  return num.toString();
+};
+
 const VideoGrid = ({ videos, onVideoClick }) => {
   if (!videos || !videos.length) {
     return (
@@ -75,43 +83,81 @@ const VideoGrid = ({ videos, onVideoClick }) => {
   return (
     <>
       {videos.map((video, idx) => {
+        const videoUrl = video.video?.url || video.url || video.rawVideoUrl || '';
         const thumbnailSrc = video.video?.thumbnail || video.thumbnail || video.poster;
-        const hasThumbnail = thumbnailSrc && 
-          typeof thumbnailSrc === 'string' && 
-          !thumbnailSrc.endsWith('.mp4') && 
-          !thumbnailSrc.endsWith('.webm') && 
-          thumbnailSrc.trim() !== '' &&
-          !thumbnailSrc.includes('1618005182384');
+        
+        const isVideoFile = videoUrl.toLowerCase().endsWith('.mp4') || 
+          videoUrl.toLowerCase().endsWith('.webm') || 
+          videoUrl.toLowerCase().endsWith('.mov') || 
+          videoUrl.toLowerCase().endsWith('.mkv') || 
+          videoUrl.toLowerCase().includes('.m3u8');
+
+        const isPhotoMedia = !isVideoFile && Boolean(
+          video.video?.type === 'image' ||
+          video.mediaType === 'photo' ||
+          video.isPhoto ||
+          video.type === 'photo' ||
+          (videoUrl && videoUrl.match(/\.(jpeg|jpg|png|webp)($|\?)/i))
+        );
+
+        const imageDisplayUrl = isPhotoMedia ? (videoUrl || thumbnailSrc) : thumbnailSrc;
+        const hasImage = imageDisplayUrl &&
+          typeof imageDisplayUrl === 'string' &&
+          !imageDisplayUrl.endsWith('.mp4') &&
+          !imageDisplayUrl.endsWith('.webm') &&
+          imageDisplayUrl.trim() !== '' &&
+          !imageDisplayUrl.includes('1618005182384');
         
         return (
           <div 
             key={idx} 
-            className="relative aspect-[3/4] bg-surface overflow-hidden group cursor-pointer border-[0.5px] border-white/5"
+            className="relative aspect-[3/4] bg-surface overflow-hidden group cursor-pointer border-[0.5px] border-white/5 select-none"
             onClick={() => onVideoClick?.(video, idx)}
           >
-            {hasThumbnail ? (
+            {/* Top-Right Stacked Photo Icon for Photo posts */}
+            {isPhotoMedia && (
+              <div className="absolute top-2 right-2 z-10 drop-shadow-[0_1px_4px_rgba(0,0,0,0.9)]">
+                <svg width="22" height="22" viewBox="0 0 20 20" fill="none">
+                  <rect x="6.5" y="6.5" width="11.5" height="11.5" rx="3.5" fill="#FFFFFF" fillOpacity="0.68" />
+                  <rect x="2.8" y="2.8" width="11.5" height="11.5" rx="3.5" fill="#FFFFFF" />
+                </svg>
+              </div>
+            )}
+
+            {hasImage ? (
               <img 
-                src={thumbnailSrc} 
+                src={imageDisplayUrl} 
                 alt="reel-thumbnail"
                 loading="lazy"
                 className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" 
               />
             ) : (
               <LazyVideo 
-                src={video.video?.url || video.url} 
+                src={videoUrl} 
                 className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 pointer-events-none"
               />
             )}
+
             <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+              {!isPhotoMedia && (
                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="white" className="opacity-80">
                   <path d="M5 3l14 9-14 9z" />
                 </svg>
+              )}
             </div>
-            <div className="absolute bottom-1.5 left-1.5 flex items-center gap-1 text-white text-[10px] font-bold drop-shadow-md theme-on-media">
-              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="white">
-                <path d="M5 3l14 9-14 9z" />
+
+            {/* Bottom Gradient Shadow for High Contrast */}
+            <div className="absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-black/65 via-black/25 to-transparent pointer-events-none z-[5]" />
+
+            {/* Bottom-Left Views Count (▷ 0) */}
+            <div 
+              className="absolute bottom-2 left-2 flex items-center gap-1.5 text-[14px] font-extrabold drop-shadow-[0_1px_4px_rgba(0,0,0,0.95)] z-10 !text-white"
+              style={{ color: '#ffffff' }}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round" style={{ stroke: '#ffffff' }}>
+                <polygon points="5 3 19 12 5 21 5 3"></polygon>
               </svg>
-              <span>{video.stats?.likesCount || video.likes || 0}</span>
+              <span style={{ color: '#ffffff' }}>{formatTikTokCount(video.stats?.viewsCount ?? video.views ?? video.viewsCount ?? 0)}</span>
             </div>
           </div>
         );

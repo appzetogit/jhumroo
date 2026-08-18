@@ -47,6 +47,7 @@ import SoundPage from './modules/user/pages/Sound/SoundPage';
 import FollowersPage from './modules/user/pages/Profile/FollowersPage';
 import NewFollowersPage from './modules/user/pages/Inbox/NewFollowersPage';
 import AllActivityPage from './modules/user/pages/Inbox/AllActivityPage';
+import InboxSearchPage from './modules/user/pages/Inbox/InboxSearchPage';
 import ChatPage from './modules/user/pages/Inbox/ChatPage';
 import ChatMediaPage from './modules/user/pages/Inbox/ChatMediaPage';
 import FollowRequestsPage from './modules/user/pages/Profile/FollowRequestsPage';
@@ -103,6 +104,7 @@ const MainLayout = ({ onLogout }) => {
         <Route path="/search/hashtag/:tagSlug" element={<SearchHashtagPage />} />
         <Route path="/create" element={<CreatePage />} />
         <Route path="/inbox" element={<InboxPage />} />
+        <Route path="/inbox/search" element={<InboxSearchPage />} />
         <Route path="/inbox/new-followers" element={<NewFollowersPage />} />
         <Route path="/inbox/activity" element={<AllActivityPage />} />
         <Route path="/inbox/chat/:username" element={<ChatPage />} />
