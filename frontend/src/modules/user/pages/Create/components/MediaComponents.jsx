@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState, memo } from 'react';
-import { FILTER_PRESETS } from '../utils/createConstants';
+import { FILTER_PRESETS, ALL_FILTERS_MAP } from '../utils/createConstants';
 import { parseDurationSeconds } from '../utils/createUtils';
 
 export const DynamicAudioDuration = ({ soundItem }) => {
@@ -25,7 +25,7 @@ export const MediaPreview = ({ image, rotation = 0, className = '', filter = 'No
   const isQuarterTurn = Math.abs(rotation % 180) === 90;
   
   const getFilter = () => {
-    const base = filter === 'Normal' ? '' : (FILTER_PRESETS[filter] || '');
+    const base = filter === 'Normal' ? '' : (ALL_FILTERS_MAP[filter] || FILTER_PRESETS[filter] || '');
     if (!adjustments) return base || 'none';
     const adj = `brightness(${adjustments.brightness}%) contrast(${adjustments.contrast}%) saturate(${adjustments.saturate}%) hue-rotate(${adjustments.hueRotate}deg) invert(${adjustments.invert}%) grayscale(${adjustments.grayscale}%) sepia(${adjustments.sepia}%) blur(${adjustments.blur}px) opacity(${adjustments.opacity}%)`;
     return `${base} ${adj}`.trim() || 'none';

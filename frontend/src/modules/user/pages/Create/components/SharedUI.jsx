@@ -27,17 +27,21 @@ export const Toggle = ({ enabled, onToggle, isDarkMode = false }) => (
   </button>
 );
 
-export const BottomSheet = ({ title, onClose, children, compact = false, scrollable = false, transparentOverlay = false }) => (
-  <div className={transparentOverlay ? "absolute inset-0 z-40 flex items-end justify-center bg-transparent" : sheetOverlayClass} onClick={onClose}>
+export const BottomSheet = ({ title, onClose, children, compact = false, scrollable = false, transparentOverlay = false, isDarkMode = true }) => (
+  <div className={transparentOverlay ? "absolute inset-0 z-[500] flex items-end justify-center bg-transparent" : sheetOverlayClass} onClick={onClose}>
     <div
-      className={`flex w-full max-w-[450px] flex-col overflow-hidden rounded-t-[24px] bg-white text-black shadow-2xl ${
+      className={`flex w-full max-w-[450px] flex-col overflow-hidden rounded-t-[24px] shadow-2xl transition-all ${
+        isDarkMode
+          ? 'bg-[#1c1c1e] text-white border-t border-white/10 shadow-[0_-12px_45px_rgba(0,0,0,0.9)]'
+          : 'bg-white text-black'
+      } ${
         compact ? 'pb-[max(1rem,env(safe-area-inset-bottom))]' : 'max-h-[78%] pb-[max(1.25rem,env(safe-area-inset-bottom))]'
       }`}
       onClick={(event) => event.stopPropagation()}
     >
       <div className="flex shrink-0 items-center justify-between px-5 pt-4 pb-3">
-        <h3 className="text-[17px] font-semibold">{title}</h3>
-        <button type="button" onClick={onClose} className="text-black/65 active:opacity-60">
+        <h3 className={`text-[17px] font-bold ${isDarkMode ? 'text-white' : 'text-black'}`}>{title}</h3>
+        <button type="button" onClick={onClose} className={`${isDarkMode ? 'text-white/70 hover:text-white' : 'text-black/65'} active:opacity-60`}>
           <BiX size={22} />
         </button>
       </div>

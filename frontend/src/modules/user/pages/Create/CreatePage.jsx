@@ -4,12 +4,15 @@ import Instacam from 'instacam';
 import FaceEffectCanvas from './components/FaceEffectCanvas';
 import { FACE_EFFECT_PRESETS } from './utils/faceEffectPresets';
 import {
+  BiAdjust,
   BiAt,
   BiBlock,
   BiCheck,
   BiChevronDown,
   BiChevronLeft,
   BiChevronRight,
+  BiChevronUp,
+  BiCog,
   BiImageAlt,
   BiLinkAlt,
   BiMicrophone,
@@ -345,39 +348,163 @@ const CreatePage = () => {
     return Number(localStorage.getItem('create_textRotation')) || 0;
   });
 
+  const [textSubTab, setTextSubTab] = useState('fonts');
+  const [overlayBgMode, setOverlayBgMode] = useState('none');
+  const [overlayAlign, setOverlayAlign] = useState('center');
+  const [fontSubCategory, setFontSubCategory] = useState('Trending');
+  const [artSubCategory, setArtSubCategory] = useState('Trending');
+  const [selectedArtId, setSelectedArtId] = useState(null);
+
+  const toggleTextBgStyle = () => {
+    setOverlayBgMode((prev) => {
+      if (prev === 'none') return 'solid';
+      if (prev === 'solid') return 'translucent';
+      if (prev === 'translucent') return 'outline';
+      return 'none';
+    });
+  };
+
+  const toggleTextAlign = () => {
+    setOverlayAlign((prev) => {
+      if (prev === 'center') return 'left';
+      if (prev === 'left') return 'right';
+      return 'center';
+    });
+  };
+
   const FONT_OPTIONS = [
-    { name: 'Classic', family: 'serif' },
-    { name: 'Modern', family: 'sans-serif' },
-    { name: 'Serif', family: "'Source Serif Pro', serif" },
-    { name: 'Bold', family: "'Outfit', sans-serif" },
-    { name: 'Typewriter', family: "'Courier New', monospace" },
-    { name: 'Italic', family: 'italic' },
-    { name: 'Script', family: 'cursive' },
-    { name: 'Impact', family: 'Impact' },
-    { name: 'Cursive', family: "'Brush Script MT', cursive" },
-    { name: 'Groovy', family: "'Comic Sans MS', cursive" },
-    { name: 'Elegant', family: 'Georgia' },
-    { name: 'Digital', family: 'monospace' },
-    { name: 'Narrow', family: "'Arial Narrow', sans-serif" },
-    { name: 'Wide', family: 'Verdana' },
-    { name: 'Vintage', family: 'Palatino' },
-    { name: 'System', family: 'system-ui' },
-    { name: 'Round', family: "'Varela Round', sans-serif" },
-    { name: 'Sharp', family: 'Tahoma' },
-    { name: 'Soft', family: 'Trebuchet MS' },
-    { name: 'Playful', family: 'Chalkboard SE' },
-    { name: 'Antique', family: 'Bookman' },
-    { name: 'Blocky', family: 'Arial Black' },
-    { name: 'Thin', family: "'Helvetica Neue', sans-serif" },
-    { name: 'Outline', family: 'sans-serif' },
-    { name: 'Glowing', family: 'sans-serif' }
+    { name: 'Classic', family: 'sans-serif', category: 'Trending' },
+    { name: 'Elegance', family: 'Georgia, serif', category: 'Basic' },
+    { name: 'Neon', family: "'Outfit', sans-serif", category: 'Glow' },
+    { name: 'Retro', family: "'Source Serif Pro', serif", category: 'Retro' },
+    { name: 'Comic Sans', family: "'Comic Sans MS', cursive", category: 'Comic' },
+    { name: 'TALLHAUS', family: "'Arial Narrow', sans-serif", category: 'Trending' },
+    { name: 'Vintage', family: 'Palatino, serif', category: 'Retro' },
+    { name: 'Bomb', family: 'Impact, sans-serif', category: 'Trending' },
+    { name: 'Signature', family: "'Brush Script MT', cursive", category: 'Handwritten' },
+    { name: 'Printer', family: "'Courier New', monospace", category: 'Basic' },
+    { name: 'Typewriter', family: "'Courier New', monospace", category: 'Basic' },
+    { name: 'Lyrical', family: 'cursive', category: 'Handwritten' },
+    { name: 'Ice Cube', family: 'monospace', category: 'Basic' },
+    { name: 'Verve', family: 'sans-serif', category: 'Basic' },
+    { name: 'Oxygen', family: 'sans-serif', category: 'Basic' },
+    { name: 'Ubuntu', family: 'sans-serif', category: 'Basic' },
+    { name: 'Long Cang', family: 'cursive', category: 'Handwritten' },
+    { name: 'Bad Script', family: 'cursive', category: 'Handwritten' },
+    { name: 'Star', family: 'sans-serif', category: 'Basic' },
+    { name: 'BenguiatB', family: 'serif', category: 'Retro' },
+    { name: 'Yeseva', family: 'serif', category: 'Retro' },
+    // Screenshot 1 Fonts
+    { name: 'BarlowE', family: "'Barlow Semi Condensed', sans-serif", category: 'Trending' },
+    { name: 'Ysabeau', family: "Georgia, serif", category: 'Basic' },
+    { name: 'GenSenB', family: "sans-serif", category: 'Basic' },
+    { name: 'Noto', family: "sans-serif", category: 'Basic' },
+    { name: 'Cormorant', family: "'Cormorant Garamond', Georgia, serif", category: 'Retro' },
+    { name: 'XioaWei', family: "Georgia, serif", category: 'Retro' },
+    { name: 'UoqMun', family: "Georgia, serif", category: 'Retro' },
+    { name: 'Zcool', family: "sans-serif", category: 'Trending' },
+    { name: 'Potta', family: "'Comic Sans MS', cursive", category: 'Comic' },
+    { name: 'Science', family: "'Impact', monospace", category: 'Trending' },
+    { name: 'Rubik', family: "sans-serif", category: 'Basic' },
+    { name: 'Libreral', family: "Georgia, serif", category: 'Retro' },
+    // Screenshot 2 Fonts
+    { name: 'Allison', family: "'Brush Script MT', cursive", category: 'Handwritten' },
+    { name: 'Italic', family: "Georgia, serif", category: 'Basic' },
+    { name: 'Montserrat', family: "sans-serif", category: 'Basic' },
+    { name: 'Playpen', family: "cursive", category: 'Handwritten' },
+    { name: 'Josefin', family: "sans-serif", category: 'Basic' },
+    { name: 'ENCODE', family: "sans-serif", category: 'Trending' },
+    { name: 'VOUGE', family: "Palatino, serif", category: 'Retro' },
+    { name: 'Nunito', family: "sans-serif", category: 'Basic' },
+    { name: 'Archive', family: "sans-serif", category: 'Trending' },
+    { name: 'BANGERS', family: "'Impact', cursive", category: 'Comic' },
+    { name: 'Anton', family: "Impact, sans-serif", category: 'Trending' },
+    { name: 'Unbounded', family: "sans-serif", category: 'Trending' },
+    // Screenshot 3 Fonts
+    { name: 'Carattere', family: "cursive", category: 'Handwritten' },
+    { name: 'FACON', family: "sans-serif", category: 'Trending' },
+    { name: 'Poppins', family: "sans-serif", category: 'Basic' },
+    { name: 'Satisfy', family: "cursive", category: 'Handwritten' },
+    { name: 'REENIE', family: "cursive", category: 'Handwritten' },
+    { name: 'Alegreya', family: "Georgia, serif", category: 'Retro' },
+    { name: 'Bevan', family: "Impact, serif", category: 'Retro' },
+    { name: 'DynaPuff', family: "'Comic Sans MS', cursive", category: 'Comic' },
+    { name: 'BEBASNEUE', family: "'Arial Narrow', sans-serif", category: 'Trending' },
+    { name: 'Playfair', family: "Georgia, serif", category: 'Retro' },
+    { name: 'EVANGEL', family: "serif", category: 'Retro' },
+    { name: 'MARKER', family: "cursive", category: 'Handwritten' },
+    // Screenshot 4 Fonts
+    { name: 'ZEN LOOP', family: "cursive", category: 'Glow' },
+    { name: 'Horror', family: "'Comic Sans MS', cursive", category: 'Comic' },
+    { name: 'Public Sans', family: "sans-serif", category: 'Basic' },
+    { name: 'MONOTON', family: "monospace", category: 'Glow' },
+    { name: 'Barlow', family: "sans-serif", category: 'Basic' },
+    { name: 'Futuristic', family: "sans-serif", category: 'Glow' },
+    { name: 'ROCK SALT', family: "cursive", category: 'Handwritten' },
+    { name: 'Onest', family: "sans-serif", category: 'Basic' },
+    { name: 'Modern', family: "Impact, sans-serif", category: 'Trending' },
+    { name: 'Italianno', family: "cursive", category: 'Handwritten' },
+    { name: 'Lexend', family: "sans-serif", category: 'Basic' },
+    { name: 'Lobster', family: "cursive", category: 'Retro' }
+  ];
+
+  const ART_STYLE_OPTIONS = [
+    // Screenshot 1 & 2: Trending & Glow Presets
+    { id: 'art_pink_glow_hot', label: 'ART', category: 'Trending', font: 'Bomb', color: '#ff2d55', bgMode: 'none', styleClass: 'text-[#ff2d55] drop-shadow-[0_0_12px_#ff2d55] font-black' },
+    { id: 'art_pink_neon_box', label: 'ART', category: 'Trending', font: 'Classic', color: '#ff77a9', bgMode: 'none', styleClass: 'border-2 border-pink-400 text-pink-300 drop-shadow-[0_0_10px_#ff007f] font-black px-2 rounded-md' },
+    { id: 'art_coral_red_glow', label: 'ART', category: 'Red', font: 'Bomb', color: '#ff3b5c', bgMode: 'none', styleClass: 'text-[#ff3b5c] drop-shadow-[0_0_10px_#ff3b5c] font-black' },
+    { id: 'art_bold_white_shadow', label: 'ART', category: 'Trending', font: 'Classic', color: '#ffffff', bgMode: 'none', styleClass: 'text-white drop-shadow-[2px_2px_0_#000000] font-black' },
+    { id: 'art_purple_blue_glow', label: 'ART', category: 'Glow', font: 'Neon', color: '#c084fc', bgMode: 'none', styleClass: 'text-purple-300 drop-shadow-[0_0_10px_#a855f7] font-black' },
+    { id: 'art_pink_white_outline', label: 'ART', category: 'Pink', font: 'Classic', color: '#ffffff', bgMode: 'none', styleClass: 'border-2 border-pink-500 text-white font-black px-2 rounded-md' },
+    { id: 'art_black_solid_box', label: 'ART', category: 'Basic', font: 'Classic', color: '#ffffff', bgMode: 'solid', styleClass: 'bg-black text-white font-black px-2.5 py-0.5 rounded-lg border border-white/20' },
+    { id: 'art_white_solid_box', label: 'ART', category: 'Basic', font: 'Classic', color: '#000000', bgMode: 'solid', styleClass: 'bg-white text-black font-black px-2.5 py-0.5 rounded-lg border border-white' },
+    { id: 'art_gray_solid_box', label: 'ART', category: 'Basic', font: 'Classic', color: '#000000', bgMode: 'solid', styleClass: 'bg-gray-300 text-black font-black px-2.5 py-0.5 rounded-lg' },
+
+    // Screenshot 2 & 3: Metallic, 3D & Neon Presets
+    { id: 'art_pink_3d_emboss', label: 'ART', category: 'Trending', font: 'Bomb', color: '#f472b6', bgMode: 'none', styleClass: 'text-pink-400 font-black drop-shadow-[2px_2px_0_#9333ea]' },
+    { id: 'art_chrome_silver', label: 'ART', category: 'Trending', font: 'Bomb', color: '#e2e8f0', bgMode: 'none', styleClass: 'bg-gradient-to-b from-white via-gray-200 to-gray-400 text-transparent bg-clip-text font-black drop-shadow-md' },
+    { id: 'art_cyan_blue_gloss', label: 'ART', category: 'Blue', font: 'Bomb', color: '#38bdf8', bgMode: 'none', styleClass: 'bg-gradient-to-b from-cyan-300 to-blue-600 text-transparent bg-clip-text font-black drop-shadow-md' },
+    { id: 'art_red_neon_double', label: 'ART', category: 'Red', font: 'Classic', color: '#ef4444', bgMode: 'none', styleClass: 'border-2 border-red-500 text-red-400 font-black px-2 rounded-md drop-shadow-[0_0_8px_#ef4444]' },
+    { id: 'art_green_neon_glow', label: 'ART', category: 'Glow', font: 'Neon', color: '#10b981', bgMode: 'none', styleClass: 'text-emerald-400 drop-shadow-[0_0_10px_#10b981] font-black' },
+    { id: 'art_silver_3d_shadow', label: 'ART', category: 'Basic', font: 'Classic', color: '#cbd5e1', bgMode: 'none', styleClass: 'text-slate-200 drop-shadow-[2px_2px_0_#000000] font-black' },
+    { id: 'art_red_solid_black_shadow', label: 'ART', category: 'Red', font: 'Bomb', color: '#dc2626', bgMode: 'none', styleClass: 'text-red-600 drop-shadow-[2px_2px_0_#000000] font-black' },
+    { id: 'art_yellow_3d_shadow', label: 'ART', category: 'Yellow', font: 'Bomb', color: '#facc15', bgMode: 'none', styleClass: 'text-yellow-400 drop-shadow-[2px_2px_0_#b45309] font-black' },
+    { id: 'art_black_3d_white_shadow', label: 'ART', category: 'Basic', font: 'Bomb', color: '#000000', bgMode: 'none', styleClass: 'text-black drop-shadow-[2px_2px_0_#ffffff] font-black' },
+
+    // Screenshot 4: Basic Presets
+    { id: 'art_simple_white', label: 'ART', category: 'Basic', font: 'Classic', color: '#ffffff', bgMode: 'none', styleClass: 'text-white font-black' },
+    { id: 'art_outline_white', label: 'ART', category: 'Basic', font: 'Outline', color: '#ffffff', bgMode: 'outline', styleClass: 'border border-white/80 text-white font-black px-2 rounded-md' },
+    { id: 'art_translucent_dark_box', label: 'ART', category: 'Basic', font: 'Classic', color: '#ffffff', bgMode: 'translucent', styleClass: 'bg-black/70 text-white font-black px-2.5 py-0.5 rounded-lg border border-white/10' },
+
+    // Screenshot 5: Yellow & Rainbow Presets
+    { id: 'art_yellow_red_3d', label: 'ART', category: 'Yellow', font: 'Bomb', color: '#facc15', bgMode: 'none', styleClass: 'text-yellow-400 drop-shadow-[2px_2px_0_#ef4444] font-black' },
+    { id: 'art_soft_yellow_neon', label: 'ART', category: 'Yellow', font: 'Neon', color: '#fde047', bgMode: 'none', styleClass: 'text-yellow-300 drop-shadow-[0_0_8px_#fde047] font-black' },
+    { id: 'art_yellow_glow_pill', label: 'ART', category: 'Yellow', font: 'Neon', color: '#eab308', bgMode: 'none', styleClass: 'text-yellow-400 drop-shadow-[0_0_12px_#eab308] font-black' },
+    { id: 'art_solid_yellow_box', label: 'ART', category: 'Yellow', font: 'Classic', color: '#000000', bgMode: 'solid', styleClass: 'bg-yellow-400 text-black font-black px-2.5 py-0.5 rounded-lg' },
+    { id: 'art_pale_yellow_box', label: 'ART', category: 'Yellow', font: 'Classic', color: '#451a03', bgMode: 'solid', styleClass: 'bg-amber-100 text-amber-950 font-black px-2.5 py-0.5 rounded-lg' },
+    { id: 'art_orange_border_yellow', label: 'ART', category: 'Yellow', font: 'Classic', color: '#facc15', bgMode: 'none', styleClass: 'border-2 border-orange-500 text-yellow-400 font-black px-2 rounded-md' },
+    { id: 'art_dark_gold_3d', label: 'ART', category: 'Yellow', font: 'Bomb', color: '#d97706', bgMode: 'none', styleClass: 'text-amber-600 drop-shadow-[2px_2px_0_#000000] font-black' },
+    { id: 'art_yellow_fire_glow', label: 'ART', category: 'Yellow', font: 'Neon', color: '#fbbf24', bgMode: 'none', styleClass: 'text-amber-400 drop-shadow-[0_0_10px_#f97316] font-black' },
   ];
 
   const COLOR_OPTIONS = [
-    '#ffffff', '#000000', '#fe2c55', '#ffcc00', '#4285f4', '#34a853', '#9b51e0',
-    '#ff4d6d', '#ff9f1c', '#2ec4b6', '#e71d36', '#011627', '#fdfffc', '#2196f3',
-    '#e91e63', '#9c27b0', '#673ab7', '#3f51b5', '#00bcd4', '#009688', '#4caf50',
-    '#8bc34a', '#cddc39', '#ffeb3b', '#ffc107'
+    // Solid Colors (Matching User Screenshot Swatches)
+    '#ffffff', '#000000', '#fe2c55', '#ffcc00', '#007aff', '#34c759', '#af52de', '#ff2d55',
+    '#ff9500', '#30b0c7', '#5856d6', '#00f2ea', '#ff007f', '#a3e635', '#f59e0b', '#64748b',
+    '#ff6b6b', '#7c3aed', '#ffd700', '#e2e8f0', '#333333', '#111827',
+    // Gradient Color Swatches
+    'linear-gradient(45deg, #ff007f, #ffaa00)',
+    'linear-gradient(45deg, #00f2ea, #ff007f)',
+    'linear-gradient(45deg, #9900ff, #ff0066)',
+    'linear-gradient(45deg, #00c6ff, #0072ff)',
+    'linear-gradient(45deg, #f857a6, #ff5858)',
+    'linear-gradient(45deg, #11998e, #38ef7d)',
+    'linear-gradient(45deg, #8e2de2, #4a00e0)',
+    'linear-gradient(45deg, #ff0844, #ffb199)',
+    'linear-gradient(45deg, #ff9a9e, #fecfef)',
+    'linear-gradient(45deg, #ff00cc, #333399)',
+    'linear-gradient(45deg, #bf953f, #fcf6ba, #b38728)',
+    'linear-gradient(90deg, #ff0000, #ffff00, #00ff00, #00ffff, #0000ff, #ff00ff)'
   ];
   const [stageStack, setStageStack] = useState(() => {
     try {
@@ -391,6 +518,7 @@ const CreatePage = () => {
   });
   const stage = stageStack[stageStack.length - 1];
   const [isEditorFullscreen, setIsEditorFullscreen] = useState(false);
+  const [isPreviewSidebarExpanded, setIsPreviewSidebarExpanded] = useState(false);
   const [activeSheet, setActiveSheet] = useState(null);
   const [activeCameraTool, setActiveCameraTool] = useState(null);
   const [recordStatus, setRecordStatus] = useState(() => {
@@ -626,7 +754,8 @@ const CreatePage = () => {
   });
 
   const getCombinedFilter = () => {
-    const base = selectedFilter === 'Normal' ? '' : (FILTER_PRESETS[selectedFilter] || '');
+    const calculated = getCalculatedFilterCss(selectedFilter, filterIntensity);
+    const base = calculated === 'none' ? '' : calculated;
     let effectFilter = '';
     if (selectedVideoEffect === 'gold_powder') effectFilter = 'sepia(0.35) saturate(1.8) brightness(1.08)';
     if (selectedVideoEffect === 'heart') effectFilter = 'sepia(0.15) saturate(1.4) hue-rotate(-20deg)';
@@ -4284,18 +4413,22 @@ const CreatePage = () => {
   );
 };
 
-  const renderFiltersTray = () => {
+  const renderFiltersTray = (options = {}) => {
+    const { isPreviewMode = false } = options;
     const currentCatObj = CATEGORIZED_FILTERS.find((c) => c.category === filterCategory) || CATEGORIZED_FILTERS[0];
 
     return (
-      <div className="w-full max-w-md flex flex-col items-center pointer-events-auto animate-in fade-in slide-in-from-bottom-4 duration-200">
+      <div className={`w-full max-w-md flex flex-col items-center pointer-events-auto animate-in fade-in slide-in-from-bottom-4 duration-200 ${isPreviewMode ? 'relative z-50' : ''}`}>
         {/* TOP INTENSITY SLIDER (Floating above sheet) */}
-        <div className="w-full max-w-xs mb-3.5 flex flex-col items-center select-none px-4">
-          <div className="relative w-full flex items-center justify-center py-1">
-            {/* Floating numeric badge (Clean text floating directly above white circle thumb) */}
+        <div className="w-full max-w-xs mb-2 flex flex-col items-center select-none px-4">
+          <div className="relative w-full flex items-center justify-center pt-6 pb-1">
+            {/* Floating numeric badge (Instant 60fps response, perfectly aligned over thumb) */}
             <span
-              className="absolute -top-5 text-[12px] font-black text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.95)] transform -translate-x-1/2 transition-all pointer-events-none z-10"
-              style={{ left: `${Math.max(6, Math.min(94, filterIntensity))}%` }}
+              className="absolute text-[13px] font-extrabold text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.95)] transform -translate-x-1/2 pointer-events-none z-10"
+              style={{
+                left: `calc(${filterIntensity}% + ${(9 - filterIntensity * 0.18).toFixed(1)}px)`,
+                top: '0px'
+              }}
             >
               {filterIntensity}
             </span>
@@ -4308,124 +4441,133 @@ const CreatePage = () => {
               onChange={(e) => setFilterIntensity(parseInt(e.target.value, 10))}
               className="w-full h-1 rounded-full appearance-none cursor-pointer custom-filter-range"
               style={{
-                background: `linear-gradient(to right, #fe2c55 0%, #fe2c55 ${filterIntensity}%, rgba(255,255,255,0.35) ${filterIntensity}%, rgba(255,255,255,0.35) 100%)`,
+                background: `linear-gradient(to right, #fe2c55 0%, #fe2c55 ${filterIntensity}%, rgba(255,255,255,0.3) ${filterIntensity}%, rgba(255,255,255,0.3) 100%)`,
               }}
             />
           </div>
         </div>
 
         {/* DARK BOTTOM SHEET CARD */}
-        <div className="w-full bg-black/90 backdrop-blur-2xl border-t border-white/15 rounded-t-[28px] pt-3.5 pb-6 px-3 shadow-[0_-12px_45px_rgba(0,0,0,0.9)]">
-          {/* SINGLE HORIZONTAL LINE: CATEGORY TABS */}
-          <div
-            ref={filterCategoryTabsRef}
-            className="flex items-center gap-3 overflow-x-auto no-scrollbar border-b border-white/10 pb-2 mb-3.5 px-1 select-none"
-          >
-          {/* Scrollable Category Tabs */}
-          {CATEGORIZED_FILTERS.map((cat) => {
-            const isActive = filterCategory === cat.category;
-            return (
-              <button
-                key={cat.category}
-                data-tab-category={cat.category}
-                type="button"
-                onClick={() => handleFilterTabClick(cat.category)}
-                className="shrink-0 flex flex-col items-center justify-center group px-1"
-              >
-                <span
-                  className={`text-[13px] font-extrabold tracking-wide transition-colors ${
-                    isActive ? 'text-white' : 'text-white/50 group-hover:text-white/80'
-                  }`}
-                >
-                  {cat.category}
-                </span>
-                <div
-                  className={`h-[2.5px] w-full rounded-full mt-1 transition-all duration-200 ${
-                    isActive ? 'bg-white scale-x-100' : 'bg-transparent scale-x-0'
-                  }`}
-                />
-              </button>
-            );
-          })}
-        </div>
+        <div className="w-full bg-black/90 backdrop-blur-2xl border-t border-white/15 rounded-t-[28px] pt-3 pb-6 px-2 shadow-[0_-12px_45px_rgba(0,0,0,0.9)]">
+          {/* TOP HEADER ROW: CLEAR BUTTON + DIVIDER + CATEGORY TABS */}
+          <div className="flex items-center border-b border-white/10 pb-2 mb-3 px-2 select-none">
+            {/* Fixed Clear/None Filter Icon on Far Left */}
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedFilter('Normal');
+                showToast('Filter removed');
+              }}
+              className={`shrink-0 flex items-center justify-center w-8 h-8 rounded-full transition-all active:scale-95 ${
+                selectedFilter === 'Normal' ? 'text-white scale-110' : 'text-white/50 hover:text-white/80'
+              }`}
+              title="No filter"
+            >
+              <BiBlock size={22} className="stroke-[1.5]" />
+            </button>
 
-        {/* CONTINUOUS MULTI-CATEGORY FILTER THUMBNAIL CIRCLES ROW */}
-        <div
-          ref={filterRowScrollRef}
-          onScroll={handleFilterRowScroll}
-          className="flex gap-3.5 overflow-x-auto no-scrollbar py-1 px-1 snap-x snap-mandatory"
-        >
-          {/* Clear filter option circle */}
-          <button
-            type="button"
-            onClick={() => setSelectedFilter('Normal')}
-            className="shrink-0 flex flex-col items-center gap-1.5 group active:scale-95 transition-transform"
-          >
+            {/* Thin Vertical Separator Line */}
+            <div className="h-4 w-[1px] bg-white/20 shrink-0 mx-2.5 rounded-full" />
+
+            {/* Scrollable Category Tabs */}
             <div
-              className={`w-12 h-12 sm:w-14 sm:h-14 rounded-full border flex items-center justify-center bg-[#2c2c2e] text-lg transition-all ${
-                selectedFilter === 'Normal'
-                  ? 'border-[#fe2c55] ring-2 ring-[#fe2c55]/60 scale-105 shadow-md shadow-[#fe2c55]/30'
-                  : 'border-white/20 group-hover:border-white/40'
-              }`}
+              ref={filterCategoryTabsRef}
+              className="flex items-center gap-4 overflow-x-auto no-scrollbar flex-1 px-1"
             >
-              🚫
-            </div>
-            <span
-              className={`text-[11px] tracking-tight transition-colors ${
-                selectedFilter === 'Normal' ? 'text-[#fe2c55] font-bold' : 'text-white/80 font-medium'
-              }`}
-            >
-              Normal
-            </span>
-          </button>
-
-          {/* Render ALL categories sequentially in one continuous horizontal scroll row */}
-          {CATEGORIZED_FILTERS.map((catObj, catIdx) => (
-            <React.Fragment key={catObj.category}>
-              {/* Category Divider Line between category groups */}
-              {catIdx > 0 && (
-                <div className="h-8 w-[1px] bg-white/25 shrink-0 mx-1.5 self-center rounded-full" />
-              )}
-              {catObj.filters.map((f, fIdx) => {
-                const isSel = selectedFilter === f.id;
+              {CATEGORIZED_FILTERS.map((cat) => {
+                const isActive = filterCategory === cat.category;
                 return (
                   <button
-                    key={`${catObj.category}-${f.id}`}
-                    data-filter-category={catObj.category}
+                    key={cat.category}
+                    data-tab-category={cat.category}
                     type="button"
-                    onClick={() => setSelectedFilter(f.id)}
-                    className="shrink-0 flex flex-col items-center gap-1.5 group active:scale-95 transition-transform"
+                    onClick={() => handleFilterTabClick(cat.category)}
+                    className="shrink-0 flex flex-col items-center justify-center group px-0.5"
                   >
-                    <div
-                      className={`w-12 h-12 sm:w-14 sm:h-14 rounded-full overflow-hidden border transition-all ${
-                        isSel
-                          ? 'border-2 border-[#fe2c55] ring-2 ring-[#fe2c55]/60 scale-105 shadow-lg shadow-[#fe2c55]/40'
-                          : 'border-white/20 group-hover:border-white/40'
-                      }`}
-                    >
-                      <img
-                        src={f.thumb}
-                        alt={f.label}
-                        className="w-full h-full object-cover transition-transform duration-200"
-                        style={{ filter: getCalculatedFilterCss(f.id, filterIntensity) }}
-                      />
-                    </div>
                     <span
-                      className={`text-[11px] tracking-tight transition-colors ${
-                        isSel ? 'text-[#fe2c55] font-bold' : 'text-white/80 font-medium'
+                      className={`text-[13px] tracking-wide transition-colors ${
+                        isActive ? 'text-white font-extrabold' : 'text-white/50 group-hover:text-white/80 font-semibold'
                       }`}
                     >
-                      {f.label}
+                      {cat.category}
                     </span>
+                    <div
+                      className={`h-[2.5px] w-full rounded-full mt-1 transition-all duration-200 ${
+                        isActive ? 'bg-white scale-x-100' : 'bg-transparent scale-x-0'
+                      }`}
+                    />
                   </button>
                 );
               })}
-            </React.Fragment>
-          ))}
+            </div>
+
+            {/* Optional Close Button in Preview Mode */}
+            {isPreviewMode && (
+              <button
+                type="button"
+                onClick={() => setActiveSheet(null)}
+                className="shrink-0 ml-2 text-white/60 hover:text-white w-7 h-7 flex items-center justify-center rounded-full bg-white/10 active:scale-90 transition-all"
+              >
+                <BiX size={18} />
+              </button>
+            )}
+          </div>
+
+          {/* CONTINUOUS MULTI-CATEGORY FILTER THUMBNAIL CIRCLES ROW */}
+          <div
+            ref={filterRowScrollRef}
+            onScroll={handleFilterRowScroll}
+            className="flex gap-3.5 overflow-x-auto no-scrollbar py-1 px-1.5 snap-x snap-mandatory"
+          >
+            {CATEGORIZED_FILTERS.map((catObj, catIdx) => (
+              <React.Fragment key={catObj.category}>
+                {catIdx > 0 && (
+                  <div className="h-8 w-[1px] bg-white/20 shrink-0 mx-1.5 self-center rounded-full" />
+                )}
+                {catObj.filters.map((f) => {
+                  const isSel = selectedFilter === f.id;
+                  const thumbImg = filterPreviewFrame || f.thumb;
+                  return (
+                    <button
+                      key={`${catObj.category}-${f.id}`}
+                      data-filter-category={catObj.category}
+                      type="button"
+                      onClick={() => {
+                        setSelectedFilter(f.id);
+                        showToast(`${f.label} filter applied`);
+                      }}
+                      className="shrink-0 flex flex-col items-center gap-1.5 group active:scale-95 transition-transform"
+                    >
+                      <div
+                        className={`w-14 h-14 sm:w-16 sm:h-16 aspect-square rounded-full overflow-hidden border transition-all ${
+                          isSel
+                            ? 'border-2 border-white ring-2 ring-white/60 scale-105 shadow-md shadow-black/50'
+                            : 'border-white/20 group-hover:border-white/40'
+                        }`}
+                      >
+                        <img
+                          src={thumbImg}
+                          alt={f.label}
+                          className="w-full h-full object-cover transition-transform duration-200"
+                          style={{ filter: getCalculatedFilterCss(f.id, filterIntensity) }}
+                        />
+                      </div>
+                      <span
+                        className={`text-[11.5px] tracking-tight transition-colors ${
+                          isSel ? 'text-white font-bold' : 'text-white/80 font-medium'
+                        }`}
+                      >
+                        {f.label}
+                      </span>
+                    </button>
+                  );
+                })}
+              </React.Fragment>
+            ))}
+          </div>
         </div>
       </div>
-    </div>
-  );
+    );
   };
 
   const renderFaceEffectsTray = () => {
@@ -4530,7 +4672,7 @@ const CreatePage = () => {
               <>
                 {/* Duration & Mode Selector Bar */}
                 {!hasRecordedClips && !isRecording && (
-                  <div className="flex items-center justify-center gap-3.5 mb-3 select-none px-4 overflow-x-auto no-scrollbar w-full max-w-md">
+                  <div className="flex items-center justify-center gap-4 mb-3.5 select-none px-4 overflow-x-auto no-scrollbar w-full max-w-md">
                     {cameraDurationModes.map((modeOpt) => {
                       const isSelected =
                         (modeOpt === selectedDuration && captureMode === 'camera') ||
@@ -4551,10 +4693,10 @@ const CreatePage = () => {
                               setSelectedDuration(modeOpt);
                             }
                           }}
-                          className={`shrink-0 transition-all duration-200 select-none ${
+                          className={`shrink-0 transition-all duration-200 select-none flex items-center justify-center ${
                             isSelected
-                              ? 'font-black text-xs px-3.5 py-1 rounded-full shadow-md shadow-black/30 scale-105'
-                              : 'font-bold text-xs px-2 py-1 tracking-wide drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]'
+                              ? 'font-extrabold text-[13px] h-[28px] px-3.5 rounded-full shadow-md shadow-black/40 scale-105'
+                              : 'font-bold text-[13px] h-[28px] px-2.5 tracking-wide drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]'
                           }`}
                           style={{
                             color: isSelected ? '#000000' : '#ffffff',
@@ -4820,7 +4962,8 @@ const CreatePage = () => {
                       muted={isVideoMuted}
                       style={{
                         transform: supportsHardwareZoom ? 'none' : `scale(${parseFloat(selectedZoom) || 1.0})`,
-                        transformOrigin: 'center'
+                        transformOrigin: 'center',
+                        filter: getCombinedFilter()
                       }}
                     />
                   )}
@@ -4854,7 +4997,8 @@ const CreatePage = () => {
                     }}
                     style={{
                       transform: supportsHardwareZoom ? 'none' : `scale(${parseFloat(selectedZoom) || 1.0})`,
-                      transformOrigin: 'center'
+                      transformOrigin: 'center',
+                      filter: getCombinedFilter()
                     }}
                   />
                 )}
@@ -5139,8 +5283,10 @@ const CreatePage = () => {
       }
 
       if (!isVideo) {
+        const { style: imgStyle, key: imgKey, ...restImageProps } = imageProps || {};
         return (
           <img
+            key={imgKey}
             src={mediaUrl}
             alt="Preview"
             className={`h-full w-full object-cover transition-all duration-300 ${className}`}
@@ -5148,17 +5294,18 @@ const CreatePage = () => {
               transform: `rotate(${editorSettings.rotation + cropRotation}deg)`,
               transformOrigin: 'center center',
               filter: getCombinedFilter(),
-              ...(imageProps?.style || {})
+              ...(imgStyle || {})
             }}
-            {...imageProps}
+            {...restImageProps}
           />
         );
       }
 
-      const { muted: primaryMuted, style: videoStyle, ...restVideoProps } = videoProps;
+      const { muted: primaryMuted, style: videoStyle, key: videoKey, ...restVideoProps } = videoProps || {};
 
       return (
         <video
+          key={videoKey}
           ref={tileIndex === 0 ? videoRef : null}
           src={mediaUrl}
           className={`h-full w-full object-cover transition-all duration-300 ${className}`}
@@ -6857,7 +7004,7 @@ const CreatePage = () => {
                 { id: 'audio', label: 'Voice', icon: <BiMicrophone size={22} /> },
                 { id: 'stickers', label: 'Stickers', icon: <BiSmile size={22} /> },
                 { id: 'filters', label: 'Filters', icon: <IoOptionsOutline size={22} /> },
-                { id: 'adjust', label: 'Adjust', icon: <BiSlider size={22} /> },
+                { id: 'adjust', label: 'Adjust', icon: <BiAdjust size={22} /> },
                 { id: 'save', label: 'Save', icon: <BiDownload size={22} /> },
               ].map((tool) => (
                 <button
@@ -7104,9 +7251,17 @@ const CreatePage = () => {
                 }`}
               style={{
                 fontSize: `${overlayFontSize}px`,
-                color: overlayColor,
                 fontFamily: FONT_OPTIONS.find(f => f.name === overlayFont)?.family || 'inherit',
                 whiteSpace: 'pre',
+                ...(overlayColor.includes('gradient')
+                  ? {
+                      background: overlayColor,
+                      WebkitBackgroundClip: 'text',
+                      WebkitTextFillColor: 'transparent',
+                    }
+                  : {
+                      color: overlayColor,
+                    }),
                 textShadow: overlayFont === 'Outline' ? `-1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000` : (overlayFont === 'Glowing' ? `0 0 20px ${overlayColor}` : 'none')
               }}
             >
@@ -7246,7 +7401,7 @@ const CreatePage = () => {
           <button
             type="button"
             onClick={handleCloseOrBack}
-            className="flex h-10 w-10 items-center justify-center rounded-full bg-black/30 text-white backdrop-blur-md active:opacity-70"
+            className="flex h-10 w-10 items-center justify-center rounded-full bg-black/40 text-white backdrop-blur-md active:opacity-70 drop-shadow-md"
           >
             <BiChevronLeft size={28} />
           </button>
@@ -7255,7 +7410,7 @@ const CreatePage = () => {
             <button
               type="button"
               onClick={() => setActiveSheet('music-library')}
-              className={`${themedFloatingPillClass} max-w-[200px] overflow-hidden flex items-center gap-2 ${selectedSound?.title && !['Original sound', 'Original audio', 'Original Audio'].includes(selectedSound.title) ? 'pr-1' : ''} cursor-pointer pointer-events-auto active:opacity-90`}
+              className={`${themedFloatingPillClass} max-w-[200px] overflow-hidden flex items-center gap-2 ${selectedSound?.title && !['Original sound', 'Original audio', 'Original Audio'].includes(selectedSound.title) ? 'pr-1' : ''} cursor-pointer pointer-events-auto active:opacity-90 shadow-md`}
             >
               <BiMusic size={15} className={selectedSound?.title && !['Original sound', 'Original audio', 'Original Audio'].includes(selectedSound.title) ? 'animate-pulse text-[#fe2c55]' : ''} />
               <span className="truncate">
@@ -7274,57 +7429,132 @@ const CreatePage = () => {
                 </div>
               )}
             </button>
-
           </div>
 
           <div className="w-10" />
         </div>
       </div>
 
-      {/* Bottom Tools & Buttons */}
+      {/* Right Sidebar Vertical Tools (Instagram Reel / Story Editor Style) */}
+      {(() => {
+        const isPhotoMedia = captureMode === 'photo' || videoFile?.type?.startsWith('image/') || previewUrl?.startsWith('data:image/');
+
+        const toolsList = [
+          ...(!isPhotoMedia ? [{
+            id: 'edit',
+            label: 'Edit',
+            icon: (
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="2" y="5" width="20" height="14" rx="4.5" strokeWidth="2.2" />
+                <path d="M5.5 9.5C4.8 10.8 4.8 13.2 5.5 14.5" strokeWidth="2" />
+                <path d="M18.5 9.5C19.2 10.8 19.2 13.2 18.5 14.5" strokeWidth="2" />
+                <rect x="7.8" y="7.5" width="8.4" height="9" rx="1.2" fill="currentColor" stroke="none" />
+              </svg>
+            )
+          }] : []),
+          {
+            id: 'text',
+            label: 'Text',
+            icon: <span className="font-extrabold text-[24px] leading-none select-none tracking-tighter drop-shadow-md">Aa</span>
+          },
+          {
+            id: 'stickers',
+            label: 'Stickers',
+            icon: (
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M15 21H6a2.5 2.5 0 0 1-2.5-2.5V6a2.5 2.5 0 0 1 2.5-2.5h12a2.5 2.5 0 0 1 2.5 2.5v9L15 21z" />
+                <path d="M15 21v-6h6" />
+                <circle cx="9" cy="9.5" r="1.2" fill="currentColor" stroke="none" />
+                <circle cx="15" cy="9.5" r="1.2" fill="currentColor" stroke="none" />
+                <path d="M9.5 13.8a3.8 3.8 0 0 0 5 0" />
+              </svg>
+            )
+          },
+          {
+            id: 'effects',
+            label: 'Effects',
+            icon: (
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round">
+                <path d="m12 2.5-2.2 6.3a2 2 0 0 1-1.3 1.3L2.2 12.3l6.3 2.2a2 2 0 0 1 1.3 1.3l2.2 6.3 2.2-6.3a2 2 0 0 1 1.3-1.3l6.3-2.2-6.3-2.2a2 2 0 0 1-1.3-1.3L12 2.5Z" />
+                <path d="M4.5 3v3.5M2.8 4.8h3.4" />
+              </svg>
+            )
+          },
+          {
+            id: 'filters',
+            label: 'Filters',
+            icon: (
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="8.2" r="5.2" />
+                <circle cx="8" cy="15.2" r="5.2" />
+                <circle cx="16" cy="15.2" r="5.2" />
+              </svg>
+            )
+          },
+          ...(!isPhotoMedia ? [{
+            id: 'audio',
+            label: 'Voice',
+            icon: (
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 2.5a3.2 3.2 0 0 0-3.2 3.2v6.5a3.2 3.2 0 0 0 6.4 0V5.7A3.2 3.2 0 0 0 12 2.5Z" />
+                <path d="M19 10.5v1.2a7 7 0 0 1-14 0v-1.2" />
+                <path d="M12 18.7V22" />
+                <path d="M17.5 4.5l1.5 1.5M19 4.5L17.5 6" />
+              </svg>
+            )
+          }] : []),
+          {
+            id: 'save',
+            label: 'Save',
+            icon: <BiDownload size={28} />
+          }
+        ];
+
+        return (
+          <div 
+            className="absolute right-3.5 top-14 z-30 flex flex-col items-end gap-5 pointer-events-auto"
+            style={{ paddingTop: 'max(env(safe-area-inset-top), 20px)' }}
+          >
+            {/* Vertically Stacked Tool Items */}
+            {toolsList.map((tool) => (
+              <button
+                key={tool.id}
+                type="button"
+                onClick={() => handlePreviewToolClick(tool.id)}
+                className="flex items-center justify-end gap-3 group active:scale-90 transition-all select-none"
+              >
+                {isPreviewSidebarExpanded && (
+                  <span className="text-[14px] font-bold text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)] tracking-wide transition-opacity duration-200">
+                    {tool.label}
+                  </span>
+                )}
+                <div className="flex h-11 w-11 items-center justify-center text-white drop-shadow-[0_3px_8px_rgba(0,0,0,0.85)] group-hover:scale-110 transition-transform">
+                  {tool.icon}
+                </div>
+              </button>
+            ))}
+          </div>
+        );
+      })()}
+
+      {/* Bottom Actions */}
       {(() => {
         const isPhotoMedia = captureMode === 'photo' || videoFile?.type?.startsWith('image/') || previewUrl?.startsWith('data:image/');
 
         return (
           <div
-            className={`absolute inset-x-0 bottom-0 z-20 pb-[max(1.2rem,env(safe-area-inset-bottom))] pt-32 ${
+            className={`absolute inset-x-0 bottom-0 z-20 pb-[max(1.2rem,env(safe-area-inset-bottom))] pt-20 ${
               isDarkMode
                 ? 'bg-gradient-to-t from-black via-black/60 to-transparent'
                 : 'bg-gradient-to-t from-black/80 via-black/40 to-transparent'
             }`}
           >
-            {/* Horizontal Tools List */}
-            <div className="mb-6 flex gap-6 overflow-x-auto px-6 no-scrollbar">
-              {[
-                { id: 'text', label: 'Text', icon: <IoTextOutline size={26} /> },
-                { id: 'effects', label: 'Effects', icon: <IoSparklesOutline size={26} /> },
-                { id: 'stickers', label: 'Stickers', icon: <BiSmile size={26} /> },
-                ...(!isPhotoMedia ? [{ id: 'audio', label: 'Voice', icon: <BiMicrophone size={26} /> }] : []),
-                { id: 'filters', label: 'Filters', icon: <IoOptionsOutline size={26} /> },
-                ...(!isPhotoMedia ? [{ id: 'volume-preview', label: 'Volume', icon: <BiVolumeFull size={26} /> }] : []),
-                { id: 'save', label: 'Save', icon: <BiDownload size={26} /> },
-              ].map((tool) => (
-                <button
-                  key={tool.id}
-                  type="button"
-                  onClick={() => handlePreviewToolClick(tool.id)}
-                  className="flex shrink-0 flex-col items-center gap-2 active:opacity-70"
-                >
-                  <div className="flex h-12 w-12 items-center justify-center rounded-[12px] bg-white/10 backdrop-blur-md">
-                    {tool.icon}
-                  </div>
-                  <span className="text-[11px] font-medium text-white/90">{tool.label}</span>
-                </button>
-              ))}
-            </div>
-
-            {/* Bottom Actions */}
             <div className={`flex items-center ${isPhotoMedia ? 'justify-end' : 'justify-between'} px-6 gap-3`}>
               {!isPhotoMedia && (
                 <button
                   type="button"
                   onClick={() => pushStage('editor')}
-                  className="flex h-[48px] items-center justify-center rounded-full bg-white/10 px-6 text-[15px] font-bold text-white backdrop-blur-md transition-all active:scale-95 shrink-0"
+                  className="flex h-[46px] items-center justify-center rounded-full bg-black/40 border border-white/20 px-6 text-[15px] font-bold text-white backdrop-blur-md transition-all active:scale-95 shrink-0 hover:bg-black/60 shadow-lg"
                 >
                   Edit video
                 </button>
@@ -7332,8 +7562,8 @@ const CreatePage = () => {
               <button
                 type="button"
                 onClick={handleNextClick}
-                className={`flex h-[48px] items-center justify-center gap-2 rounded-full bg-[#4d70ff] ${
-                  isPhotoMedia ? 'w-full' : 'px-8 flex-1'
+                className={`flex h-[46px] items-center justify-center gap-2 rounded-full bg-[#0095f6] hover:bg-[#1877f2] ${
+                  isPhotoMedia ? 'w-full' : 'px-8 flex-1 max-w-[200px] ml-auto'
                 } text-[15px] font-bold text-white shadow-lg transition-all active:scale-95`}
               >
                 <span>Next</span>
@@ -8957,60 +9187,13 @@ const CreatePage = () => {
       )}
       {activeSheet === 'effects-preview' && renderEffectsSheet()}
       {activeSheet === 'filters-preview' && (
-        <div className="absolute inset-x-0 bottom-0 z-50 animate-in slide-in-from-bottom duration-500">
-          <div className="bg-black/60 backdrop-blur-xl border-t border-white/10 rounded-t-[32px] pt-4 pb-10 shadow-[0_-20px_50px_rgba(0,0,0,0.5)]">
-            <div className="flex items-center justify-between px-6 mb-6">
-              <h3 className="text-white text-[17px] font-bold tracking-tight">Filters</h3>
-              <button
-                onClick={() => setActiveSheet(null)}
-                className="w-8 h-8 flex items-center justify-center rounded-full bg-white/10 text-white/60 active:scale-90 transition-transform"
-              >
-                <BiX size={20} />
-              </button>
-            </div>
-
-            <div className="flex gap-4 overflow-x-auto px-6 no-scrollbar pb-2">
-              {Object.keys(FILTER_PRESETS).map((filter) => (
-                <button
-                  key={filter}
-                  type="button"
-                  onClick={() => {
-                    setSelectedFilter(filter);
-                    showToast(`${filter} filter applied`);
-                  }}
-                  className="flex flex-col items-center gap-3 shrink-0 group"
-                >
-                  <div
-                    className={`relative h-20 w-20 rounded-2xl overflow-hidden transition-all duration-300 ${selectedFilter === filter
-                        ? 'ring-4 ring-[#fe2c55] ring-offset-4 ring-offset-black scale-105 shadow-[0_0_30px_rgba(254,44,85,0.4)]'
-                        : 'ring-1 ring-white/20 opacity-70 group-hover:opacity-100 group-hover:scale-105'
-                      }`}
-                  >
-                    {filterPreviewFrame ? (
-                      <img
-                        src={filterPreviewFrame}
-                        className="h-full w-full object-cover"
-                        style={{ filter: FILTER_PRESETS[filter] }}
-                        alt={filter}
-                      />
-                    ) : (
-                      <div className="h-full w-full bg-[#2c2c2e]" style={{ filter: FILTER_PRESETS[filter] }} />
-                    )}
-                    {selectedFilter === filter && (
-                      <div className="absolute inset-0 bg-[#fe2c55]/10 flex items-center justify-center">
-                        <div className="w-6 h-6 rounded-full bg-white flex items-center justify-center shadow-lg">
-                          <BiCheck size={18} className="text-[#fe2c55]" />
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                  <span className={`text-[12px] font-semibold tracking-wide transition-colors ${selectedFilter === filter ? 'text-[#fe2c55]' : 'text-white/50'
-                    }`}>
-                    {filter}
-                  </span>
-                </button>
-              ))}
-            </div>
+        <div className="absolute inset-0 z-50 flex flex-col justify-end pointer-events-auto animate-in slide-in-from-bottom duration-300">
+          <div
+            className="absolute inset-0 bg-black/40 backdrop-blur-[2px]"
+            onClick={() => setActiveSheet(null)}
+          />
+          <div className="relative z-10 w-full flex justify-center pb-2 sm:pb-4 pointer-events-auto">
+            {renderFiltersTray({ isPreviewMode: true })}
           </div>
         </div>
       )}
@@ -9038,37 +9221,44 @@ const CreatePage = () => {
         </BottomSheet>
       )}
 
-      {activeSheet === 'volume-preview' && (
-        <BottomSheet title="Volume" onClose={() => setActiveSheet(null)}>
-          <div className="space-y-8 px-6 pb-10 pt-4">
-            <div className="space-y-4">
+      {(activeSheet === 'volume-preview' || activeSheet === 'volume') && (
+        <BottomSheet title="Volume" onClose={() => setActiveSheet(null)} isDarkMode={true}>
+          <div className="space-y-6 px-6 pb-8 pt-2">
+            {/* Original Sound Slider */}
+            <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-[15px] font-bold text-white">Original sound</span>
-                <span className="text-[13px] text-white/50 font-bold">{originalVolume}%</span>
+                <span className="text-[13px] text-white/70 font-bold">{originalVolume}%</span>
               </div>
-              <input
-                type="range"
-                min="0"
-                max="100"
-                value={originalVolume}
-                onChange={(e) => setOriginalVolume(Number(e.target.value))}
-                className="w-full accent-[#fe2c55] h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer"
-              />
-            </div>
-            {selectedSounds.length > 0 && (
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <span className="text-[15px] font-bold text-white">Added sound ({selectedSound.title})</span>
-                  <span className="text-[13px] text-white/50 font-bold">{addedVolume}%</span>
-                </div>
+              <div className="relative flex items-center w-full">
                 <input
                   type="range"
                   min="0"
                   max="100"
-                  value={addedVolume}
-                  onChange={(e) => setAddedVolume(Number(e.target.value))}
-                  className="w-full accent-[#fe2c55] h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer"
+                  value={originalVolume}
+                  onChange={(e) => setOriginalVolume(Number(e.target.value))}
+                  className="w-full accent-[#fe2c55] h-2 bg-white/30 rounded-full appearance-none cursor-pointer border border-white/10"
                 />
+              </div>
+            </div>
+
+            {/* Added Sound Slider */}
+            {selectedSounds.length > 0 && (
+              <div className="space-y-3 pt-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[15px] font-bold text-white">Added sound ({selectedSound?.title || 'Music'})</span>
+                  <span className="text-[13px] text-white/70 font-bold">{addedVolume}%</span>
+                </div>
+                <div className="relative flex items-center w-full">
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    value={addedVolume}
+                    onChange={(e) => setAddedVolume(Number(e.target.value))}
+                    className="w-full accent-[#fe2c55] h-2 bg-white/30 rounded-full appearance-none cursor-pointer border border-white/10"
+                  />
+                </div>
                 <button
                   type="button"
                   onClick={() => {
@@ -9076,7 +9266,7 @@ const CreatePage = () => {
                     showToast('Background sound removed');
                     setActiveSheet(null);
                   }}
-                  className="w-full mt-6 py-3.5 rounded-2xl bg-red-500/10 hover:bg-red-500/20 text-red-500 text-[14px] font-bold transition-all active:scale-95 flex items-center justify-center gap-2 border border-red-500/10"
+                  className="w-full mt-4 py-3 rounded-2xl bg-red-500/15 hover:bg-red-500/25 text-red-400 text-[14px] font-bold transition-all active:scale-95 flex items-center justify-center gap-2 border border-red-500/20"
                 >
                   <BiTrash size={16} />
                   Remove Added Sound
@@ -9374,121 +9564,347 @@ const CreatePage = () => {
 
 
       {isEditingText && (
-        <div className="absolute inset-0 z-[100] flex flex-col bg-black/80 backdrop-blur-md transition-all duration-300">
-          <div className="flex items-center justify-between px-5 pt-8">
-            <button
-              type="button"
-              onClick={handleTextCancel}
-              className="text-[16px] font-medium text-white/80"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={handleTextDone}
-              className="rounded-[6px] bg-white px-4 py-1.5 text-[14px] font-bold text-black"
-            >
-              Done
-            </button>
-          </div>
-
-          <div className="flex flex-1 items-center justify-center px-8">
-            <textarea
-              autoFocus
-              className="w-full bg-transparent text-center font-bold outline-none placeholder:text-white/20 whitespace-pre overflow-hidden no-scrollbar"
-              placeholder="Type something..."
-              style={{
-                fontSize: `${overlayFontSize}px`,
-                fontFamily: FONT_OPTIONS.find(f => f.name === overlayFont)?.family || 'inherit',
-                color: overlayColor,
-                lineHeight: 1.2,
-                overflow: 'hidden',
-                resize: 'none'
-              }}
-              value={overlayText}
-              onChange={(e) => setOverlayText(e.target.value)}
-            />
-
-            {/* Vertical Font Size Slider (Roller) - Redesigned for smooth custom dragging */}
-            <div
-              ref={fontSizeSliderRef}
-              className="absolute left-8 top-1/2 -translate-y-1/2 group touch-none"
-              onPointerDown={(e) => {
-                e.currentTarget.setPointerCapture(e.pointerId);
-                const rect = e.currentTarget.getBoundingClientRect();
-                const pct = 1 - Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height));
-                setOverlayFontSize(Math.round(12 + pct * (100 - 12)));
-              }}
-              onPointerMove={(e) => {
-                if (e.buttons !== 1) return;
-                const rect = e.currentTarget.getBoundingClientRect();
-                const pct = 1 - Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height));
-                setOverlayFontSize(Math.round(12 + pct * (100 - 12)));
-              }}
-            >
-              <div className="relative h-64 w-6 flex items-center justify-center cursor-ns-resize">
-                {/* Tapered Track */}
-                <div
-                  className="absolute inset-0 bg-white/40 backdrop-blur-sm rounded-t-sm"
-                  style={{
-                    clipPath: 'polygon(0% 0%, 100% 0%, 60% 100%, 40% 100%)'
-                  }}
+        <div className="absolute inset-0 z-[100] flex flex-col justify-between bg-black/90 pointer-events-auto animate-in fade-in duration-200">
+          {/* TOP HALF: VIDEO PREVIEW CANVAS WITH REAL-TIME TEXT BOUNDING BOX */}
+          <div className="relative flex-1 w-full flex items-center justify-center p-4 overflow-hidden">
+            {/* Video Preview Background */}
+            <div className="relative w-full max-w-sm aspect-[9/16] rounded-[24px] overflow-hidden bg-black flex items-center justify-center shadow-2xl border border-white/10">
+              {previewUrl ? (
+                <video
+                  src={previewUrl}
+                  className="w-full h-full object-cover opacity-70"
+                  autoPlay
+                  loop
+                  muted
+                  playsInline
+                  style={{ filter: getCombinedFilter() }}
                 />
+              ) : (
+                <img src={CREATE_CANVAS_IMAGE || selectedMedia?.image} className="w-full h-full object-cover opacity-70" alt="" />
+              )}
 
-                {/* Active Fill (Tapered) */}
-                <div
-                  className="absolute bottom-0 w-full bg-white/60 origin-bottom transition-all duration-75"
+              {/* Live Text Overlay with White Bounding Box (Matching Screenshots 2, 3, 4, 5) */}
+              <div
+                className={`absolute max-w-[85%] border-2 border-white rounded-lg px-4 py-2 flex items-center justify-center transition-all shadow-2xl ${
+                  overlayBgMode === 'solid'
+                    ? 'bg-white text-black'
+                    : overlayBgMode === 'translucent'
+                    ? 'bg-black/70 text-white'
+                    : overlayBgMode === 'outline'
+                    ? 'bg-transparent text-white'
+                    : ''
+                }`}
+                style={{
+                  textAlign: overlayAlign,
+                }}
+              >
+                <span
+                  className="text-[22px] font-bold tracking-wide break-words"
                   style={{
-                    height: `${((overlayFontSize - 12) / (100 - 12)) * 100}%`,
-                    clipPath: 'polygon(0% 0%, 100% 0%, 60% 100%, 40% 100%)'
+                    fontFamily: FONT_OPTIONS.find((f) => f.name === overlayFont)?.family || 'sans-serif',
+                    ...(overlayColor.includes('gradient') && overlayBgMode !== 'solid'
+                      ? {
+                          background: overlayColor,
+                          WebkitBackgroundClip: 'text',
+                          WebkitTextFillColor: 'transparent',
+                        }
+                      : {
+                          color: overlayBgMode === 'solid' ? '#000000' : overlayColor,
+                        }),
+                    textAlign: overlayAlign,
+                    textShadow:
+                      overlayBgMode === 'outline'
+                        ? '-1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000'
+                        : selectedArtId
+                        ? '0 0 12px currentColor'
+                        : '0 2px 8px rgba(0,0,0,0.8)',
                   }}
-                />
-
-                {/* Thumb (White Circle) */}
-                <div
-                  className="absolute left-1/2 -translate-x-1/2 w-6 h-6 rounded-full shadow-[0_0_20px_rgba(255,255,255,0.6)] z-10 pointer-events-none transition-all duration-75 border-2 border-white"
-                  style={{
-                    bottom: `calc(${((overlayFontSize - 12) / (100 - 12)) * 100}% - 12px)`,
-                    backgroundColor: '#ffffff'
-                  }}
-                />
-              </div>
-              <div className="absolute -bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center">
-                <span className="text-[10px] font-black text-white uppercase tracking-[0.2em]">Size</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="pb-[max(1rem,env(safe-area-inset-bottom))]">
-            {/* Font Picker */}
-            <div className="mb-6 flex gap-3 overflow-x-auto px-5 no-scrollbar">
-              {FONT_OPTIONS.map((font) => (
-                <button
-                  key={font.name}
-                  type="button"
-                  onClick={() => setOverlayFont(font.name)}
-                  className={`shrink-0 rounded-[8px] border px-4 py-2.5 text-[15px] font-bold transition-all active:scale-95 ${overlayFont === font.name ? 'border-white bg-white text-black' : 'border-white/10 bg-white/5 text-white'
-                    }`}
-                  style={{ fontFamily: font.family }}
                 >
-                  {font.name}
-                </button>
-              ))}
+                  {overlayText || 'Enter text'}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* BOTTOM HALF: TEXT EDITOR CONTROL DRAWER (Pixel-Perfect to User Screenshot) */}
+          <div className="w-full bg-[#18181a] backdrop-blur-2xl border-t border-white/10 rounded-t-[24px] pt-4 pb-8 px-4 shadow-[0_-12px_45px_rgba(0,0,0,0.9)] flex flex-col pointer-events-auto select-none">
+            {/* 1. TOP INPUT BAR: DARK INPUT BOX + RIGHT CHECKMARK ICON */}
+            <div className="flex items-center gap-3 mb-4">
+              <div className="flex-1 bg-[#2c2c2e] rounded-[14px] px-4 py-2.5 flex items-center border border-white/5 focus-within:border-white/30 transition-all">
+                <input
+                  type="text"
+                  autoFocus
+                  value={overlayText}
+                  onChange={(e) => setOverlayText(e.target.value)}
+                  placeholder="Enter text"
+                  className="w-full bg-transparent text-white text-[15px] font-medium outline-none placeholder:text-white/40"
+                />
+              </div>
+              
+              {/* Checkmark Icon directly on dark background (Matching Screenshot!) */}
+              <button
+                type="button"
+                onClick={handleTextDone}
+                className="shrink-0 text-white hover:text-white/80 transition-transform active:scale-90 p-1"
+                title="Apply text"
+              >
+                <BiCheck size={32} className="stroke-[0.5]" />
+              </button>
             </div>
 
-            {/* Color Picker */}
-            <div className="flex gap-4 overflow-x-auto px-6 no-scrollbar">
-              {COLOR_OPTIONS.map((color) => (
-                <button
-                  key={color}
-                  type="button"
-                  onClick={() => setOverlayColor(color)}
-                  className={`h-8 w-8 shrink-0 rounded-full border-2 transition-transform active:scale-125 ${overlayColor === color ? 'border-white scale-110 shadow-lg' : 'border-white/20'
-                    }`}
-                  style={{ backgroundColor: color }}
-                />
-              ))}
+            {/* 2. TOOLBAR TABS (5 ICON BUTTONS) */}
+            <div className="flex items-center justify-between px-2 mb-4">
+              {/* Tab 1: Font Family (A) */}
+              <button
+                type="button"
+                onClick={() => setTextSubTab('fonts')}
+                className={`w-11 h-11 rounded-[12px] flex items-center justify-center transition-all ${
+                  textSubTab === 'fonts' ? 'bg-[#3a3a3c] text-white shadow-md' : 'text-white/60 hover:text-white'
+                }`}
+                title="Fonts"
+              >
+                <span className="text-[19px] font-serif font-black">A</span>
+              </button>
+
+              {/* Tab 2: Color Wheel (Rainbow Circle matching Screenshot 2) */}
+              <button
+                type="button"
+                onClick={() => setTextSubTab('colors')}
+                className={`w-11 h-11 rounded-[12px] flex items-center justify-center transition-all ${
+                  textSubTab === 'colors' ? 'bg-[#3a3a3c] text-white shadow-md' : 'text-white/60 hover:text-white'
+                }`}
+                title="Text Color"
+              >
+                <div className="w-6 h-6 rounded-full p-[2px] bg-white flex items-center justify-center shadow-sm">
+                  <div className="w-full h-full rounded-full bg-[conic-gradient(from_0deg,_#ff0000_0%,_#ff8800_15%,_#ffff00_30%,_#00ff00_45%,_#00ffff_60%,_#0000ff_75%,_#ff00ff_90%,_#ff0000_100%)]" />
+                </div>
+              </button>
+
+              {/* Tab 3: Text Background & Art Styles ([A] matching Screenshots 1-5) */}
+              <button
+                type="button"
+                onClick={() => setTextSubTab('bgStyle')}
+                className={`w-11 h-11 rounded-[12px] flex items-center justify-center transition-all ${
+                  textSubTab === 'bgStyle' || overlayBgMode !== 'none'
+                    ? 'bg-[#3a3a3c] text-white shadow-md'
+                    : 'text-white/60 hover:text-white'
+                }`}
+                title="Background & Art Styles"
+              >
+                <div className={`w-5 h-5 rounded flex items-center justify-center font-bold text-[11px] border ${
+                  overlayBgMode === 'solid' ? 'bg-white text-black border-white' : 'border-white text-white'
+                }`}>
+                  A
+                </div>
+              </button>
+
+              {/* Tab 4: Text Alignment (☰) */}
+              <button
+                type="button"
+                onClick={toggleTextAlign}
+                className="w-11 h-11 rounded-[12px] flex items-center justify-center text-white/60 hover:text-white transition-all"
+                title="Text Alignment"
+              >
+                {overlayAlign === 'left' ? (
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="15" y2="12"/><line x1="3" y1="18" x2="18" y2="18"/></svg>
+                ) : overlayAlign === 'right' ? (
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="9" y1="12" x2="21" y2="12"/><line x1="6" y1="18" x2="21" y2="18"/></svg>
+                ) : (
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="6" y1="12" x2="18" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/></svg>
+                )}
+              </button>
+
+              {/* Tab 5: Text Art Styles (Aa / AAll) */}
+              <button
+                type="button"
+                onClick={() => setTextSubTab('art')}
+                className={`w-11 h-11 rounded-[12px] flex items-center justify-center transition-all ${
+                  textSubTab === 'art' ? 'bg-[#3a3a3c] text-white shadow-md' : 'text-white/60 hover:text-white'
+                }`}
+                title="Text Art Presets"
+              >
+                <div className="px-1 py-0.5 rounded border border-current font-black text-[10px] tracking-tighter">A\All</div>
+              </button>
             </div>
+
+            {/* 3. SUB-PANEL CONTENT */}
+            {textSubTab === 'fonts' && (
+              <div className="flex flex-col">
+                {/* Sub-Category Filter Text Pills (Matching Screenshot!) */}
+                <div className="flex items-center gap-5 overflow-x-auto no-scrollbar mb-3.5 px-1">
+                  {['Trending', 'Basic', 'Handwritten', 'Retro', 'Comic'].map((cat) => (
+                    <button
+                      key={cat}
+                      type="button"
+                      onClick={() => setFontSubCategory(cat)}
+                      className={`shrink-0 text-[13px] transition-colors ${
+                        fontSubCategory === cat ? 'text-white font-bold' : 'text-white/40 font-medium hover:text-white/70'
+                      }`}
+                    >
+                      {cat}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Font Cards Grid - Stadium/Pill Shaped Buttons (3x3 Grid visible initially, exact screenshot scale) */}
+                <div className="grid grid-cols-3 gap-3 max-h-[196px] overflow-y-auto no-scrollbar py-1">
+                  {FONT_OPTIONS.filter((f) => fontSubCategory === 'Trending' || f.category === fontSubCategory || !f.category).map((font) => {
+                    const isSel = overlayFont === font.name;
+                    return (
+                      <button
+                        key={font.name}
+                        type="button"
+                        onClick={() => {
+                          setOverlayFont(font.name);
+                          setSelectedArtId(null);
+                        }}
+                        className={`h-14 rounded-full bg-[#28282a] flex items-center justify-center px-3 transition-all active:scale-95 ${
+                          isSel
+                            ? 'border-2 border-white bg-[#28282a] text-white shadow-lg font-bold'
+                            : 'border border-transparent hover:border-white/20 text-white/90 font-medium'
+                        }`}
+                      >
+                        <span
+                          className={`text-[15px] tracking-wide truncate ${
+                            font.name === 'Neon' ? 'font-bold text-white drop-shadow-[0_0_8px_#fff]' : ''
+                          }`}
+                          style={{ fontFamily: font.family }}
+                        >
+                          {font.name}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {textSubTab === 'colors' && (
+              <div className="flex flex-col gap-3 min-h-[196px] justify-center py-2 px-1">
+                {/* Section 1: Solid Colors Row */}
+                <div className="flex flex-col gap-1.5">
+                  <span className="text-[11px] font-semibold text-white/40 tracking-wider uppercase">Solid Colors</span>
+                  <div className="flex items-center gap-3.5 overflow-x-auto no-scrollbar py-1">
+                    {/* Custom Color Selector Picker Option */}
+                    <label
+                      className="relative shrink-0 w-10 h-10 rounded-full cursor-pointer flex items-center justify-center border-2 border-white/60 bg-[conic-gradient(from_0deg,_#ff0000,_#ffff00,_#00ff00,_#00ffff,_#0000ff,_#ff00ff,_#ff0000)] shadow-md hover:scale-110 transition-transform active:scale-95"
+                      title="Choose Custom Color"
+                    >
+                      <div className="w-5 h-5 rounded-full bg-black/70 backdrop-blur-xs flex items-center justify-center text-white text-[13px] font-bold shadow-sm">
+                        +
+                      </div>
+                      <input
+                        type="color"
+                        value={overlayColor.startsWith('#') ? overlayColor : '#ffffff'}
+                        onChange={(e) => setOverlayColor(e.target.value)}
+                        className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                      />
+                    </label>
+
+                    {COLOR_OPTIONS.filter(c => !c.includes('gradient')).map((color, idx) => {
+                      const isSel = overlayColor === color;
+                      return (
+                        <button
+                          key={`solid-${idx}`}
+                          type="button"
+                          onClick={() => setOverlayColor(color)}
+                          className={`w-10 h-10 shrink-0 rounded-full border-2 transition-all active:scale-110 shadow-md ${
+                            isSel ? 'border-white scale-110 ring-2 ring-white/60 shadow-xl' : 'border-white/20 hover:border-white/50'
+                          }`}
+                          style={{ backgroundColor: color }}
+                        />
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Section 2: Gradient Effects Row */}
+                <div className="flex flex-col gap-1.5">
+                  <span className="text-[11px] font-semibold text-white/40 tracking-wider uppercase">Gradient Effects</span>
+                  <div className="flex items-center gap-3.5 overflow-x-auto no-scrollbar py-1">
+                    {COLOR_OPTIONS.filter(c => c.includes('gradient')).map((color, idx) => {
+                      const isSel = overlayColor === color;
+                      return (
+                        <button
+                          key={`grad-${idx}`}
+                          type="button"
+                          onClick={() => setOverlayColor(color)}
+                          className={`w-10 h-10 shrink-0 rounded-full border-2 transition-all active:scale-110 shadow-md ${
+                            isSel ? 'border-white scale-110 ring-2 ring-white/60 shadow-xl' : 'border-white/20 hover:border-white/50'
+                          }`}
+                          style={{ background: color }}
+                        />
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {(textSubTab === 'art' || textSubTab === 'bgStyle') && (
+              <div className="flex flex-col">
+                {/* Sub-Category Filter Navigation Bar (Matching Screenshots 1, 4 & 5!) */}
+                <div className="flex items-center gap-3.5 overflow-x-auto no-scrollbar mb-3.5 px-1">
+                  {/* Reset / No Background Button (Matching Screenshots 1 & 5 far left!) */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setOverlayBgMode('none');
+                      setSelectedArtId(null);
+                    }}
+                    className="shrink-0 text-white/50 hover:text-white transition-colors p-1"
+                    title="No Background / Reset"
+                  >
+                    <BiBlock size={18} />
+                  </button>
+
+                  {/* Thin Vertical Separator Divider */}
+                  <div className="w-[1px] h-4 bg-white/20 shrink-0" />
+
+                  {/* Category Filter Pills */}
+                  {['Trending', 'Basic', 'Glow', 'Red', 'Blue', 'Yellow', 'Pink'].map((cat) => (
+                    <button
+                      key={cat}
+                      type="button"
+                      onClick={() => setArtSubCategory(cat)}
+                      className={`shrink-0 text-[13px] transition-colors ${
+                        artSubCategory === cat ? 'text-white font-bold' : 'text-white/40 font-medium hover:text-white/70'
+                      }`}
+                    >
+                      {cat}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Art & Background Cards Grid - Stadium/Pill Shaped Buttons (3x3 Grid visible initially, exact screenshot scale) */}
+                <div className="grid grid-cols-3 gap-3 max-h-[196px] overflow-y-auto no-scrollbar py-1">
+                  {ART_STYLE_OPTIONS.filter((a) => artSubCategory === 'Trending' || a.category === artSubCategory || !a.category).map((art) => {
+                    const isSel = selectedArtId === art.id;
+                    return (
+                      <button
+                        key={art.id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedArtId(art.id);
+                          setOverlayColor(art.color);
+                          setOverlayBgMode(art.bgMode);
+                          setOverlayFont(art.font);
+                        }}
+                        className={`h-14 rounded-full bg-[#28282a] flex items-center justify-center px-3 transition-all active:scale-95 ${
+                          isSel
+                            ? 'border-2 border-white bg-[#28282a] text-white shadow-lg font-bold'
+                            : 'border border-transparent hover:border-white/20 text-white/90 font-medium'
+                        }`}
+                      >
+                        <span className={`text-[15px] ${art.styleClass}`}>
+                          {art.label}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

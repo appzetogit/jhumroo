@@ -259,6 +259,18 @@ const reelSchema = new mongoose.Schema(
     aiInfo: {
       type: String,
       default: ''
+    },
+    // Post Type (video vs photo)
+    postType: {
+      type: String,
+      enum: ['video', 'photo'],
+      default: 'video',
+      index: true
+    },
+    isPhoto: {
+      type: Boolean,
+      default: false,
+      index: true
     }
   },
   {

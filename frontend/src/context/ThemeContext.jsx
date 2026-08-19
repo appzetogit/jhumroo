@@ -3,9 +3,9 @@ import { useLocation } from 'react-router-dom';
 import { getStoredTheme, setStoredTheme, toggleStoredTheme } from '../utils/themeSettings';
 
 const ThemeContext = createContext({
-  theme: 'dark',
-  preferredTheme: 'dark',
-  isDarkMode: true,
+  theme: 'light',
+  preferredTheme: 'light',
+  isDarkMode: false,
   setTheme: () => {},
   toggleTheme: () => {},
 });

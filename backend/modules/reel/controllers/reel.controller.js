@@ -352,6 +352,20 @@ export const createReel = asyncHandler(async (req, res) => {
   });
 });
 
+// Fixed global seed so all users receive the exact same deterministic feed sequence
+const GLOBAL_FEED_SEED = 789123;
+
+/**
+ * Helper to identify if a candidate item is a photo post/reel
+ */
+const isPhotoCandidate = (item) => {
+  if (item.isPhoto || item.postType === 'photo') return true;
+  if (item.video && item.video.type === 'image') return true;
+  const url = item.video?.url || item.rawVideoUrl || '';
+  if (url && (url.match(/\.(jpeg|jpg|png|webp)($|\?)/i) || url.includes('photo'))) return true;
+  return false;
+};
+
 /**
  * Deterministically shuffles an array using a numeric seed.
  * Uses a basic LCG-based pseudo-random generator to ensure consistency.
@@ -402,15 +416,16 @@ export const getFeedReels = asyncHandler(async (req, res) => {
     try {
       const decoded = Buffer.from(cursor, 'base64').toString('ascii');
       const [parsedSeed, parsedOffset] = decoded.split('_');
-      seed = parseInt(parsedSeed);
-      offset = parseInt(parsedOffset);
+      seed = parseInt(parsedSeed) || GLOBAL_FEED_SEED;
+      offset = parseInt(parsedOffset) || 0;
     } catch (e) {
       console.error('[getFeedReels] Cursor decoding failed:', e);
-      seed = Math.floor(Math.random() * 1000000);
+      seed = GLOBAL_FEED_SEED;
       offset = 0;
     }
   } else {
-    seed = Math.floor(Math.random() * 1000000);
+    // If client supplied explicit query seed, use it; otherwise use GLOBAL_FEED_SEED for all users
+    seed = req.query.seed ? parseInt(req.query.seed) : GLOBAL_FEED_SEED;
     offset = 0;
   }
 
@@ -469,36 +484,50 @@ export const getFeedReels = asyncHandler(async (req, res) => {
     });
   }
 
+  // Separate candidates into Video Reels and Photo Posts (photo reels)
+  const videoCandidates = [];
+  const photoCandidates = [];
+
+  for (const candidate of candidates) {
+    if (isPhotoCandidate(candidate)) {
+      photoCandidates.push({ ...candidate, isPhoto: true, postType: 'photo' });
+    } else {
+      videoCandidates.push({ ...candidate, isPhoto: false, postType: 'video' });
+    }
+  }
+
+  // Shuffle both video reels and photo posts deterministically using global seed
+  const shuffledVideos = seededShuffle(videoCandidates, seed);
+  const shuffledPhotos = seededShuffle(photoCandidates, seed + 9999);
+
+  // Interleave videos and photos into a single unified sequence (2 videos : 1 photo pattern)
+  const combinedCandidates = [];
+  let vIdx = 0, pIdx = 0;
+
+  while (vIdx < shuffledVideos.length || pIdx < shuffledPhotos.length) {
+    if (vIdx < shuffledVideos.length) combinedCandidates.push(shuffledVideos[vIdx++]);
+    if (vIdx < shuffledVideos.length) combinedCandidates.push(shuffledVideos[vIdx++]);
+    if (pIdx < shuffledPhotos.length) combinedCandidates.push(shuffledPhotos[pIdx++]);
+
+    // Drain remaining items if one list is exhausted
+    if (vIdx >= shuffledVideos.length && pIdx < shuffledPhotos.length) {
+      combinedCandidates.push(shuffledPhotos[pIdx++]);
+    } else if (pIdx >= shuffledPhotos.length && vIdx < shuffledVideos.length) {
+      combinedCandidates.push(shuffledVideos[vIdx++]);
+    }
+  }
+
   let pageReels = [];
   let hasMore = false;
   let nextCursor = null;
 
-  const latestReel = candidates[0];
-  const remainingCandidates = candidates.slice(1);
-
-  // Shuffle remaining reels deterministically with the session seed
-  const shuffled = seededShuffle(remainingCandidates, seed);
-
-  if (offset === 0) {
-    // First page: return latest reel at index 0 + first batch of shuffled
-    const firstBatch = shuffled.slice(0, limit - 1);
-    pageReels = [latestReel, ...firstBatch];
-    
-    const nextOffset = firstBatch.length;
-    hasMore = shuffled.length > nextOffset;
-    if (hasMore) {
-      nextCursor = Buffer.from(`${seed}_${nextOffset}`).toString('base64');
-    }
-  } else {
-    // Subsequent pages: return batch of shuffled from offset
-    const batch = shuffled.slice(offset, offset + limit);
-    pageReels = batch;
-    
-    const nextOffset = offset + batch.length;
-    hasMore = shuffled.length > nextOffset;
-    if (hasMore) {
-      nextCursor = Buffer.from(`${seed}_${nextOffset}`).toString('base64');
-    }
+  const batch = combinedCandidates.slice(offset, offset + limit);
+  pageReels = batch;
+  
+  const nextOffset = offset + batch.length;
+  hasMore = combinedCandidates.length > nextOffset;
+  if (hasMore) {
+    nextCursor = Buffer.from(`${seed}_${nextOffset}`).toString('base64');
   }
 
   // Populate user data. `options: { lean: true }` keeps populated subdocuments

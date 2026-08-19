@@ -66,7 +66,9 @@ export const useReelsAPI = () => {
           comments: reel.stats?.commentsCount || 0,
           shares: reel.stats?.sharesCount || 0,
           isLiked: reel.isLiked || false,
-          isSaved: reel.isSaved || false
+          isSaved: reel.isSaved || false,
+          isPhoto: reel.isPhoto || reel.postType === 'photo' || Boolean(reel.video?.url && reel.video.url.match(/\.(jpeg|jpg|png|webp)($|\?)/i)),
+          postType: reel.postType || (reel.isPhoto ? 'photo' : 'video')
         }));
 
         setReels(prev => {
@@ -105,7 +107,9 @@ export const useReelsAPI = () => {
           comments: reel.stats?.commentsCount || 0,
           shares: reel.stats?.sharesCount || 0,
           isLiked: reel.isLiked || false,
-          isSaved: reel.isSaved || false
+          isSaved: reel.isSaved || false,
+          isPhoto: reel.isPhoto || reel.postType === 'photo' || Boolean(reel.video?.url && reel.video.url.match(/\.(jpeg|jpg|png|webp)($|\?)/i)),
+          postType: reel.postType || (reel.isPhoto ? 'photo' : 'video')
         };
         setReels([normalizedReel]);
         setHasMore(false);
