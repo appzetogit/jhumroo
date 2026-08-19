@@ -408,7 +408,7 @@ const VideoOverlay = ({ reelId, username, caption, musicName, isLiked, likes, co
 
   return (
     <>
-      <div className="absolute inset-0 pointer-events-none flex flex-col justify-end bg-gradient-to-t from-black/80 via-black/20 to-transparent z-[30]">
+      <div data-video-overlay="true" className="video-overlay absolute inset-0 pointer-events-none flex flex-col justify-end bg-gradient-to-t from-black/80 via-black/20 to-transparent z-[30]">
         <div className={`flex justify-between items-end p-4 transition-opacity duration-200 ${isScrubbingInternal ? 'opacity-0 pointer-events-none' : 'opacity-100'} ${compactBottom ? 'pb-4' : 'pb-[calc(var(--bottom-nav-height)+16px+env(safe-area-inset-bottom,0px))]'}`}>
           {/* Left: User info */}
           <div className="flex-1 pr-10 text-left text-white pointer-events-none flex flex-col items-start select-none">

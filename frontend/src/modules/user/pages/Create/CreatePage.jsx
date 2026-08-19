@@ -340,10 +340,7 @@ const CreatePage = () => {
   const [overlayFontSize, setOverlayFontSize] = useState(() => {
     return Number(localStorage.getItem('create_overlayFontSize')) || 24;
   });
-  const [textPos, setTextPos] = useState(() => {
-    const saved = localStorage.getItem('create_textPos');
-    return saved ? JSON.parse(saved) : { x: 0, y: 0 };
-  });
+  const [textPos, setTextPos] = useState({ x: 0, y: 0 });
   const [textRotation, setTextRotation] = useState(() => {
     return Number(localStorage.getItem('create_textRotation')) || 0;
   });
@@ -366,9 +363,11 @@ const CreatePage = () => {
 
   const toggleTextAlign = () => {
     setOverlayAlign((prev) => {
-      if (prev === 'center') return 'left';
-      if (prev === 'left') return 'right';
-      return 'center';
+      const next = prev === 'center' ? 'left' : prev === 'left' ? 'right' : 'center';
+      if (next === 'center') {
+        setTextPos({ x: 0, y: 0 });
+      }
+      return next;
     });
   };
 
@@ -728,6 +727,26 @@ const CreatePage = () => {
   const [isTextTrackSelected, setIsTextTrackSelected] = useState(false); // timeline clip selection
   const textListRef = useRef(textList);
   useEffect(() => { textListRef.current = textList; }, [textList]);
+
+  const getCurrentPlayheadTime = () => {
+    if (stage === 'editor' && editorVideoRef.current) {
+      const currentClip = clipSequence[currentClipIndex];
+      const pastDuration = clipSequence.slice(0, currentClipIndex).reduce((a, c) => a + (c.duration || 0), 0);
+      const startOffset = currentClip?.startOffset || 0;
+      const speed = currentClip?.speed || 1;
+      const localTime = Math.max(0, (editorVideoRef.current.currentTime - startOffset) / speed);
+      return pastDuration + localTime;
+    }
+    if (stage === 'preview' && previewVideoRef.current) {
+      const currentClip = clipSequence[currentPreviewClipIndex];
+      const pastDuration = clipSequence.slice(0, currentPreviewClipIndex).reduce((a, c) => a + (c.duration || 0), 0);
+      const startOffset = currentClip?.startOffset || 0;
+      const speed = currentClip?.speed || 1;
+      const localTime = Math.max(0, (previewVideoRef.current.currentTime - startOffset) / speed);
+      return pastDuration + localTime;
+    }
+    return 0;
+  };
   const [isRecordingVoice, setIsRecordingVoice] = useState(false);
   const [recordedVoiceBlob, setRecordedVoiceBlob] = useState(null);
   const [voiceRecorder, setVoiceRecorder] = useState(null);
@@ -762,7 +781,7 @@ const CreatePage = () => {
     if (selectedVideoEffect === 'neon') effectFilter = 'saturate(2.2) contrast(1.2)';
     if (selectedVideoEffect === 'bling') effectFilter = 'brightness(1.15) contrast(1.1)';
     if (selectedVideoEffect === 'illusion') effectFilter = 'contrast(1.4) saturate(1.8)';
-    if (selectedVideoEffect === 'glitch') effectFilter = 'drop-shadow(-2px 0 0 rgba(255,0,0,0.6)) drop-shadow(2px 0 0 rgba(0,255,255,0.6))';
+    if (selectedVideoEffect === 'glitch') effectFilter = 'contrast(1.5) saturate(2.0) hue-rotate(90deg)';
 
     const adj = `brightness(${imageAdjustments.brightness}%) contrast(${imageAdjustments.contrast}%) saturate(${imageAdjustments.saturate}%) hue-rotate(${imageAdjustments.hueRotate}deg) invert(${imageAdjustments.invert}%) grayscale(${imageAdjustments.grayscale}%) sepia(${imageAdjustments.sepia}%) blur(${imageAdjustments.blur}px) opacity(${imageAdjustments.opacity}%)`;
     return `${base} ${effectFilter} ${adj}`.trim() || 'none';
@@ -2863,9 +2882,24 @@ const CreatePage = () => {
   };
 
   const handleNextClick = () => {
+    const isAdjusted = imageAdjustments.brightness !== 100 ||
+      imageAdjustments.contrast !== 100 ||
+      imageAdjustments.saturate !== 100 ||
+      imageAdjustments.hueRotate !== 0 ||
+      imageAdjustments.invert !== 0 ||
+      imageAdjustments.grayscale !== 0 ||
+      imageAdjustments.sepia !== 0 ||
+      imageAdjustments.blur !== 0 ||
+      imageAdjustments.opacity !== 100;
+
     const hasEdits = textList.length > 0 ||
+      (overlayText && overlayText.trim() !== '') ||
       activeStickers.length > 0 ||
+      activeOverlays.length > 0 ||
       selectedFilter !== 'Normal' ||
+      (selectedVideoEffect && selectedVideoEffect !== '') ||
+      isAdjusted ||
+      selectedSounds.length > 0 ||
       editorSettings.rotation !== 0 ||
       clipSequence.length > 1 ||
       clipSequence.some(clip => {
@@ -2889,6 +2923,172 @@ const CreatePage = () => {
       pushStage('post');
     } else {
       performMergeSave(false);
+    }
+  };
+
+  const renderTextItemToCanvas = (ctx, canvas, item, globalTime) => {
+    if (!item || !item.text) return;
+    if (globalTime !== undefined && (globalTime < item.startTime || globalTime > item.endTime)) return;
+
+    const fontConfig = FONT_OPTIONS.find((f) => f.name === item.font);
+    const fontFamily = fontConfig?.family || 'sans-serif';
+    const fontSize = (item.fontSize || 28) * 2;
+    const lines = item.text.split('\n');
+
+    ctx.save();
+    ctx.font = `bold ${fontSize}px ${fontFamily}`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    const lineHeight = fontSize * 1.25;
+    const totalHeight = lines.length * lineHeight;
+    let maxLineWidth = 0;
+    lines.forEach((line) => {
+      const w = ctx.measureText(line).width;
+      if (w > maxLineWidth) maxLineWidth = w;
+    });
+
+    const paddingX = 24;
+    const paddingY = 14;
+    const rectW = maxLineWidth + paddingX * 2;
+    const rectH = totalHeight + paddingY * 2;
+    const bgMode = item.bgMode || overlayBgMode || 'none';
+
+    const canvasHalfW = canvas.width / 2;
+    const canvasHalfH = canvas.height / 2;
+    const targetX = item.normX !== undefined ? (item.normX * canvasHalfW) : ((item.x || 0) * (canvasHalfW / 127.5));
+    const targetY = item.normY !== undefined ? (item.normY * canvasHalfH) : ((item.y || 0) * (canvasHalfH / 226.6));
+
+    ctx.translate(canvasHalfW + targetX, canvasHalfH + targetY);
+    ctx.rotate(((item.rotation || 0) * Math.PI) / 180);
+
+    // Draw Background Box (Solid, Translucent, or Outline)
+    if (bgMode === 'solid') {
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      if (ctx.roundRect) {
+        ctx.roundRect(-rectW / 2, -rectH / 2, rectW, rectH, 16);
+      } else {
+        ctx.rect(-rectW / 2, -rectH / 2, rectW, rectH);
+      }
+      ctx.fill();
+    } else if (bgMode === 'translucent') {
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+      ctx.beginPath();
+      if (ctx.roundRect) {
+        ctx.roundRect(-rectW / 2, -rectH / 2, rectW, rectH, 16);
+      } else {
+        ctx.rect(-rectW / 2, -rectH / 2, rectW, rectH);
+      }
+      ctx.fill();
+    } else if (bgMode === 'outline') {
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      if (ctx.roundRect) {
+        ctx.roundRect(-rectW / 2, -rectH / 2, rectW, rectH, 16);
+      } else {
+        ctx.rect(-rectW / 2, -rectH / 2, rectW, rectH);
+      }
+      ctx.stroke();
+    }
+
+    // Set Text Color
+    if (bgMode === 'solid') {
+      ctx.fillStyle = '#000000';
+    } else {
+      ctx.fillStyle = item.color || '#ffffff';
+    }
+
+    // Render Text Lines
+    const startY = -((lines.length - 1) * lineHeight) / 2;
+    lines.forEach((line, idx) => {
+      ctx.fillText(line, 0, startY + idx * lineHeight);
+    });
+
+    ctx.restore();
+  };
+
+  const renderEffectOverlayToCanvas = (ctx, canvas, globalTime = 0) => {
+    if (!selectedVideoEffect) return;
+
+    // 1. Glitch Scanlines Overlay
+    if (selectedVideoEffect === 'glitch') {
+      ctx.save();
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.22)';
+      for (let y = 0; y < canvas.height; y += 8) {
+        ctx.fillRect(0, y, canvas.width, 4);
+      }
+      ctx.restore();
+    }
+
+    // 2. Gold Powder Floating Sparkles Overlay
+    if (selectedVideoEffect === 'gold_powder') {
+      ctx.save();
+      const sparkPositions = [12, 35, 58, 72, 85, 20, 45, 63, 90, 15, 50, 78];
+      sparkPositions.forEach((left, i) => {
+        const speed = (i % 2) + 1;
+        const yPos = ((globalTime * 140 * speed + i * 90) % canvas.height);
+        const xPos = (left / 100) * canvas.width;
+        const radius = (i % 3) * 3 + 6;
+
+        ctx.fillStyle = '#fde047';
+        ctx.shadowColor = '#eab308';
+        ctx.shadowBlur = 14;
+        ctx.beginPath();
+        ctx.arc(xPos, yPos, radius, 0, Math.PI * 2);
+        ctx.fill();
+      });
+      ctx.restore();
+    }
+
+    // 3. Heart Floating Emojis Overlay
+    if (selectedVideoEffect === 'heart') {
+      ctx.save();
+      ctx.font = '54px serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      const heartPositions = [10, 25, 42, 60, 78, 88, 30, 50, 70];
+      heartPositions.forEach((left, i) => {
+        const speed = (i % 3) + 1.2;
+        const yPos = canvas.height - ((globalTime * 110 * speed + i * 120) % (canvas.height + 100));
+        const xPos = (left / 100) * canvas.width;
+
+        ctx.fillText('💖', xPos, yPos);
+      });
+      ctx.restore();
+    }
+
+    // 4. Bling Twinkling Stars Overlay
+    if (selectedVideoEffect === 'bling') {
+      ctx.save();
+      ctx.font = '50px serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      const blingPositions = [15, 38, 55, 75, 85, 22, 68, 48, 88, 32];
+      blingPositions.forEach((left, i) => {
+        const yPos = ((i * 21) % 85 + 8) / 100 * canvas.height;
+        const xPos = (left / 100) * canvas.width;
+
+        const opacity = Math.abs(Math.sin(globalTime * 4 + i));
+        ctx.globalAlpha = opacity;
+        ctx.fillText('✨', xPos, yPos);
+      });
+      ctx.restore();
+    }
+
+    // 5. Window Vintage Vignette Frame Overlay
+    if (selectedVideoEffect === 'window') {
+      ctx.save();
+      const gradient = ctx.createRadialGradient(
+        canvas.width / 2, canvas.height / 2, canvas.width * 0.35,
+        canvas.width / 2, canvas.height / 2, canvas.width * 0.75
+      );
+      gradient.addColorStop(0, 'rgba(0, 0, 0, 0)');
+      gradient.addColorStop(1, 'rgba(0, 0, 0, 0.88)');
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.restore();
     }
   };
 
@@ -3006,6 +3206,22 @@ const CreatePage = () => {
         p.audio.play().catch(err => console.warn("Failed to play background audio in exporter:", err));
       });
 
+      const effectiveTextList = textList.length > 0 ? textList : (overlayText && overlayText.trim() ? [{
+        id: 'single-overlay-text',
+        text: overlayText,
+        font: overlayFont,
+        color: overlayColor,
+        fontSize: overlayFontSize,
+        x: textPos.x,
+        y: textPos.y,
+        normX: textPos.normX !== undefined ? textPos.normX : (textPos.x / 127.5),
+        normY: textPos.normY !== undefined ? textPos.normY : (textPos.y / 226.6),
+        rotation: textRotation,
+        bgMode: overlayBgMode,
+        startTime: 0,
+        endTime: 9999
+      }] : []);
+
       for (let i = 0; i < clipSequence.length; i++) {
         const clip = clipSequence[i];
         setRenderProgress(Math.round((i / clipSequence.length) * 100));
@@ -3019,6 +3235,19 @@ const CreatePage = () => {
 
           const clipStartTimeInGlobalTimeline = clipSequence.slice(0, i).reduce((acc, c) => acc + (c.duration || 5), 0);
 
+          const canvasRatio = canvas.width / canvas.height;
+          const imgW = img.width || canvas.width;
+          const imgH = img.height || canvas.height;
+          const imgRatio = imgW / imgH;
+          let imgDrawWidth, imgDrawHeight;
+          if (imgRatio < canvasRatio) {
+            imgDrawWidth = canvas.width;
+            imgDrawHeight = canvas.width / imgRatio;
+          } else {
+            imgDrawHeight = canvas.height;
+            imgDrawWidth = canvas.height * imgRatio;
+          }
+
           while (Date.now() - startTime < durationMs) {
             const elapsedInClip = (Date.now() - startTime) / 1000;
             const globalTime = clipStartTimeInGlobalTimeline + elapsedInClip;
@@ -3028,20 +3257,13 @@ const CreatePage = () => {
             ctx.translate(canvas.width / 2, canvas.height / 2);
             ctx.rotate((editorSettings.rotation * Math.PI) / 180);
             ctx.filter = getCombinedFilter();
-            ctx.drawImage(img, -canvas.width / 2, -canvas.height / 2, canvas.width, canvas.height);
+            ctx.drawImage(img, -imgDrawWidth / 2, -imgDrawHeight / 2, imgDrawWidth, imgDrawHeight);
             ctx.restore();
 
-            textList.forEach(item => {
-              if (item.text && globalTime >= item.startTime && globalTime <= item.endTime) {
-                ctx.save();
-                ctx.fillStyle = item.color || '#ffffff';
-                ctx.font = `${(item.fontSize || 28) * 2}px ${item.font || 'Standard'}`;
-                ctx.textAlign = 'center';
-                ctx.translate(canvas.width / 2 + item.x * 2, canvas.height / 2 + item.y * 2);
-                ctx.rotate(((item.rotation || 0) * Math.PI) / 180);
-                ctx.fillText(item.text, 0, 0);
-                ctx.restore();
-              }
+            renderEffectOverlayToCanvas(ctx, canvas, globalTime);
+
+            effectiveTextList.forEach(item => {
+              renderTextItemToCanvas(ctx, canvas, item, globalTime);
             });
 
             activeStickers.forEach(sticker => {
@@ -3077,14 +3299,13 @@ const CreatePage = () => {
 
           const clipStartTimeInGlobalTimeline = clipSequence.slice(0, i).reduce((acc, c) => acc + (c.duration || 5), 0);
 
-          // Letterbox instead of stretching - landscape/non-9:16 source clips keep their own
-          // aspect ratio and get centered with black bars, rather than being squashed to fill.
+          // Full vertical Reel Cover Fill (object-fit: cover) to eliminate top/bottom black bars
           const srcW = renderVideo.videoWidth || canvas.width;
           const srcH = renderVideo.videoHeight || canvas.height;
           const srcRatio = srcW / srcH;
           const canvasRatio = canvas.width / canvas.height;
           let drawWidth, drawHeight;
-          if (srcRatio > canvasRatio) {
+          if (srcRatio < canvasRatio) {
             drawWidth = canvas.width;
             drawHeight = canvas.width / srcRatio;
           } else {
@@ -3106,17 +3327,10 @@ const CreatePage = () => {
             ctx.drawImage(renderVideo, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight);
             ctx.restore();
 
-            textList.forEach(item => {
-              if (item.text && globalTime >= item.startTime && globalTime <= item.endTime) {
-                ctx.save();
-                ctx.fillStyle = item.color || '#ffffff';
-                ctx.font = `${(item.fontSize || 28) * 2}px ${item.font || 'Standard'}`;
-                ctx.textAlign = 'center';
-                ctx.translate(canvas.width / 2 + item.x * 2, canvas.height / 2 + item.y * 2);
-                ctx.rotate(((item.rotation || 0) * Math.PI) / 180);
-                ctx.fillText(item.text, 0, 0);
-                ctx.restore();
-              }
+            renderEffectOverlayToCanvas(ctx, canvas, globalTime);
+
+            effectiveTextList.forEach(item => {
+              renderTextItemToCanvas(ctx, canvas, item, globalTime);
             });
 
             activeStickers.forEach(sticker => {
@@ -3166,6 +3380,9 @@ const CreatePage = () => {
       return;
     }
 
+    const normX = textPos.normX !== undefined ? textPos.normX : (textPos.x / 127.5);
+    const normY = textPos.normY !== undefined ? textPos.normY : (textPos.y / 226.6);
+
     const itemData = {
       id: selectedTextId || `text-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       text: overlayText,
@@ -3173,10 +3390,13 @@ const CreatePage = () => {
       endTime: textEndTime,
       x: textPos.x,
       y: textPos.y,
+      normX,
+      normY,
       rotation: textRotation,
       color: overlayColor,
       font: overlayFont,
-      fontSize: overlayFontSize
+      fontSize: overlayFontSize,
+      bgMode: overlayBgMode
     };
 
     setTextList(prev => {
@@ -3201,9 +3421,9 @@ const CreatePage = () => {
       return;
     }
     if (toolId === 'text') {
-      const maxEndTime = textList.reduce((max, t) => Math.max(max, t.endTime), 0);
-      const start = Math.min(videoDuration, maxEndTime);
-      const end = Math.min(videoDuration, start + 5);
+      const playheadTime = getCurrentPlayheadTime();
+      const start = Math.max(0, Math.min(Math.max(0, videoDuration - 0.5), playheadTime));
+      const end = Math.min(videoDuration, start + 3);
       setOverlayText('');
       setTextStartTime(start);
       setTextEndTime(end);
@@ -3351,6 +3571,22 @@ const CreatePage = () => {
 
       const editsPayload = {
         ...editsData,
+        textList: textList.map(t => ({
+          id: t.id,
+          text: t.text,
+          font: t.font,
+          color: t.color,
+          fontSize: t.fontSize,
+          x: t.x,
+          y: t.y,
+          normX: t.normX !== undefined ? t.normX : (t.x / 127.5),
+          normY: t.normY !== undefined ? t.normY : (t.y / 226.6),
+          rotation: t.rotation,
+          startTime: t.startTime,
+          endTime: t.endTime,
+          bgMode: t.bgMode || overlayBgMode
+        })),
+        imageAdjustments: imageAdjustments,
         overlays: activeOverlays.map(o => ({
           id: o.id,
           url: o.url,
@@ -5895,14 +6131,14 @@ const CreatePage = () => {
                   style={{ display: initiallyVisible ? '' : 'none' }}
                 >
                   <div
-                    className={`absolute pointer-events-auto cursor-move select-none touch-none transition-all ${
-                      isSelected && isTextSelected ? 'ring-2 ring-white/30 rounded-lg p-2' : ''
+                    className={`absolute pointer-events-auto cursor-move select-none touch-none transition-all w-max max-w-[90%] ${
+                      isSelected && isTextSelected ? 'border-2 border-white/80 rounded-lg p-2 shadow-2xl' : ''
                     }`}
                     style={{
-                      left: `calc(50% + ${overlay.x}px)`,
-                      top: `calc(50% + ${overlay.y}px)`,
+                      left: `calc(50% + ${(overlay.normX !== undefined ? overlay.normX * 50 : (overlay.x / 127.5) * 50)}%)`,
+                      top: `calc(50% + ${(overlay.normY !== undefined ? overlay.normY * 50 : (overlay.y / 226.6) * 50)}%)`,
                       transform: `translate(-50%, -50%) rotate(${overlay.rotation || 0}deg)`,
-                      padding: '10px'
+                      padding: '8px'
                     }}
                     onPointerDown={(e) => {
                       e.stopPropagation();
@@ -5914,6 +6150,11 @@ const CreatePage = () => {
                       const initialY = overlay.y;
                       let hasMoved = false;
 
+                      const parentBox = target.parentElement || target;
+                      const rect = parentBox.getBoundingClientRect();
+                      const halfW = (rect.width || 255) / 2;
+                      const halfH = (rect.height || 453) / 2;
+
                       // Synchronize composer states with this selected text item
                       setSelectedTextId(overlay.id);
                       setOverlayText(overlay.text);
@@ -5921,7 +6162,7 @@ const CreatePage = () => {
                       setTextEndTime(overlay.endTime);
                       textStartTimeRef.current = overlay.startTime;
                       textEndTimeRef.current = overlay.endTime;
-                      setTextPos({ x: overlay.x, y: overlay.y });
+                      setTextPos({ x: overlay.x, y: overlay.y, normX: overlay.normX, normY: overlay.normY });
                       setTextRotation(overlay.rotation || 0);
                       setOverlayColor(overlay.color || '#ffffff');
                       setOverlayFont(overlay.font || 'Standard');
@@ -5934,7 +6175,14 @@ const CreatePage = () => {
                         const dx = moveEvent.clientX - startX;
                         const dy = moveEvent.clientY - startY;
                         if (Math.abs(dx) > 3 || Math.abs(dy) > 3) hasMoved = true;
-                        setTextPos({ x: initialX + dx, y: initialY + dy });
+
+                        const newX = initialX + dx;
+                        const newY = initialY + dy;
+                        const normX = newX / halfW;
+                        const normY = newY / halfH;
+
+                        setTextPos({ x: newX, y: newY, normX, normY });
+                        setTextList(prev => prev.map(t => t.id === overlay.id ? { ...t, x: newX, y: newY, normX, normY } : t));
                       };
 
                       const upHandler = () => {
@@ -5948,16 +6196,59 @@ const CreatePage = () => {
                       target.addEventListener('pointermove', moveHandler);
                       target.addEventListener('pointerup', upHandler);
                     }}
+                    onTouchStart={(e) => {
+                      if (e.touches.length === 2) {
+                        const t1 = e.touches[0];
+                        const t2 = e.touches[1];
+                        e.currentTarget.lastDist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+                        e.currentTarget.lastAngle = Math.atan2(t2.clientY - t1.clientY, t2.clientX - t1.clientX) * (180 / Math.PI);
+                      }
+                    }}
+                    onTouchMove={(e) => {
+                      if (e.touches.length === 2) {
+                        e.stopPropagation();
+                        const t1 = e.touches[0];
+                        const t2 = e.touches[1];
+                        const dist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+                        const angle = Math.atan2(t2.clientY - t1.clientY, t2.clientX - t1.clientX) * (180 / Math.PI);
+
+                        const el = e.currentTarget;
+                        if (el.lastDist && el.lastDist > 0) {
+                          const scaleFactor = dist / el.lastDist;
+                          const newFontSize = Math.max(12, Math.min(180, Math.round((overlay.fontSize || 28) * scaleFactor)));
+                          setTextList(prev => prev.map(t => t.id === overlay.id ? { ...t, fontSize: newFontSize } : t));
+                          setOverlayFontSize(newFontSize);
+                        }
+                        if (el.lastAngle !== undefined) {
+                          const deltaAngle = angle - el.lastAngle;
+                          const newRotation = (overlay.rotation || 0) + deltaAngle;
+                          setTextList(prev => prev.map(t => t.id === overlay.id ? { ...t, rotation: newRotation } : t));
+                          setTextRotation(newRotation);
+                        }
+                        el.lastDist = dist;
+                        el.lastAngle = angle;
+                      }
+                    }}
+                    onTouchEnd={(e) => {
+                      if (e.currentTarget) {
+                        e.currentTarget.lastDist = undefined;
+                        e.currentTarget.lastAngle = undefined;
+                      }
+                    }}
+                    onWheel={(e) => {
+                      const delta = e.deltaY < 0 ? 3 : -3;
+                      const newFontSize = Math.max(12, Math.min(180, (overlay.fontSize || 28) + delta));
+                      setTextList(prev => prev.map(t => t.id === overlay.id ? { ...t, fontSize: newFontSize } : t));
+                      setOverlayFontSize(newFontSize);
+                    }}
                   >
                     <span
+                      className="whitespace-pre-wrap break-words max-w-full block text-center"
                       style={{
                         fontSize: `${overlay.fontSize || 28}px`,
                         fontFamily: FONT_OPTIONS.find(f => f.name === (overlay.font || 'Standard'))?.family || 'serif',
                         color: overlay.color || '#ffffff',
-                        whiteSpace: 'pre-wrap',
-                        textAlign: 'center',
                         textShadow: '0 2px 4px rgba(0,0,0,0.5)',
-                        display: 'block'
                       }}
                     >
                       {overlay.text}
@@ -5975,9 +6266,47 @@ const CreatePage = () => {
                           showToast('Text deleted');
                         }}
                         className="absolute -top-3 -right-3 w-6 h-6 rounded-full bg-red-500 text-white flex items-center justify-center shadow-lg active:scale-90 transition-transform z-40 border-2 border-white pointer-events-auto"
+                        title="Delete text"
                       >
                         <BiX size={16} />
                       </button>
+                    )}
+
+                    {/* Corner Resize Handle for Stretching / Shrinking Text */}
+                    {isSelected && isTextSelected && (
+                      <div
+                        onPointerDown={(e) => {
+                          e.stopPropagation();
+                          const handle = e.currentTarget;
+                          handle.setPointerCapture(e.pointerId);
+                          const startX = e.clientX;
+                          const startY = e.clientY;
+                          const startSize = overlay.fontSize || 28;
+
+                          const moveHandler = (me) => {
+                            const dx = me.clientX - startX;
+                            const dy = me.clientY - startY;
+                            const distDelta = (dx + dy) * 0.5;
+                            const newSize = Math.max(12, Math.min(180, Math.round(startSize + distDelta)));
+                            setTextList(prev => prev.map(t => t.id === overlay.id ? { ...t, fontSize: newSize } : t));
+                            setOverlayFontSize(newSize);
+                          };
+
+                          const upHandler = () => {
+                            handle.removeEventListener('pointermove', moveHandler);
+                            handle.removeEventListener('pointerup', upHandler);
+                          };
+
+                          handle.addEventListener('pointermove', moveHandler);
+                          handle.addEventListener('pointerup', upHandler);
+                        }}
+                        className="absolute -bottom-3 -right-3 w-6 h-6 rounded-full bg-white border-2 border-[#00f2ea] shadow-lg cursor-se-resize flex items-center justify-center pointer-events-auto z-40 active:scale-125 transition-transform"
+                        title="Pinch or drag to resize text"
+                      >
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#000" strokeWidth="2.8">
+                          <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />
+                        </svg>
+                      </div>
                     )}
                   </div>
                 </div>
@@ -6606,236 +6935,255 @@ const CreatePage = () => {
             </div>
 
             {/* Text Track Row (Only rendered when text items exist) */}
-            {textList.length > 0 && (
-              <div className="flex h-12 mt-2" onClick={(e) => {
-                // Clicking outside text clip deselects
-                if (e.target === e.currentTarget) {
-                  setIsTextTrackSelected(false);
-                  setSelectedTextId(null);
+            {textList.length > 0 && (() => {
+              // Calculate non-overlapping lane indices for text clips
+              const sortedClips = [...textList].sort((a, b) => a.startTime - b.startTime);
+              const laneEndTimes = [];
+              const textLanes = sortedClips.map((clip) => {
+                let lane = 0;
+                while (laneEndTimes[lane] !== undefined && laneEndTimes[lane] > clip.startTime + 0.05) {
+                  lane++;
                 }
-              }}>
-                <div className="flex ml-[50%] items-center relative h-full">
-                  {textList.map((item) => {
-                    const isSelected = selectedTextId === item.id;
-                    return (
-                      <div key={item.id} className="relative">
-                        {/* Clip Bar */}
-                        <div
-                          className={`absolute h-10 rounded-[4px] flex items-center px-3 shadow-lg cursor-pointer transition-all ${
-                            isSelected && isTextTrackSelected
-                              ? 'border-y-4 border-[#ffcc00] z-10 bg-white/5 shadow-lg animate-pulse-subtle'
-                              : 'bg-white/20 border border-white/30'
-                          }`}
-                          style={{
-                            left: item.startTime * PIXELS_PER_SECOND,
-                            width: (item.endTime - item.startTime) * PIXELS_PER_SECOND,
-                            top: '-20px'
-                          }}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            // Ignore click if it was a drag gesture
-                            if (e.currentTarget.dataset.dragged === 'true') {
-                              e.currentTarget.removeAttribute('data-dragged');
-                              return;
-                            }
+                laneEndTimes[lane] = clip.endTime;
+                return { ...clip, lane };
+              });
+              const totalLanes = laneEndTimes.length || 1;
 
-                            // Select this item and sync states
-                            setSelectedTextId(item.id);
-                            setOverlayText(item.text);
-                            setTextStartTime(item.startTime);
-                            setTextEndTime(item.endTime);
-                            textStartTimeRef.current = item.startTime;
-                            textEndTimeRef.current = item.endTime;
-                            setTextPos({ x: item.x, y: item.y });
-                            setTextRotation(item.rotation || 0);
-                            setOverlayColor(item.color || '#ffffff');
-                            setOverlayFont(item.font || 'Standard');
-                            setOverlayFontSize(item.fontSize || 28);
-
-                            setIsTextTrackSelected(prev => {
-                              const next = !prev || selectedTextId !== item.id;
-                              if (next) {
-                                setFocusedTrack('text');
-                              } else {
-                                setFocusedTrack(null);
-                              }
-                              return next;
-                            });
-                          }}
-                          onPointerDown={(e) => {
-                            const target = e.currentTarget;
-                            target.setPointerCapture(e.pointerId);
-                            const startX = e.clientX;
-                            const initialStart = item.startTime;
-                            const initialEnd = item.endTime;
-                            const width = initialEnd - initialStart;
-                            let hasMoved = false;
-
-                            const moveHandler = (mE) => {
-                              const dx = Math.abs(mE.clientX - startX);
-                              if (dx > 4) {
-                                hasMoved = true;
-                                target.dataset.dragged = 'true';
-                              }
-                              if (!hasMoved) return;
-                              const delta = (mE.clientX - startX) / PIXELS_PER_SECOND;
-                              const newStart = Math.max(0, Math.min(videoDuration - width, initialStart + delta));
-                              const newEnd = newStart + width;
-                              
-                              // Update this item directly in state
-                              setTextList(prev => prev.map(t => {
-                                if (t.id === item.id) {
-                                  return { ...t, startTime: newStart, endTime: newEnd };
-                                }
-                                return t;
-                              }));
-
-                              if (isSelected) {
-                                textStartTimeRef.current = newStart;
-                                textEndTimeRef.current = newEnd;
-                                setTextStartTime(newStart);
-                                setTextEndTime(newEnd);
-                              }
-                            };
-
-                            const upHandler = () => {
-                              try {
-                                if (target.hasPointerCapture(e.pointerId)) {
-                                  target.releasePointerCapture(e.pointerId);
-                                }
-                              } catch (err) {}
-                              window.removeEventListener('pointermove', moveHandler);
-                              window.removeEventListener('pointerup', upHandler);
-                            };
-
-                            window.addEventListener('pointermove', moveHandler);
-                            window.addEventListener('pointerup', upHandler);
-                          }}
-                        >
-                          <span className={`text-[10px] font-bold text-white truncate pointer-events-none flex-1 transition-all ${isSelected && isTextTrackSelected ? 'pl-4' : ''}`}>
-                            {item.text}
-                          </span>
-                          <span className={`text-[9px] text-white/50 pointer-events-none ml-1 shrink-0 transition-all ${isSelected && isTextTrackSelected ? 'pr-4' : ''}`}>
-                            {(item.endTime - item.startTime).toFixed(1)}s
-                          </span>
-
-                          {/* Start Handle */}
+              return (
+                <div
+                  className="flex mt-1 relative transition-all duration-200"
+                  style={{ height: `${totalLanes * 44 + 44}px` }}
+                  onClick={(e) => {
+                    // Clicking outside text clip deselects
+                    if (e.target === e.currentTarget) {
+                      setIsTextTrackSelected(false);
+                      setSelectedTextId(null);
+                    }
+                  }}
+                >
+                  <div className="flex ml-[50%] relative h-full">
+                    {textLanes.map((item) => {
+                      const isSelected = selectedTextId === item.id;
+                      return (
+                        <div key={item.id} className="relative">
+                          {/* Clip Bar */}
                           <div
-                            className={`absolute z-50 cursor-col-resize flex items-center justify-center transition-all duration-150 ${isSelected && isTextTrackSelected
-                                ? '-top-[4px] -bottom-[4px] -left-[4px] w-[18px] bg-[#ffcc00] rounded-l-[8px] opacity-100 pointer-events-auto'
-                                : 'top-0 bottom-0 left-0 w-[18px] bg-transparent opacity-0 hover:opacity-20 hover:bg-[#ffcc00] rounded-l-[8px] pointer-events-auto'
-                              }`}
-                            onPointerDown={(e) => {
+                            className={`absolute h-9 rounded-[4px] flex items-center px-3 shadow-lg cursor-pointer transition-all ${
+                              isSelected && isTextTrackSelected
+                                ? 'border-y-4 border-[#ffcc00] z-20 bg-white/10 shadow-xl animate-pulse-subtle'
+                                : 'bg-white/20 border border-white/30 hover:bg-white/30 z-10'
+                            }`}
+                            style={{
+                              left: item.startTime * PIXELS_PER_SECOND,
+                              width: (item.endTime - item.startTime) * PIXELS_PER_SECOND,
+                              top: `${item.lane * 44}px`
+                            }}
+                            onClick={(e) => {
                               e.stopPropagation();
+                              // Ignore click if it was a drag gesture
+                              if (e.currentTarget.dataset.dragged === 'true') {
+                                e.currentTarget.removeAttribute('data-dragged');
+                                return;
+                              }
+
+                              // Select this item and sync states
+                              setSelectedTextId(item.id);
+                              setOverlayText(item.text);
+                              setTextStartTime(item.startTime);
+                              setTextEndTime(item.endTime);
+                              textStartTimeRef.current = item.startTime;
+                              textEndTimeRef.current = item.endTime;
+                              setTextPos({ x: item.x, y: item.y });
+                              setTextRotation(item.rotation || 0);
+                              setOverlayColor(item.color || '#ffffff');
+                              setOverlayFont(item.font || 'Standard');
+                              setOverlayFontSize(item.fontSize || 28);
+
+                              setIsTextTrackSelected(prev => {
+                                const next = !prev || selectedTextId !== item.id;
+                                if (next) {
+                                  setFocusedTrack('text');
+                                } else {
+                                  setFocusedTrack(null);
+                                }
+                                return next;
+                              });
+                            }}
+                            onPointerDown={(e) => {
                               const target = e.currentTarget;
                               target.setPointerCapture(e.pointerId);
                               const startX = e.clientX;
                               const initialStart = item.startTime;
+                              const initialEnd = item.endTime;
+                              const width = initialEnd - initialStart;
+                              let hasMoved = false;
+
                               const moveHandler = (mE) => {
+                                const dx = Math.abs(mE.clientX - startX);
+                                if (dx > 4) {
+                                  hasMoved = true;
+                                  target.dataset.dragged = 'true';
+                                }
+                                if (!hasMoved) return;
                                 const delta = (mE.clientX - startX) / PIXELS_PER_SECOND;
-                                const newStart = Math.max(0, Math.min(item.endTime - 0.5, initialStart + delta));
+                                const newStart = Math.max(0, Math.min(videoDuration - width, initialStart + delta));
+                                const newEnd = newStart + width;
                                 
+                                // Update this item directly in state
                                 setTextList(prev => prev.map(t => {
                                   if (t.id === item.id) {
-                                    return { ...t, startTime: newStart };
+                                    return { ...t, startTime: newStart, endTime: newEnd };
                                   }
                                   return t;
                                 }));
 
                                 if (isSelected) {
                                   textStartTimeRef.current = newStart;
-                                  setTextStartTime(newStart);
-                                }
-                              };
-                              const upHandler = () => {
-                                target.removeEventListener('pointermove', moveHandler);
-                                target.removeEventListener('pointerup', upHandler);
-                              };
-                              target.addEventListener('pointermove', moveHandler);
-                              target.addEventListener('pointerup', upHandler);
-                            }}
-                          >
-                            {isSelected && isTextTrackSelected && (
-                              <svg className="w-3 h-3 text-white font-black" fill="none" stroke="currentColor" strokeWidth="4.5" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
-                              </svg>
-                            )}
-                          </div>
-
-                          {/* End Handle */}
-                          <div
-                            className={`absolute z-50 cursor-col-resize flex items-center justify-center transition-all duration-150 ${isSelected && isTextTrackSelected
-                                ? '-top-[4px] -bottom-[4px] -right-[4px] w-[18px] bg-[#ffcc00] rounded-r-[8px] opacity-100 pointer-events-auto'
-                                : 'top-0 bottom-0 right-0 w-[18px] bg-transparent opacity-0 hover:opacity-20 hover:bg-[#ffcc00] rounded-r-[8px] pointer-events-auto'
-                              }`}
-                            onPointerDown={(e) => {
-                              e.stopPropagation();
-                              const target = e.currentTarget;
-                              target.setPointerCapture(e.pointerId);
-                              const startX = e.clientX;
-                              const initialEnd = item.endTime;
-                              const moveHandler = (mE) => {
-                                const delta = (mE.clientX - startX) / PIXELS_PER_SECOND;
-                                const newEnd = Math.min(videoDuration, Math.max(item.startTime + 0.5, initialEnd + delta));
-                                
-                                setTextList(prev => prev.map(t => {
-                                  if (t.id === item.id) {
-                                    return { ...t, endTime: newEnd };
-                                  }
-                                  return t;
-                                }));
-
-                                if (isSelected) {
                                   textEndTimeRef.current = newEnd;
+                                  setTextStartTime(newStart);
                                   setTextEndTime(newEnd);
                                 }
                               };
+
                               const upHandler = () => {
-                                target.removeEventListener('pointermove', moveHandler);
-                                target.removeEventListener('pointerup', upHandler);
+                                try {
+                                  if (target.hasPointerCapture(e.pointerId)) {
+                                    target.releasePointerCapture(e.pointerId);
+                                  }
+                                } catch (err) {}
+                                window.removeEventListener('pointermove', moveHandler);
+                                window.removeEventListener('pointerup', upHandler);
                               };
-                              target.addEventListener('pointermove', moveHandler);
-                              target.addEventListener('pointerup', upHandler);
+
+                              window.addEventListener('pointermove', moveHandler);
+                              window.addEventListener('pointerup', upHandler);
                             }}
                           >
-                            {isSelected && isTextTrackSelected && (
-                              <svg className="w-3 h-3 text-white font-black" fill="none" stroke="currentColor" strokeWidth="4.5" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
-                              </svg>
-                            )}
+                            <span className={`text-[10px] font-bold text-white truncate pointer-events-none flex-1 transition-all ${isSelected && isTextTrackSelected ? 'pl-4' : ''}`}>
+                              {item.text}
+                            </span>
+                            <span className={`text-[9px] text-white/50 pointer-events-none ml-1 shrink-0 transition-all ${isSelected && isTextTrackSelected ? 'pr-4' : ''}`}>
+                              {(item.endTime - item.startTime).toFixed(1)}s
+                            </span>
+
+                            {/* Start Handle */}
+                            <div
+                              className={`absolute z-50 cursor-col-resize flex items-center justify-center transition-all duration-150 ${isSelected && isTextTrackSelected
+                                  ? '-top-[4px] -bottom-[4px] -left-[4px] w-[18px] bg-[#ffcc00] rounded-l-[8px] opacity-100 pointer-events-auto'
+                                  : 'top-0 bottom-0 left-0 w-[18px] bg-transparent opacity-0 hover:opacity-20 hover:bg-[#ffcc00] rounded-l-[8px] pointer-events-auto'
+                                }`}
+                              onPointerDown={(e) => {
+                                e.stopPropagation();
+                                const target = e.currentTarget;
+                                target.setPointerCapture(e.pointerId);
+                                const startX = e.clientX;
+                                const initialStart = item.startTime;
+                                const moveHandler = (mE) => {
+                                  const delta = (mE.clientX - startX) / PIXELS_PER_SECOND;
+                                  const newStart = Math.max(0, Math.min(item.endTime - 0.5, initialStart + delta));
+                                  
+                                  setTextList(prev => prev.map(t => {
+                                    if (t.id === item.id) {
+                                      return { ...t, startTime: newStart };
+                                    }
+                                    return t;
+                                  }));
+
+                                  if (isSelected) {
+                                    textStartTimeRef.current = newStart;
+                                    setTextStartTime(newStart);
+                                  }
+                                };
+                                const upHandler = () => {
+                                  target.removeEventListener('pointermove', moveHandler);
+                                  target.removeEventListener('pointerup', upHandler);
+                                };
+                                target.addEventListener('pointermove', moveHandler);
+                                target.addEventListener('pointerup', upHandler);
+                              }}
+                            >
+                              {isSelected && isTextTrackSelected && (
+                                <svg className="w-3 h-3 text-white font-black" fill="none" stroke="currentColor" strokeWidth="4.5" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+                                </svg>
+                              )}
+                            </div>
+
+                            {/* End Handle */}
+                            <div
+                              className={`absolute z-50 cursor-col-resize flex items-center justify-center transition-all duration-150 ${isSelected && isTextTrackSelected
+                                  ? '-top-[4px] -bottom-[4px] -right-[4px] w-[18px] bg-[#ffcc00] rounded-r-[8px] opacity-100 pointer-events-auto'
+                                  : 'top-0 bottom-0 right-0 w-[18px] bg-transparent opacity-0 hover:opacity-20 hover:bg-[#ffcc00] rounded-r-[8px] pointer-events-auto'
+                                }`}
+                              onPointerDown={(e) => {
+                                e.stopPropagation();
+                                const target = e.currentTarget;
+                                target.setPointerCapture(e.pointerId);
+                                const startX = e.clientX;
+                                const initialEnd = item.endTime;
+                                const moveHandler = (mE) => {
+                                  const delta = (mE.clientX - startX) / PIXELS_PER_SECOND;
+                                  const newEnd = Math.min(videoDuration, Math.max(item.startTime + 0.5, initialEnd + delta));
+                                  
+                                  setTextList(prev => prev.map(t => {
+                                    if (t.id === item.id) {
+                                      return { ...t, endTime: newEnd };
+                                    }
+                                    return t;
+                                  }));
+
+                                  if (isSelected) {
+                                    textEndTimeRef.current = newEnd;
+                                    setTextEndTime(newEnd);
+                                  }
+                                };
+                                const upHandler = () => {
+                                  target.removeEventListener('pointermove', moveHandler);
+                                  target.removeEventListener('pointerup', upHandler);
+                                };
+                                target.addEventListener('pointermove', moveHandler);
+                                target.addEventListener('pointerup', upHandler);
+                              }}
+                            >
+                              {isSelected && isTextTrackSelected && (
+                                <svg className="w-3 h-3 text-white font-black" fill="none" stroke="currentColor" strokeWidth="4.5" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+                                </svg>
+                              )}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
 
-                  {/* Add text button - always positioned after the last text clip */}
-                  <button
-                    onClick={() => {
-                      const maxEndTime = textList.reduce((max, t) => Math.max(max, t.endTime), 0);
-                      const start = Math.min(videoDuration, maxEndTime);
-                      const end = Math.min(videoDuration, start + 5);
-                      setOverlayText('');
-                      setTextStartTime(start);
-                      setTextEndTime(end);
-                      textStartTimeRef.current = start;
-                      textEndTimeRef.current = end;
-                      setSelectedTextId(null);
-                      setIsTextTrackSelected(false);
-                      setIsEditingText(true);
-                    }}
-                    className="absolute h-10 flex items-center gap-2 text-white/40 px-3 bg-white/5 rounded-[4px] hover:text-white hover:bg-white/10 transition-all border border-transparent hover:border-white/10 shrink-0 pointer-events-auto whitespace-nowrap"
-                    style={{
-                      left: (textList.reduce((max, t) => Math.max(max, t.endTime), 0) * PIXELS_PER_SECOND) + 12,
-                      top: '4px'
-                    }}
-                  >
-                    <BiPlus size={18} />
-                    <span className="text-[11px] font-medium">Add text</span>
-                  </button>
+                    {/* Add text button - places text starting at current playhead position */}
+                    <button
+                      onClick={() => {
+                        const playheadTime = getCurrentPlayheadTime();
+                        const start = Math.max(0, Math.min(Math.max(0, videoDuration - 0.5), playheadTime));
+                        const end = Math.min(videoDuration, start + 3);
+                        setOverlayText('');
+                        setTextStartTime(start);
+                        setTextEndTime(end);
+                        textStartTimeRef.current = start;
+                        textEndTimeRef.current = end;
+                        setSelectedTextId(null);
+                        setIsTextTrackSelected(false);
+                        setIsEditingText(true);
+                      }}
+                      className="absolute h-9 flex items-center gap-2 text-white/80 px-3 bg-white/10 rounded-[4px] hover:text-white hover:bg-white/20 transition-all border border-white/20 shrink-0 pointer-events-auto whitespace-nowrap shadow-md z-30"
+                      style={{
+                        left: (getCurrentPlayheadTime() * PIXELS_PER_SECOND) + 12,
+                        top: `${totalLanes * 44}px`
+                      }}
+                    >
+                      <BiPlus size={18} />
+                      <span className="text-[11px] font-bold">Add text</span>
+                    </button>
+                  </div>
                 </div>
-              </div>
-            )}
+              );
+            })()}
           </div>
         </div>
 
@@ -6999,8 +7347,6 @@ const CreatePage = () => {
                 { id: 'sound', label: 'Sound', icon: <BiMusic size={22} /> },
                 { id: 'text', label: 'Text', icon: <IoTextOutline size={22} /> },
                 { id: 'effects', label: 'Effects', icon: <IoSparklesOutline size={22} /> },
-                { id: 'magic', label: 'Magic', icon: <IoColorWandOutline size={22} /> },
-                { id: 'captions', label: 'Captions', icon: <BiCaptions size={22} /> },
                 { id: 'audio', label: 'Voice', icon: <BiMicrophone size={22} /> },
                 { id: 'stickers', label: 'Stickers', icon: <BiSmile size={22} /> },
                 { id: 'filters', label: 'Filters', icon: <IoOptionsOutline size={22} /> },
@@ -7165,111 +7511,183 @@ const CreatePage = () => {
                 )
               })}
             </div>
-          </div>
-        )}
-      </div>
-      {/* Text Overlay Display with Drag & Rotate */}
-      {overlayText && (
-        <div
-          className="absolute inset-0 z-30 overflow-hidden pointer-events-none"
-        >
-          <div
-            className="absolute pointer-events-auto cursor-move select-none touch-none"
-            style={{
-              left: `calc(50% + ${textPos.x}px)`,
-              top: `calc(50% + ${textPos.y}px)`,
-              transform: `translate(-50%, -50%) rotate(${textRotation}deg)`,
-              padding: '20px' // Increased hit area
-            }}
-            onPointerDown={(e) => {
-              const target = e.currentTarget;
-              target.setPointerCapture(e.pointerId);
-              const startX = e.clientX;
-              const startY = e.clientY;
-              const initialX = textPos.x;
-              const initialY = textPos.y;
-              let hasMoved = false;
-              setIsDraggingAny(true);
 
-              const moveHandler = (moveEvent) => {
-                const dx = moveEvent.clientX - startX;
-                const dy = moveEvent.clientY - startY;
-                if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
-                  hasMoved = true;
-                }
-                setTextPos({ x: initialX + dx, y: initialY + dy });
+            {/* Single Text Overlay Display inside video container (only if no textList items exist) */}
+            {overlayText && textList.length === 0 && !isEditingText && (
+                <div className="absolute inset-0 z-30 overflow-hidden pointer-events-none flex items-center justify-center">
+                  <div
+                    className={`absolute pointer-events-auto cursor-move select-none touch-none transition-all border-2 w-max max-w-[90%] ${
+                        isDraggingAny ? 'border-white/90 rounded-lg shadow-2xl' : 'border-white/50 rounded-lg hover:border-white'
+                      }`}
+                    style={{
+                      left: '50%',
+                      top: '50%',
+                      transform: `translate(calc(-50% + ${textPos.x}px), calc(-50% + ${textPos.y}px)) rotate(${textRotation}deg)`,
+                      padding: '8px'
+                    }}
+                    onPointerDown={(e) => {
+                      const target = e.currentTarget;
+                      target.setPointerCapture(e.pointerId);
+                      const startX = e.clientX;
+                      const startY = e.clientY;
+                      const initialX = textPos.x;
+                      const initialY = textPos.y;
+                      let hasMoved = false;
+                      setIsDraggingAny(true);
 
-                const screenHeight = window.innerHeight;
-                if (moveEvent.clientY > screenHeight * 0.7) {
-                  setIsOverDeleteZone(true);
-                } else {
-                  setIsOverDeleteZone(false);
-                }
-              };
+                      const moveHandler = (moveEvent) => {
+                        const dx = moveEvent.clientX - startX;
+                        const dy = moveEvent.clientY - startY;
+                        if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
+                          hasMoved = true;
+                        }
+                        let clampedX = Math.max(-140, Math.min(140, initialX + dx));
+                        let clampedY = Math.max(-260, Math.min(260, initialY + dy));
+                        if (Math.abs(clampedX) < 14) clampedX = 0;
+                        if (Math.abs(clampedY) < 14) clampedY = 0;
+                        setTextPos({ x: clampedX, y: clampedY });
 
-              const upHandler = (upEvent) => {
-                const screenHeight = window.innerHeight;
-                if (upEvent.clientY > screenHeight * 0.7) {
-                  setOverlayText('');
-                  showToast('Text deleted');
-                } else if (!hasMoved) {
-                  setIsEditingText(true);
-                }
-                setIsDraggingAny(false);
-                setIsOverDeleteZone(false);
-                target.removeEventListener('pointermove', moveHandler);
-                target.removeEventListener('pointerup', upHandler);
-              };
+                        const screenHeight = window.innerHeight;
+                        if (moveEvent.clientY > screenHeight * 0.7) {
+                          setIsOverDeleteZone(true);
+                        } else {
+                          setIsOverDeleteZone(false);
+                        }
+                      };
 
-              target.addEventListener('pointermove', moveHandler);
-              target.addEventListener('pointerup', upHandler);
-            }}
-            onTouchMove={(e) => {
-              if (e.touches.length === 2) {
-                const touch1 = e.touches[0];
-                const touch2 = e.touches[1];
+                      const upHandler = (upEvent) => {
+                        const screenHeight = window.innerHeight;
+                        if (upEvent.clientY > screenHeight * 0.7) {
+                          setOverlayText('');
+                          setTextPos({ x: 0, y: 0 });
+                          showToast('Text deleted');
+                        } else if (!hasMoved) {
+                          setIsEditingText(true);
+                        }
+                        setIsDraggingAny(false);
+                        setIsOverDeleteZone(false);
+                        target.removeEventListener('pointermove', moveHandler);
+                        target.removeEventListener('pointerup', upHandler);
+                      };
 
-                // Rotation logic
-                const angle = Math.atan2(
-                  touch2.clientY - touch1.clientY,
-                  touch2.clientX - touch1.clientX
-                ) * (180 / Math.PI);
+                      target.addEventListener('pointermove', moveHandler);
+                      target.addEventListener('pointerup', upHandler);
+                    }}
+                    onTouchStart={(e) => {
+                      if (e.touches.length === 2) {
+                        const touch1 = e.touches[0];
+                        const touch2 = e.touches[1];
+                        e.currentTarget.lastDist = Math.hypot(touch2.clientX - touch1.clientX, touch2.clientY - touch1.clientY);
+                        e.currentTarget.lastAngle = Math.atan2(touch2.clientY - touch1.clientY, touch2.clientX - touch1.clientX) * (180 / Math.PI);
+                      }
+                    }}
+                    onTouchMove={(e) => {
+                      if (e.touches.length === 2) {
+                        e.stopPropagation();
+                        const touch1 = e.touches[0];
+                        const touch2 = e.touches[1];
+                        const dist = Math.hypot(touch2.clientX - touch1.clientX, touch2.clientY - touch1.clientY);
+                        const angle = Math.atan2(touch2.clientY - touch1.clientY, touch2.clientX - touch1.clientX) * (180 / Math.PI);
 
-                if (window.lastAngle !== undefined) {
-                  const deltaAngle = angle - window.lastAngle;
-                  setTextRotation((prev) => prev + deltaAngle);
-                }
-                window.lastAngle = angle;
-              }
-            }}
-            onTouchEnd={() => {
-              window.lastAngle = undefined;
-            }}
-          >
-            <p
-              className={`whitespace-nowrap px-4 text-center font-black drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)] transition-all duration-200 ${isOverDeleteZone && isDraggingAny ? 'scale-50 opacity-50 blur-sm' : 'active:scale-105'
-                }`}
-              style={{
-                fontSize: `${overlayFontSize}px`,
-                fontFamily: FONT_OPTIONS.find(f => f.name === overlayFont)?.family || 'inherit',
-                whiteSpace: 'pre',
-                ...(overlayColor.includes('gradient')
-                  ? {
-                      background: overlayColor,
-                      WebkitBackgroundClip: 'text',
-                      WebkitTextFillColor: 'transparent',
-                    }
-                  : {
-                      color: overlayColor,
-                    }),
-                textShadow: overlayFont === 'Outline' ? `-1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000` : (overlayFont === 'Glowing' ? `0 0 20px ${overlayColor}` : 'none')
-              }}
-            >
-              {overlayText}
-            </p>
-          </div>
+                        const el = e.currentTarget;
+                        if (el.lastDist && el.lastDist > 0) {
+                          const scaleFactor = dist / el.lastDist;
+                          setOverlayFontSize((prev) => Math.max(12, Math.min(180, Math.round(prev * scaleFactor))));
+                        }
+                        if (el.lastAngle !== undefined) {
+                          const deltaAngle = angle - el.lastAngle;
+                          setTextRotation((prev) => prev + deltaAngle);
+                        }
+                        el.lastDist = dist;
+                        el.lastAngle = angle;
+                      }
+                    }}
+                    onTouchEnd={(e) => {
+                      if (e.currentTarget) {
+                        e.currentTarget.lastDist = undefined;
+                        e.currentTarget.lastAngle = undefined;
+                      }
+                    }}
+                    onWheel={(e) => {
+                      const delta = e.deltaY < 0 ? 3 : -3;
+                      setOverlayFontSize((prev) => Math.max(12, Math.min(180, prev + delta)));
+                    }}
+                  >
+                    <p
+                      className={`px-3 py-1 text-center font-black drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)] transition-all duration-200 whitespace-pre-wrap break-words max-w-full ${
+                        isOverDeleteZone && isDraggingAny ? 'scale-50 opacity-50 blur-sm' : 'active:scale-105'
+                      }`}
+                      style={{
+                        fontSize: `${overlayFontSize}px`,
+                        fontFamily: FONT_OPTIONS.find(f => f.name === overlayFont)?.family || 'inherit',
+                        ...(overlayColor.includes('gradient')
+                          ? {
+                              background: overlayColor,
+                              WebkitBackgroundClip: 'text',
+                              WebkitTextFillColor: 'transparent',
+                            }
+                          : {
+                              color: overlayColor,
+                            }),
+                        textShadow: overlayFont === 'Outline' ? `-1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000` : (overlayFont === 'Glowing' ? `0 0 20px ${overlayColor}` : 'none')
+                      }}
+                    >
+                      {overlayText}
+                    </p>
+
+                    {/* Top-Right Delete Button (X) */}
+                    <button
+                      type="button"
+                      onPointerDown={(e) => {
+                        e.stopPropagation();
+                        setOverlayText('');
+                        showToast('Text deleted');
+                      }}
+                      className="absolute -top-3 -right-3 w-6 h-6 rounded-full bg-red-500 text-white flex items-center justify-center shadow-lg active:scale-90 transition-transform z-40 border-2 border-white pointer-events-auto"
+                      title="Delete text"
+                    >
+                      <BiX size={16} />
+                    </button>
+
+                    {/* Bottom-Right Corner Resize Handle */}
+                    <div
+                      onPointerDown={(e) => {
+                        e.stopPropagation();
+                        const handle = e.currentTarget;
+                        handle.setPointerCapture(e.pointerId);
+                        const startX = e.clientX;
+                        const startY = e.clientY;
+                        const startSize = overlayFontSize;
+
+                        const moveHandler = (me) => {
+                          const dx = me.clientX - startX;
+                          const dy = me.clientY - startY;
+                          const distDelta = (dx + dy) * 0.5;
+                          const newSize = Math.max(12, Math.min(180, Math.round(startSize + distDelta)));
+                          setOverlayFontSize(newSize);
+                        };
+
+                        const upHandler = () => {
+                          handle.removeEventListener('pointermove', moveHandler);
+                          handle.removeEventListener('pointerup', upHandler);
+                        };
+
+                        handle.addEventListener('pointermove', moveHandler);
+                        handle.addEventListener('pointerup', upHandler);
+                      }}
+                      className="absolute -bottom-3 -right-3 w-6 h-6 rounded-full bg-white border-2 border-[#00f2ea] shadow-lg cursor-se-resize flex items-center justify-center pointer-events-auto z-40 active:scale-125 transition-transform"
+                      title="Pinch or drag to resize text"
+                    >
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#000" strokeWidth="2.8">
+                        <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />
+                      </svg>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
-      )}
 
       {/* Multiple Text Overlays Display in Preview */}
       {textList.map((overlay) => (
@@ -7282,8 +7700,8 @@ const CreatePage = () => {
           <div
             className="absolute select-none pointer-events-none"
             style={{
-              left: `calc(50% + ${overlay.x}px)`,
-              top: `calc(50% + ${overlay.y}px)`,
+              left: `calc(50% + ${(overlay.normX !== undefined ? overlay.normX * 50 : (overlay.x / 127.5) * 50)}%)`,
+              top: `calc(50% + ${(overlay.normY !== undefined ? overlay.normY * 50 : (overlay.y / 226.6) * 50)}%)`,
               transform: `translate(-50%, -50%) rotate(${overlay.rotation || 0}deg)`,
               padding: '10px'
             }}
@@ -9583,45 +10001,113 @@ const CreatePage = () => {
                 <img src={CREATE_CANVAS_IMAGE || selectedMedia?.image} className="w-full h-full object-cover opacity-70" alt="" />
               )}
 
-              {/* Live Text Overlay with White Bounding Box (Matching Screenshots 2, 3, 4, 5) */}
-              <div
-                className={`absolute max-w-[85%] border-2 border-white rounded-lg px-4 py-2 flex items-center justify-center transition-all shadow-2xl ${
-                  overlayBgMode === 'solid'
-                    ? 'bg-white text-black'
-                    : overlayBgMode === 'translucent'
-                    ? 'bg-black/70 text-white'
-                    : overlayBgMode === 'outline'
-                    ? 'bg-transparent text-white'
-                    : ''
-                }`}
-                style={{
-                  textAlign: overlayAlign,
-                }}
-              >
-                <span
-                  className="text-[22px] font-bold tracking-wide break-words"
+              {/* Live Text Overlay with White Bounding Box & Interactive Touch Pinch / Stretch Handle */}
+              <div className="absolute inset-0 z-30 flex items-center justify-center pointer-events-none p-4">
+                <div
+                  onTouchStart={(e) => {
+                    if (e.touches.length === 2) {
+                      const t1 = e.touches[0];
+                      const t2 = e.touches[1];
+                      e.currentTarget.lastDist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+                    }
+                  }}
+                  onTouchMove={(e) => {
+                    if (e.touches.length === 2) {
+                      e.stopPropagation();
+                      const t1 = e.touches[0];
+                      const t2 = e.touches[1];
+                      const dist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+                      const el = e.currentTarget;
+                      if (el.lastDist && el.lastDist > 0) {
+                        const factor = dist / el.lastDist;
+                        setOverlayFontSize(prev => Math.max(12, Math.min(180, Math.round(prev * factor))));
+                      }
+                      el.lastDist = dist;
+                    }
+                  }}
+                  onTouchEnd={(e) => {
+                    if (e.currentTarget) e.currentTarget.lastDist = undefined;
+                  }}
+                  onWheel={(e) => {
+                    const delta = e.deltaY < 0 ? 3 : -3;
+                    setOverlayFontSize(prev => Math.max(12, Math.min(180, prev + delta)));
+                  }}
+                  className={`pointer-events-auto relative w-max max-w-[90%] border-2 border-white rounded-lg px-4 py-2 flex items-center justify-center transition-all shadow-2xl touch-none select-none ${
+                    overlayBgMode === 'solid'
+                      ? 'bg-white text-black'
+                      : overlayBgMode === 'translucent'
+                      ? 'bg-black/70 text-white'
+                      : overlayBgMode === 'outline'
+                      ? 'bg-transparent text-white'
+                      : ''
+                  }`}
                   style={{
-                    fontFamily: FONT_OPTIONS.find((f) => f.name === overlayFont)?.family || 'sans-serif',
-                    ...(overlayColor.includes('gradient') && overlayBgMode !== 'solid'
-                      ? {
-                          background: overlayColor,
-                          WebkitBackgroundClip: 'text',
-                          WebkitTextFillColor: 'transparent',
-                        }
-                      : {
-                          color: overlayBgMode === 'solid' ? '#000000' : overlayColor,
-                        }),
                     textAlign: overlayAlign,
-                    textShadow:
-                      overlayBgMode === 'outline'
-                        ? '-1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000'
-                        : selectedArtId
-                        ? '0 0 12px currentColor'
-                        : '0 2px 8px rgba(0,0,0,0.8)',
+                    left: `calc(50% + ${(textPos.normX !== undefined ? textPos.normX * 50 : (textPos.x / 127.5) * 50)}%)`,
+                    top: `calc(50% + ${(textPos.normY !== undefined ? textPos.normY * 50 : (textPos.y / 226.6) * 50)}%)`,
+                    transform: `translate(-50%, -50%) rotate(${textRotation}deg)`,
                   }}
                 >
-                  {overlayText || 'Enter text'}
-                </span>
+                  <span
+                    className="font-bold tracking-wide whitespace-pre-wrap break-words max-w-full select-none text-center block w-full"
+                    style={{
+                      fontSize: `${overlayFontSize}px`,
+                      fontFamily: FONT_OPTIONS.find((f) => f.name === overlayFont)?.family || 'sans-serif',
+                      ...(overlayColor.includes('gradient') && overlayBgMode !== 'solid'
+                        ? {
+                            background: overlayColor,
+                            WebkitBackgroundClip: 'text',
+                            WebkitTextFillColor: 'transparent',
+                          }
+                        : {
+                            color: overlayBgMode === 'solid' ? '#000000' : overlayColor,
+                          }),
+                      textAlign: overlayAlign,
+                      textShadow:
+                        overlayBgMode === 'outline'
+                          ? '-1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000'
+                          : selectedArtId
+                          ? '0 0 12px currentColor'
+                          : '0 2px 8px rgba(0,0,0,0.8)',
+                    }}
+                  >
+                    {overlayText || 'Enter text'}
+                  </span>
+
+                  {/* Corner Resize Handle to Stretch or Shrink Text */}
+                  <div
+                    onPointerDown={(e) => {
+                      e.stopPropagation();
+                      const handle = e.currentTarget;
+                      handle.setPointerCapture(e.pointerId);
+                      const startX = e.clientX;
+                      const startY = e.clientY;
+                      const startSize = overlayFontSize;
+
+                      const moveHandler = (me) => {
+                        const dx = me.clientX - startX;
+                        const dy = me.clientY - startY;
+                        const distDelta = (dx + dy) * 0.5;
+                        const newSize = Math.max(12, Math.min(180, Math.round(startSize + distDelta)));
+                        setOverlayFontSize(newSize);
+                      };
+
+                      const upHandler = () => {
+                        handle.removeEventListener('pointermove', moveHandler);
+                        handle.removeEventListener('pointerup', upHandler);
+                      };
+
+                      handle.addEventListener('pointermove', moveHandler);
+                      handle.addEventListener('pointerup', upHandler);
+                    }}
+                    className="absolute -bottom-3 -right-3 w-6 h-6 rounded-full bg-white border-2 border-[#00f2ea] shadow-lg cursor-se-resize flex items-center justify-center pointer-events-auto z-40 active:scale-125 transition-transform"
+                    title="Pinch or drag to resize text"
+                  >
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#000" strokeWidth="2.8">
+                      <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />
+                    </svg>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -9652,8 +10138,8 @@ const CreatePage = () => {
               </button>
             </div>
 
-            {/* 2. TOOLBAR TABS (5 ICON BUTTONS) */}
-            <div className="flex items-center justify-between px-2 mb-4">
+            {/* 2. TOOLBAR TABS (4 ICON BUTTONS) */}
+            <div className="flex items-center justify-around px-2 mb-4">
               {/* Tab 1: Font Family (A) */}
               <button
                 type="button"
@@ -9712,18 +10198,6 @@ const CreatePage = () => {
                 ) : (
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="6" y1="12" x2="18" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/></svg>
                 )}
-              </button>
-
-              {/* Tab 5: Text Art Styles (Aa / AAll) */}
-              <button
-                type="button"
-                onClick={() => setTextSubTab('art')}
-                className={`w-11 h-11 rounded-[12px] flex items-center justify-center transition-all ${
-                  textSubTab === 'art' ? 'bg-[#3a3a3c] text-white shadow-md' : 'text-white/60 hover:text-white'
-                }`}
-                title="Text Art Presets"
-              >
-                <div className="px-1 py-0.5 rounded border border-current font-black text-[10px] tracking-tighter">A\All</div>
               </button>
             </div>
 
@@ -9963,8 +10437,8 @@ const CreatePage = () => {
             ].map((adj) => (
               <div key={adj.id} className="flex flex-col gap-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-[13px] font-bold text-black">{adj.label}</span>
-                  <span className="text-[12px] font-medium text-black/40">{imageAdjustments[adj.id]}{adj.unit}</span>
+                  <span className="text-[13px] font-bold text-white">{adj.label}</span>
+                  <span className="text-[12px] font-medium text-white/60">{imageAdjustments[adj.id]}{adj.unit}</span>
                 </div>
                 <input
                   type="range"
@@ -9972,7 +10446,7 @@ const CreatePage = () => {
                   max={adj.max}
                   value={imageAdjustments[adj.id]}
                   onChange={(e) => setImageAdjustments(prev => ({ ...prev, [adj.id]: parseInt(e.target.value) }))}
-                  className="w-full accent-[#fe2c55] h-1.5 bg-black/5 rounded-lg appearance-none cursor-pointer"
+                  className="w-full accent-[#fe2c55] h-1.5 bg-white/20 rounded-lg appearance-none cursor-pointer"
                 />
               </div>
             ))}
@@ -9982,7 +10456,7 @@ const CreatePage = () => {
                 brightness: 100, contrast: 100, saturate: 100, hueRotate: 0,
                 invert: 0, grayscale: 0, sepia: 0, blur: 0, opacity: 100
               })}
-              className="mt-4 w-full py-3 rounded-xl bg-black/5 text-[13px] font-bold text-black active:scale-95 transition-transform"
+              className="mt-4 w-full py-3 rounded-xl bg-white/10 text-[13px] font-bold text-white hover:bg-white/20 border border-white/10 active:scale-95 transition-all"
             >
               Reset Adjustments
             </button>
