@@ -3,8 +3,10 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useAppContent } from '../../../../hooks/useAppContent';
 import { useSocket } from '../../../../context/SocketContext';
 import { useAuth } from '../../../../context/AuthContext';
+import { useTheme } from '../../../../context/ThemeContext';
 import messageService from '../../../../services/messageService';
 import userService from '../../../../services/userService';
+import followService from '../../../../services/followService';
 import ReportUserSheet from '../../components/modals/ReportUserSheet';
 
 const formatBubbleTimestamp = (isoString) => {
@@ -420,6 +422,7 @@ const ChatPage = () => {
   const { config } = useAppContent();
   const socket = useSocket();
   const { user: currentUser, updateUser } = useAuth();
+  const { isDarkMode } = useTheme();
   
   const [messages, setMessages] = useState([]);
   const [targetUser, setTargetUser] = useState(null);
@@ -443,6 +446,54 @@ const ChatPage = () => {
   const [showReportSheet, setShowReportSheet] = useState(false);
   const [isBlockedByThem, setIsBlockedByThem] = useState(false);
   const [isTargetOnline, setIsTargetOnline] = useState(false);
+  const [followingState, setFollowingState] = useState('not_following');
+
+  useEffect(() => {
+    if (targetUser) {
+      if (targetUser.isFollowing) {
+        setFollowingState('following');
+      } else if (targetUser.followStatus === 'pending') {
+        setFollowingState('pending');
+      } else {
+        setFollowingState('not_following');
+      }
+    }
+  }, [targetUser]);
+
+  const followingCount = targetUser?.followingCount ?? targetUser?.following?.length ?? targetUser?.stats?.followingCount ?? 0;
+  const followersCount = targetUser?.followersCount ?? targetUser?.followers?.length ?? targetUser?.stats?.followersCount ?? 0;
+
+  const handleFollowToggle = async () => {
+    if (!currentUser || !targetUser?._id) return;
+
+    try {
+      if (followingState === 'following' || followingState === 'pending') {
+        const res = await followService.unfollowUser(targetUser._id);
+        if (res.success) {
+          setFollowingState('not_following');
+          setTargetUser(prev => prev ? { 
+            ...prev, 
+            isFollowing: false,
+            followersCount: Math.max(0, (followersCount - 1))
+          } : prev);
+        }
+      } else {
+        const res = await followService.followUser(targetUser._id);
+        if (res.success) {
+          const newStatus = res.status || 'accepted';
+          const isNowFollowing = newStatus === 'accepted';
+          setFollowingState(isNowFollowing ? 'following' : 'pending');
+          setTargetUser(prev => prev ? { 
+            ...prev, 
+            isFollowing: isNowFollowing,
+            followersCount: isNowFollowing ? (followersCount + 1) : followersCount
+          } : prev);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to toggle follow in chat:', err);
+    }
+  };
 
   const theme = THEMES[activeThemeKey] || THEMES.default;
 
@@ -756,40 +807,52 @@ const ChatPage = () => {
       {/* Context Menu Overlay */}
       {menuConfig && (
         <div 
-          className="fixed inset-0 z-[100] bg-black/5" 
+          className="fixed inset-0 z-[100] bg-black/10" 
           onClick={() => setMenuConfig(null)}
           onContextMenu={(e) => { e.preventDefault(); setMenuConfig(null); }}
         >
           <div 
-            className="absolute bg-[#242424] rounded-2xl shadow-[0_8px_30px_rgba(0,0,0,0.4)] border border-white/5 py-2 min-w-[160px] animate-scale-in text-white"
+            className={`absolute rounded-2xl shadow-[0_8px_30px_rgba(0,0,0,0.2)] border py-2 min-w-[160px] animate-scale-in transition-all ${
+              isDarkMode 
+                ? 'bg-[#1e202f] border-white/10 text-white shadow-[0_8px_30px_rgba(0,0,0,0.5)]' 
+                : 'bg-white border-gray-200 text-gray-900'
+            }`}
             style={{ 
               top: Math.min(menuConfig.y, window.innerHeight - 200), 
               left: Math.min(menuConfig.x, window.innerWidth - 180) 
             }}
           >
             <button 
-              className="w-full px-4 py-3 text-left text-[14px] font-semibold active:bg-white/10 flex items-center gap-3 border-b border-white/5"
+              className={`w-full px-4 py-3 text-left text-[14px] font-semibold flex items-center gap-3 border-b ${
+                isDarkMode ? 'border-white/5 hover:bg-white/5 text-white' : 'border-gray-100 hover:bg-gray-50 text-gray-900'
+              }`}
               onClick={() => { setReplyingTo(menuConfig.message); setMenuConfig(null); }}
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="M9 14l-4-4 4-4"/><path d="M5 10h11a4 4 0 1 1 0 8h-1"/></svg>
               Reply
             </button>
             <button 
-              className="w-full px-4 py-3 text-left text-[14px] font-semibold active:bg-white/10 flex items-center gap-3 border-b border-white/5"
+              className={`w-full px-4 py-3 text-left text-[14px] font-semibold flex items-center gap-3 border-b ${
+                isDarkMode ? 'border-white/5 hover:bg-white/5 text-white' : 'border-gray-100 hover:bg-gray-50 text-gray-900'
+              }`}
               onClick={() => handleCopy(menuConfig.message)}
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
               Copy
             </button>
             <button 
-              className="w-full px-4 py-3 text-left text-[14px] font-semibold active:bg-white/10 flex items-center gap-3 border-b border-white/5"
+              className={`w-full px-4 py-3 text-left text-[14px] font-semibold flex items-center gap-3 border-b ${
+                isDarkMode ? 'border-white/5 hover:bg-white/5 text-white' : 'border-gray-100 hover:bg-gray-50 text-gray-900'
+              }`}
               onClick={() => handlePin(menuConfig.message)}
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="M16 12V4h1V2H7v2h1v8l-2 3v2h5v7l1 1 1-1v-7h5v-2l-2-3z"/></svg>
               {menuConfig.message.isPinned ? 'Unpin' : 'Pin'}
             </button>
             <button 
-              className="w-full px-4 py-3 text-left text-[14px] font-semibold text-[#FE2C55] active:bg-[#FE2C55]/10 flex items-center gap-3"
+              className={`w-full px-4 py-3 text-left text-[14px] font-semibold text-[#FE2C55] flex items-center gap-3 ${
+                isDarkMode ? 'hover:bg-red-500/10' : 'hover:bg-red-50'
+              }`}
               onClick={() => handleDelete(menuConfig.message)}
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M10 11v6M14 11v6"/></svg>
@@ -802,53 +865,30 @@ const ChatPage = () => {
       {/* Header */}
       <div className={`px-4 py-3 border-b sticky top-0 z-50 transition-colors duration-300 ${theme.headerBg} ${theme.headerText}`}>
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <button onClick={handleBack} className={`active:opacity-60 ${theme.headerText}`}>
-              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+          <div className="flex items-center gap-2.5">
+            <button onClick={handleBack} className={`p-1 active:opacity-60 ${theme.headerText}`}>
+              <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
                 <path d="M15 18l-6-6 6-6" />
               </svg>
             </button>
             <div 
-              className={`flex items-center gap-3 ${isBlockedByThem ? 'cursor-default' : 'cursor-pointer'}`}
+              className={`flex items-center gap-2.5 ${isBlockedByThem ? 'cursor-default' : 'cursor-pointer'}`}
               onClick={() => !isBlockedByThem && navigate(`/user/${username}`)}
             >
-              <div className="relative shrink-0">
-                <div className="w-10 h-10 rounded-full overflow-hidden border border-gray-100">
-                  <img
-                    src={displayAvatar}
-                    alt={displayUsername}
-                    className="w-full h-full object-cover"
-                  />
-                </div>
-                {!isBlockedByThem && (
-                  <span
-                    className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-white dark:border-[#161616] transition-colors duration-300 z-10 ${
-                      isTargetOnline
-                        ? 'bg-[#00E676] shadow-[0_0_6px_#00E676]'
-                        : 'bg-gray-400 dark:bg-gray-500'
-                    }`}
-                    title={isTargetOnline ? 'Online' : 'Offline'}
-                  />
-                )}
+              <div className="w-9 h-9 rounded-full overflow-hidden border border-gray-100 shrink-0">
+                <img
+                  src={displayAvatar}
+                  alt={displayUsername}
+                  className="w-full h-full object-cover"
+                />
               </div>
-              <div className="flex flex-col">
-                <p className={`text-[15px] font-bold leading-tight ${theme.headerText}`}>
-                  {displayName}
-                </p>
-                <p className="text-[12px] opacity-60 font-medium">
-                  {isTyping && !isBlockedByThem ? (
-                    <span className="text-[#FE2C55]">Typing...</span>
-                  ) : isTargetOnline && !isBlockedByThem ? (
-                    <span className="text-[#00E676] font-semibold">Active now</span>
-                  ) : (
-                    `@${displayUsername}`
-                  )}
-                </p>
-              </div>
+              <p className={`text-[16px] font-bold leading-tight truncate max-w-[180px] sm:max-w-[260px] ${theme.headerText}`}>
+                {displayUsername}
+              </p>
             </div>
           </div>
           
-          {/* Header Options Dots Menu */}
+          {/* Header Options Dots Menu (Horizontal 3 dots) */}
           <div className="relative">
             <button 
               onClick={() => setShowHeaderMenu(prev => !prev)} 
@@ -856,10 +896,10 @@ const ChatPage = () => {
                 theme === THEMES.midnight ? 'hover:bg-white/10 text-white' : 'hover:bg-gray-100 text-black'
               }`}
             >
-              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 24 24">
-                <circle cx="12" cy="5" r="2" />
+              <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" fill="currentColor" viewBox="0 0 24 24">
+                <circle cx="5" cy="12" r="2" />
                 <circle cx="12" cy="12" r="2" />
-                <circle cx="12" cy="19" r="2" />
+                <circle cx="19" cy="12" r="2" />
               </svg>
             </button>
             
@@ -868,18 +908,18 @@ const ChatPage = () => {
               <>
                 <div className="fixed inset-0 z-[80]" onClick={() => setShowHeaderMenu(false)} />
                 <div 
-                  className={`absolute right-0 mt-2 z-[90] rounded-2xl shadow-[0_8px_30px_rgba(0,0,0,0.4)] border py-1.5 min-w-[190px] animate-scale-in transition-all ${
-                    theme === THEMES.midnight 
-                      ? 'bg-[#0E1017]/95 border-white/5 backdrop-blur-md text-white' 
-                      : 'bg-[#242424]/95 border-white/5 backdrop-blur-md text-white'
+                  className={`absolute right-0 mt-2 z-[90] rounded-2xl shadow-[0_10px_30px_rgba(0,0,0,0.15)] border py-1.5 min-w-[190px] animate-scale-in transition-all ${
+                    isDarkMode 
+                      ? 'bg-[#1e202f] border-white/10 text-white shadow-[0_10px_30px_rgba(0,0,0,0.5)]' 
+                      : 'bg-white border-gray-200 text-gray-900'
                   }`}
                 >
                   {!isBlockedByThem && (
                     <button 
-                      className={`w-full px-4 py-3 text-left text-[14px] font-semibold active:bg-opacity-50 flex items-center gap-3 border-b ${
-                        theme === THEMES.midnight 
-                          ? 'active:bg-white/5 border-white/5 hover:bg-white/5' 
-                          : 'active:bg-white/5 border-white/5 hover:bg-white/5'
+                      className={`w-full px-4 py-3 text-left text-[14px] font-semibold flex items-center gap-3 border-b transition-colors ${
+                        isDarkMode 
+                          ? 'border-white/5 hover:bg-white/5 text-white active:bg-white/10' 
+                          : 'border-gray-100 hover:bg-gray-50 text-gray-900 active:bg-gray-100'
                       }`}
                       onClick={() => {
                         navigate(`/user/${username}`);
@@ -891,10 +931,10 @@ const ChatPage = () => {
                     </button>
                   )}
                   <button 
-                    className={`w-full px-4 py-3 text-left text-[14px] font-semibold active:bg-opacity-50 flex items-center gap-3 border-b ${
-                      theme === THEMES.midnight 
-                        ? 'active:bg-white/5 border-white/5 hover:bg-white/5' 
-                        : 'active:bg-gray-50 border-gray-50 hover:bg-gray-50'
+                    className={`w-full px-4 py-3 text-left text-[14px] font-semibold flex items-center gap-3 border-b transition-colors ${
+                      isDarkMode 
+                        ? 'border-white/5 hover:bg-white/5 text-white active:bg-white/10' 
+                        : 'border-gray-100 hover:bg-gray-50 text-gray-900 active:bg-gray-100'
                     }`}
                     onClick={() => {
                       setIsSearching(true);
@@ -905,10 +945,10 @@ const ChatPage = () => {
                     Search Chat
                   </button>
                   <button 
-                    className={`w-full px-4 py-3 text-left text-[14px] font-semibold active:bg-opacity-50 flex items-center gap-3 border-b ${
-                      theme === THEMES.midnight 
-                        ? 'active:bg-white/5 border-white/5 hover:bg-white/5' 
-                        : 'active:bg-gray-50 border-gray-50 hover:bg-gray-50'
+                    className={`w-full px-4 py-3 text-left text-[14px] font-semibold flex items-center gap-3 border-b transition-colors ${
+                      isDarkMode 
+                        ? 'border-white/5 hover:bg-white/5 text-white active:bg-white/10' 
+                        : 'border-gray-100 hover:bg-gray-50 text-gray-900 active:bg-gray-100'
                     }`}
                     onClick={() => {
                       setShowThemePicker(true);
@@ -919,10 +959,10 @@ const ChatPage = () => {
                     Change Theme
                   </button>
                   <button 
-                    className={`w-full px-4 py-3 text-left text-[14px] font-semibold active:bg-opacity-50 flex items-center gap-3 border-b ${
-                      theme === THEMES.midnight 
-                        ? 'active:bg-white/5 border-white/5 hover:bg-white/5' 
-                        : 'active:bg-gray-50 border-gray-50 hover:bg-gray-50'
+                    className={`w-full px-4 py-3 text-left text-[14px] font-semibold flex items-center gap-3 border-b transition-colors ${
+                      isDarkMode 
+                        ? 'border-white/5 hover:bg-white/5 text-white active:bg-white/10' 
+                        : 'border-gray-100 hover:bg-gray-50 text-gray-900 active:bg-gray-100'
                     }`}
                     onClick={() => {
                       if (isBlocked) {
@@ -937,10 +977,10 @@ const ChatPage = () => {
                     {isBlocked ? 'Unblock' : 'Block'}
                   </button>
                   <button 
-                    className={`w-full px-4 py-3 text-left text-[14px] font-semibold text-[#FE2C55] active:bg-opacity-50 flex items-center gap-3 ${
-                      theme === THEMES.midnight 
-                        ? 'active:bg-red-500/10 hover:bg-red-500/5' 
-                        : 'active:bg-red-50 hover:bg-red-50/50'
+                    className={`w-full px-4 py-3 text-left text-[14px] font-semibold text-[#FE2C55] flex items-center gap-3 transition-colors ${
+                      isDarkMode 
+                        ? 'hover:bg-red-500/10 active:bg-red-500/20' 
+                        : 'hover:bg-red-50 active:bg-red-100'
                     }`}
                     onClick={() => {
                       setShowReportSheet(true);
@@ -1065,14 +1105,61 @@ const ChatPage = () => {
           </div>
         ) : (
           <>
+            {/* Top Profile Card (Matching TikTok Chat UI Screenshot) */}
+            {targetUser && !isBlockedByThem && (
+              <div className="flex flex-col items-center justify-center pt-6 pb-6 px-4 text-center select-none animate-fade-in">
+                {/* Large Avatar */}
+                <div 
+                  className="w-24 h-24 sm:w-28 sm:h-28 rounded-full overflow-hidden mb-3 border-2 border-gray-100 dark:border-white/10 shadow-md cursor-pointer active:scale-95 transition-transform"
+                  onClick={() => navigate(`/user/${username}`)}
+                >
+                  <img
+                    src={displayAvatar}
+                    alt={displayUsername}
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+
+                {/* Display Name / Username */}
+                <h2 
+                  className="text-xl sm:text-2xl font-bold tracking-tight cursor-pointer active:opacity-70 transition-opacity"
+                  onClick={() => navigate(`/user/${username}`)}
+                >
+                  {displayName}
+                </h2>
+
+                {/* Username handle */}
+                <p className="text-[14px] font-medium opacity-60 mt-0.5 mb-1">
+                  @{displayUsername}
+                </p>
+
+                {/* Stats line: X following · Y followers */}
+                <p className="text-[13.5px] font-medium opacity-70 mb-4">
+                  {followingCount} following · {followersCount} followers
+                </p>
+
+                {/* Follow / Following Red Pill Button */}
+                {currentUser && (currentUser._id !== targetUser._id && currentUser.username !== username) && (
+                  <button
+                    type="button"
+                    onClick={handleFollowToggle}
+                    className={`px-12 py-2.5 rounded-full font-bold text-[15px] transition-all duration-200 shadow-md active:scale-95 ${
+                      followingState === 'following'
+                        ? 'bg-gray-200 text-black dark:bg-white/15 dark:text-white hover:bg-gray-300 dark:hover:bg-white/20 border border-gray-300 dark:border-white/10'
+                        : followingState === 'pending'
+                        ? 'bg-gray-200 text-black dark:bg-white/15 dark:text-white border border-gray-300 dark:border-white/10'
+                        : 'bg-[#FE2C55] text-white hover:bg-[#e0264b] shadow-[#FE2C55]/20'
+                    }`}
+                  >
+                    {followingState === 'following' ? 'Following' : followingState === 'pending' ? 'Requested' : 'Follow'}
+                  </button>
+                )}
+              </div>
+            )}
+
             {messages.length === 0 && !loading && (
-               <div className="flex flex-col items-center justify-center h-full text-center opacity-40">
-                  <div className="w-16 h-16 rounded-full bg-gray-50 flex items-center justify-center mb-4">
-                     <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
-                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-                     </svg>
-                  </div>
-                  <p className="text-[14px]">Say hi to {targetUser?.fullName || username}!</p>
+               <div className="flex flex-col items-center justify-center py-6 text-center opacity-40">
+                  <p className="text-[13px] font-medium">Say hi to {targetUser?.fullName || username}!</p>
                </div>
             )}
             

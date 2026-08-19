@@ -1122,7 +1122,7 @@ const ProfilePage = () => {
       {activeOverlayIndex !== null && (
         <div className="fixed inset-x-0 top-0 bg-black z-[999] flex flex-col animate-fade-in" style={{ bottom: 'var(--bottom-nav-height)' }}>
           {/* Top Header */}
-          <div className="absolute top-[var(--safe-area-top)] left-0 w-full flex justify-between items-center px-4 py-6 z-[950] pointer-events-none">
+          <div data-video-overlay="true" className="video-overlay absolute top-[var(--safe-area-top)] left-0 w-full flex justify-between items-center px-4 py-6 z-[950] pointer-events-none">
             <button 
               onClick={handleCloseOverlay} 
               className="pointer-events-auto flex items-center gap-1 text-white font-bold bg-transparent border-none outline-none cursor-pointer drop-shadow-md active:opacity-60 transition-opacity"

@@ -45,7 +45,7 @@ const formatTime = (seconds) => {
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 };
 
-const VideoSeekBar = ({ currentTime = 0, duration = 0, onSeek, onScrubStateChange }) => {
+const VideoSeekBar = ({ currentTime = 0, duration = 0, onSeek, onScrubStateChange, compactBottom = false }) => {
   const [isDragging, setIsDragging] = useState(false);
   const [dragTime, setDragTime] = useState(0);
   const progressBarRef = React.useRef(null);
@@ -102,7 +102,7 @@ const VideoSeekBar = ({ currentTime = 0, duration = 0, onSeek, onScrubStateChang
   const progressPercent = Math.min(100, Math.max(0, (displayTime / effectiveDuration) * 100));
 
   return (
-    <div className="absolute bottom-[calc(var(--bottom-nav-height,50px)+env(safe-area-inset-bottom,0px))] left-0 w-full z-[100]">
+    <div className={`absolute left-0 w-full z-[100] ${compactBottom ? 'bottom-0' : 'bottom-[calc(var(--bottom-nav-height,50px)+env(safe-area-inset-bottom,0px))]'}`}>
       {/* Big Scrub Time Overlay (Matching Image 2: Floating text in clean empty space, no box!) */}
       {isDragging && (
         <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-[110] flex items-center justify-center pointer-events-none select-none drop-shadow-[0_4px_16px_rgba(0,0,0,0.95)]">
@@ -510,7 +510,7 @@ const VideoOverlay = ({ reelId, username, caption, musicName, isLiked, likes, co
           </div>
 
           {/* Right: Floating TikTok Action Sidebar */}
-          <div className="flex flex-col items-center gap-4.5 pointer-events-auto select-none">
+          <div className="flex flex-col items-center gap-3.5 pointer-events-auto select-none">
              {/* Avatar + Follow Badge Button */}
              {(!isAd || (isAd && videoData.onModel === 'User')) && (
                <div className="relative mb-2">
@@ -654,6 +654,26 @@ const VideoOverlay = ({ reelId, username, caption, musicName, isLiked, likes, co
                 <span className="text-[12px] font-bold mt-1 text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.8)]">{formatTikTokCount(shares)}</span>
              </div>
 
+             {/* 5. More Options Three Dots Icon */}
+             <div 
+               className="flex flex-col items-center text-white cursor-pointer group" 
+               onClick={(e) => { e.stopPropagation(); setIsMoreOpen(true); }} 
+               style={{ pointerEvents: 'auto' }}
+               title="More options"
+             >
+                <div className="active:scale-75 transition-transform duration-150 flex items-center justify-center w-[37px] h-[37px]">
+                  <svg 
+                    width="32" height="32" viewBox="0 0 24 24" 
+                    fill="rgba(255,255,255,0.95)" 
+                    className="drop-shadow-[0_2px_4px_rgba(0,0,0,0.6)] group-hover:scale-105"
+                  >
+                    <circle cx="12" cy="5" r="2.2" />
+                    <circle cx="12" cy="12" r="2.2" />
+                    <circle cx="12" cy="19" r="2.2" />
+                  </svg>
+                </div>
+             </div>
+
 
               {/* 6. Static Vinyl Disc Sound Icon */}
               <div
@@ -681,6 +701,7 @@ const VideoOverlay = ({ reelId, username, caption, musicName, isLiked, likes, co
             duration={duration}
             onSeek={onSeek}
             onScrubStateChange={handleScrubStateChangeInternal}
+            compactBottom={compactBottom}
           />
         )}
       </div>

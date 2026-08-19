@@ -602,7 +602,7 @@
   background-color: var(--theme-page-bg) !important;
 }
 
-[data-theme='light'] :is(.theme-surface-page, .theme-chat-page).text-white {
+[data-theme='light'] :is(.theme-surface-page, .theme-chat-page).text-white:not(:is([data-video-overlay], .video-overlay, .theme-on-media) *) {
   color: var(--theme-text-primary) !important;
 }
 
@@ -630,39 +630,39 @@
   background-color: var(--theme-surface-muted) !important;
 }
 
-[data-theme='light'] :is(.theme-surface-page, .theme-chat-page) .text-white {
+[data-theme='light'] :is(.theme-surface-page, .theme-chat-page) .text-white:not(:is([data-video-overlay], .video-overlay, .theme-on-media) *) {
   color: var(--theme-text-primary) !important;
 }
 
-[data-theme='light'] :is(.theme-surface-page, .theme-chat-page) .text-white\/90 {
+[data-theme='light'] :is(.theme-surface-page, .theme-chat-page) .text-white\/90:not(:is([data-video-overlay], .video-overlay, .theme-on-media) *) {
   color: rgba(17, 24, 39, 0.9) !important;
 }
 
-[data-theme='light'] :is(.theme-surface-page, .theme-chat-page) .text-white\/80 {
+[data-theme='light'] :is(.theme-surface-page, .theme-chat-page) .text-white\/80:not(:is([data-video-overlay], .video-overlay, .theme-on-media) *) {
   color: rgba(17, 24, 39, 0.8) !important;
 }
 
-[data-theme='light'] :is(.theme-surface-page, .theme-chat-page) .text-white\/70 {
+[data-theme='light'] :is(.theme-surface-page, .theme-chat-page) .text-white\/70:not(:is([data-video-overlay], .video-overlay, .theme-on-media) *) {
   color: rgba(17, 24, 39, 0.7) !important;
 }
 
-[data-theme='light'] :is(.theme-surface-page, .theme-chat-page) .text-white\/60 {
+[data-theme='light'] :is(.theme-surface-page, .theme-chat-page) .text-white\/60:not(:is([data-video-overlay], .video-overlay, .theme-on-media) *) {
   color: rgba(17, 24, 39, 0.6) !important;
 }
 
-[data-theme='light'] :is(.theme-surface-page, .theme-chat-page) .text-white\/55,
-[data-theme='light'] :is(.theme-surface-page, .theme-chat-page) .text-white\/50 {
+[data-theme='light'] :is(.theme-surface-page, .theme-chat-page) .text-white\/55:not(:is([data-video-overlay], .video-overlay, .theme-on-media) *),
+[data-theme='light'] :is(.theme-surface-page, .theme-chat-page) .text-white\/50:not(:is([data-video-overlay], .video-overlay, .theme-on-media) *) {
   color: var(--theme-text-muted) !important;
 }
 
-[data-theme='light'] :is(.theme-surface-page, .theme-chat-page) .text-white\/45,
-[data-theme='light'] :is(.theme-surface-page, .theme-chat-page) .text-white\/40,
-[data-theme='light'] :is(.theme-surface-page, .theme-chat-page) .text-white\/35 {
+[data-theme='light'] :is(.theme-surface-page, .theme-chat-page) .text-white\/45:not(:is([data-video-overlay], .video-overlay, .theme-on-media) *),
+[data-theme='light'] :is(.theme-surface-page, .theme-chat-page) .text-white\/40:not(:is([data-video-overlay], .video-overlay, .theme-on-media) *),
+[data-theme='light'] :is(.theme-surface-page, .theme-chat-page) .text-white\/35:not(:is([data-video-overlay], .video-overlay, .theme-on-media) *) {
   color: var(--theme-text-muted) !important;
 }
 
-[data-theme='light'] :is(.theme-surface-page, .theme-chat-page) .text-white\/30,
-[data-theme='light'] :is(.theme-surface-page, .theme-chat-page) .text-white\/20 {
+[data-theme='light'] :is(.theme-surface-page, .theme-chat-page) .text-white\/30:not(:is([data-video-overlay], .video-overlay, .theme-on-media) *),
+[data-theme='light'] :is(.theme-surface-page, .theme-chat-page) .text-white\/20:not(:is([data-video-overlay], .video-overlay, .theme-on-media) *) {
   color: var(--theme-text-faint) !important;
 }
 
@@ -710,11 +710,56 @@
 }
 
 /* Guarantee pure white text for video player overlays under all theme modes */
+:is([data-theme='light'], [data-theme='dark'], body) :is(.theme-surface-page, .theme-chat-page, body) :is([data-video-overlay], .video-overlay, .theme-on-media),
+:is([data-theme='light'], [data-theme='dark'], body) :is(.theme-surface-page, .theme-chat-page, body) :is([data-video-overlay], .video-overlay, .theme-on-media) :is(h1, h2, h3, h4, h5, h6, p, span, div, a, button, svg),
+:is([data-theme='light'], [data-theme='dark'], body) :is([data-video-overlay], .video-overlay, .theme-on-media),
+:is([data-theme='light'], [data-theme='dark'], body) :is([data-video-overlay], .video-overlay, .theme-on-media) :is(h1, h2, h3, h4, h5, h6, p, span, div, a, button, svg),
 [data-video-overlay],
-[data-video-overlay] :is(h1, h2, h3, h4, h5, h6, p, span, div, a, button),
+[data-video-overlay] :is(h1, h2, h3, h4, h5, h6, p, span, div, a, button, svg),
 .video-overlay,
-.video-overlay :is(h1, h2, h3, h4, h5, h6, p, span, div, a, button) {
+.video-overlay :is(h1, h2, h3, h4, h5, h6, p, span, div, a, button, svg),
+.theme-on-media,
+.theme-on-media :is(h1, h2, h3, h4, h5, h6, p, span, div, a, button, svg) {
   color: #ffffff !important;
+}
+
+:is([data-theme='light'], [data-theme='dark'], body) :is(.theme-surface-page, .theme-chat-page, body) :is([data-video-overlay], .video-overlay, .theme-on-media) .text-white,
+:is([data-theme='light'], [data-theme='dark'], body) :is(.theme-surface-page, .theme-chat-page, body) :is([data-video-overlay], .video-overlay, .theme-on-media) .text-white\/90,
+:is([data-theme='light'], [data-theme='dark'], body) :is(.theme-surface-page, .theme-chat-page, body) :is([data-video-overlay], .video-overlay, .theme-on-media) .text-white\/80,
+:is([data-theme='light'], [data-theme='dark'], body) :is(.theme-surface-page, .theme-chat-page, body) :is([data-video-overlay], .video-overlay, .theme-on-media) .text-white\/70,
+:is([data-theme='light'], [data-theme='dark'], body) :is(.theme-surface-page, .theme-chat-page, body) :is([data-video-overlay], .video-overlay, .theme-on-media) .text-white\/60,
+:is([data-theme='light'], [data-theme='dark'], body) :is(.theme-surface-page, .theme-chat-page, body) :is([data-video-overlay], .video-overlay, .theme-on-media) .text-white\/55,
+:is([data-theme='light'], [data-theme='dark'], body) :is(.theme-surface-page, .theme-chat-page, body) :is([data-video-overlay], .video-overlay, .theme-on-media) .text-white\/50,
+:is([data-theme='light'], [data-theme='dark'], body) :is(.theme-surface-page, .theme-chat-page, body) :is([data-video-overlay], .video-overlay, .theme-on-media) .text-white\/45,
+:is([data-theme='light'], [data-theme='dark'], body) :is(.theme-surface-page, .theme-chat-page, body) :is([data-video-overlay], .video-overlay, .theme-on-media) .text-white\/40,
+:is([data-theme='light'], [data-theme='dark'], body) :is(.theme-surface-page, .theme-chat-page, body) :is([data-video-overlay], .video-overlay, .theme-on-media) .text-white\/35,
+:is([data-theme='light'], [data-theme='dark'], body) :is(.theme-surface-page, .theme-chat-page, body) :is([data-video-overlay], .video-overlay, .theme-on-media) .text-white\/30,
+:is([data-theme='light'], [data-theme='dark'], body) :is(.theme-surface-page, .theme-chat-page, body) :is([data-video-overlay], .video-overlay, .theme-on-media) .text-white\/20 {
+  color: #ffffff !important;
+}
+
+:is([data-theme='light'], [data-theme='dark'], body) :is(.theme-surface-page, .theme-chat-page, body) :is([data-video-overlay], .video-overlay, .theme-on-media) .text-white\/90 {
+  color: rgba(255, 255, 255, 0.9) !important;
+}
+
+:is([data-theme='light'], [data-theme='dark'], body) :is(.theme-surface-page, .theme-chat-page, body) :is([data-video-overlay], .video-overlay, .theme-on-media) .text-white\/80 {
+  color: rgba(255, 255, 255, 0.8) !important;
+}
+
+:is([data-theme='light'], [data-theme='dark'], body) :is(.theme-surface-page, .theme-chat-page, body) :is([data-video-overlay], .video-overlay, .theme-on-media) .text-white\/70 {
+  color: rgba(255, 255, 255, 0.7) !important;
+}
+
+:is([data-theme='light'], [data-theme='dark'], body) :is(.theme-surface-page, .theme-chat-page, body) :is([data-video-overlay], .video-overlay, .theme-on-media) .text-white\/60 {
+  color: rgba(255, 255, 255, 0.6) !important;
+}
+
+:is([data-theme='light'], [data-theme='dark'], body) :is(.theme-surface-page, .theme-chat-page, body) :is([data-video-overlay], .video-overlay, .theme-on-media) .text-white\/50 {
+  color: rgba(255, 255, 255, 0.5) !important;
+}
+
+:is([data-theme='light'], [data-theme='dark'], body) :is(.theme-surface-page, .theme-chat-page, body) :is([data-video-overlay], .video-overlay, .theme-on-media) .text-white\/40 {
+  color: rgba(255, 255, 255, 0.4) !important;
 }
 
 [data-video-overlay] .text-\[\#25f4ee\],
