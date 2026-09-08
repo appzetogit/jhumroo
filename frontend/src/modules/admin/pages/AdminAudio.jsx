@@ -306,10 +306,21 @@ const AdminAudio = () => {
                       const file = e.target.files[0];
                       if (file) {
                         const objectUrl = URL.createObjectURL(file);
-                        const tempAudio = new window.Audio(objectUrl);
+                        const tempAudio = new window.Audio();
+                        tempAudio.src = objectUrl;
                         tempAudio.onloadedmetadata = () => {
-                          setFormData({...formData, audio: file, duration: tempAudio.duration});
-                          URL.revokeObjectURL(objectUrl);
+                          const duration = tempAudio.duration;
+                          setFormData(prev => ({ ...prev, audio: file, duration }));
+                          tempAudio.src = '';
+                          setTimeout(() => {
+                            try { URL.revokeObjectURL(objectUrl); } catch (err) {}
+                          }, 1000);
+                        };
+                        tempAudio.onerror = () => {
+                          tempAudio.src = '';
+                          setTimeout(() => {
+                            try { URL.revokeObjectURL(objectUrl); } catch (err) {}
+                          }, 1000);
                         };
                       }
                     }}

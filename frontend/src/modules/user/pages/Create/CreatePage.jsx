@@ -61,8 +61,9 @@ import reelService from '../../../../services/reelService';
 import userService from '../../../../services/userService';
 import followService from '../../../../services/followService';
 import audioService from '../../../../services/audioService';
-import { SOUND_FAVORITES_KEY, createInitialPostState, FILTER_PRESETS, CATEGORIZED_FILTERS, ALL_FILTERS_MAP, FONT_OPTIONS, COLOR_OPTIONS, MOCK_STICKERS, PREVIEW_TOOLS } from './utils/createConstants';
-import { formatElapsed, parseDurationSeconds, readSoundFavorites } from './utils/createUtils';
+import { SOUND_FAVORITES_KEY, createInitialPostState, FILTER_PRESETS, CATEGORIZED_FILTERS, ALL_FILTERS_MAP, FONT_OPTIONS, COLOR_OPTIONS, MOCK_STICKERS, PREVIEW_TOOLS, DEFAULT_ADJUSTMENTS } from './utils/createConstants';
+import { formatElapsed, parseDurationSeconds, readSoundFavorites, computeAdjustmentFilterCss } from './utils/createUtils';
+import { ADJUST_TOOLS } from './utils/adjustTools';
 import { initDB, saveVideoToCache, getVideoFromCache, saveSequenceToCache, getSequenceFromCache, clearVideoCache } from './services/videoCacheService';
 import { sheetOverlayClass, Toggle, BottomSheet, CenterModal } from './components/SharedUI';
 import { DynamicAudioDuration, MediaPreview, DraggableOverlay, TimelineThumbnail } from './components/MediaComponents';
@@ -644,8 +645,14 @@ const CreatePage = () => {
     }, 80);
   }, []);
   const [selectedSounds, setSelectedSounds] = useState(() => {
-    const saved = localStorage.getItem('create_selectedSounds');
-    return saved ? JSON.parse(saved) : [];
+    try {
+      const saved = localStorage.getItem('create_selectedSounds');
+      if (!saved) return [];
+      const parsed = JSON.parse(saved);
+      return Array.isArray(parsed) ? parsed.filter(s => s?.url && !s.url.startsWith('blob:')) : [];
+    } catch {
+      return [];
+    }
   });
   const [editingSoundIndex, setEditingSoundIndex] = useState(-1);
   const selectedSound = editingSoundIndex >= 0 ? selectedSounds[editingSoundIndex] : (selectedSounds[0] || { id: 'sound-original', title: 'Original sound', artist: 'Original Audio', duration: '00:00', cover: '' });
@@ -689,12 +696,24 @@ const CreatePage = () => {
   const [soundBrowserTab, setSoundBrowserTab] = useState('recommended');
   const [favoriteSoundTitles, setFavoriteSoundTitles] = useState(() => readSoundFavorites());
   const [activeStickers, setActiveStickers] = useState(() => {
-    const saved = localStorage.getItem('create_activeStickers');
-    return saved ? JSON.parse(saved) : [];
+    try {
+      const saved = localStorage.getItem('create_activeStickers');
+      if (!saved) return [];
+      const parsed = JSON.parse(saved);
+      return Array.isArray(parsed) ? parsed.filter(s => !s?.url?.startsWith('blob:') && !s?.image?.startsWith('blob:')) : [];
+    } catch {
+      return [];
+    }
   });
   const [activeOverlays, setActiveOverlays] = useState(() => {
-    const saved = localStorage.getItem('create_activeOverlays');
-    return saved ? JSON.parse(saved) : [];
+    try {
+      const saved = localStorage.getItem('create_activeOverlays');
+      if (!saved) return [];
+      const parsed = JSON.parse(saved);
+      return Array.isArray(parsed) ? parsed.filter(o => o?.url && !o.url.startsWith('blob:')) : [];
+    } catch {
+      return [];
+    }
   });
   const [libraryAudios, setLibraryAudios] = useState([]);
   const [savedAudiosList, setSavedAudiosList] = useState([]);
@@ -760,17 +779,10 @@ const CreatePage = () => {
   const [voiceClipStart, setVoiceClipStart] = useState(0);
   const voiceTimerIntervalRef = useRef(null);
   const [mergedVideoBlob, setMergedVideoBlob] = useState(null);
-  const [imageAdjustments, setImageAdjustments] = useState({
-    brightness: 100,
-    contrast: 100,
-    saturate: 100,
-    hueRotate: 0,
-    invert: 0,
-    grayscale: 0,
-    sepia: 0,
-    blur: 0,
-    opacity: 100
-  });
+  const [imageAdjustments, setImageAdjustments] = useState(() => ({ ...DEFAULT_ADJUSTMENTS }));
+  const [selectedAdjustTopic, setSelectedAdjustTopic] = useState('brightness');
+  const [adjustScrollPage, setAdjustScrollPage] = useState(0);
+  const adjustToolsScrollRef = useRef(null);
 
   const getCombinedFilter = () => {
     const calculated = getCalculatedFilterCss(selectedFilter, filterIntensity);
@@ -783,7 +795,7 @@ const CreatePage = () => {
     if (selectedVideoEffect === 'illusion') effectFilter = 'contrast(1.4) saturate(1.8)';
     if (selectedVideoEffect === 'glitch') effectFilter = 'contrast(1.5) saturate(2.0) hue-rotate(90deg)';
 
-    const adj = `brightness(${imageAdjustments.brightness}%) contrast(${imageAdjustments.contrast}%) saturate(${imageAdjustments.saturate}%) hue-rotate(${imageAdjustments.hueRotate}deg) invert(${imageAdjustments.invert}%) grayscale(${imageAdjustments.grayscale}%) sepia(${imageAdjustments.sepia}%) blur(${imageAdjustments.blur}px) opacity(${imageAdjustments.opacity}%)`;
+    const adj = computeAdjustmentFilterCss(imageAdjustments);
     return `${base} ${effectFilter} ${adj}`.trim() || 'none';
   };
 
@@ -1424,17 +1436,26 @@ const CreatePage = () => {
     if (stage === 'editor' && selectedSound && selectedSound.url && selectedSound.id !== 'sound-original') {
       // If duration is 15 (default) or missing, try to get actual duration
       if (!selectedSound.clipDuration || selectedSound.clipDuration === 15) {
-        const tempAudio = new Audio(selectedSound.url);
-        tempAudio.onloadedmetadata = () => {
-          if (tempAudio.duration > 0 && Math.abs(tempAudio.duration - (selectedSound.clipDuration || 0)) > 1) {
-            setSelectedSounds(prev => prev.map((s, idx) => {
-              if (idx === editingSoundIndex || (editingSoundIndex === -1 && idx === 0)) {
-                return { ...s, clipDuration: tempAudio.duration };
-              }
-              return s;
-            }));
-          }
-        };
+        try {
+          const tempAudio = new Audio();
+          tempAudio.src = selectedSound.url;
+          tempAudio.onloadedmetadata = () => {
+            if (tempAudio.duration > 0 && Math.abs(tempAudio.duration - (selectedSound.clipDuration || 0)) > 1) {
+              setSelectedSounds(prev => prev.map((s, idx) => {
+                if (idx === editingSoundIndex || (editingSoundIndex === -1 && idx === 0)) {
+                  return { ...s, clipDuration: tempAudio.duration };
+                }
+                return s;
+              }));
+            }
+            tempAudio.src = '';
+          };
+          tempAudio.onerror = () => {
+            tempAudio.src = '';
+          };
+        } catch (e) {
+          // ignore error
+        }
       }
     }
   }, [stage, selectedSound?.id, selectedSound?.url]);
@@ -1445,10 +1466,13 @@ const CreatePage = () => {
     localStorage.setItem('create_stageStack', JSON.stringify(cleanStack));
     localStorage.setItem('create_recordStatus', recordStatus);
     localStorage.setItem('create_recordedSeconds', recordedSeconds.toString());
-    localStorage.setItem('create_selectedSounds', JSON.stringify(selectedSounds));
+    const persistableSounds = (selectedSounds || []).filter(s => s?.url && !s.url.startsWith('blob:'));
+    localStorage.setItem('create_selectedSounds', JSON.stringify(persistableSounds));
     localStorage.setItem('create_postState', JSON.stringify(postState));
-    localStorage.setItem('create_activeStickers', JSON.stringify(activeStickers));
-    localStorage.setItem('create_activeOverlays', JSON.stringify(activeOverlays));
+    const persistableStickers = (activeStickers || []).filter(s => !s?.url?.startsWith('blob:') && !s?.image?.startsWith('blob:'));
+    localStorage.setItem('create_activeStickers', JSON.stringify(persistableStickers));
+    const persistableOverlays = (activeOverlays || []).filter(o => o?.url && !o.url.startsWith('blob:'));
+    localStorage.setItem('create_activeOverlays', JSON.stringify(persistableOverlays));
     localStorage.setItem('create_overlayText', overlayText);
     localStorage.setItem('create_overlayFont', overlayFont);
     localStorage.setItem('create_overlayColor', overlayColor);
@@ -1456,7 +1480,7 @@ const CreatePage = () => {
     localStorage.setItem('create_textPos', JSON.stringify(textPos));
     localStorage.setItem('create_textRotation', textRotation.toString());
     localStorage.setItem('create_textList', JSON.stringify(textList));
-  }, [stageStack, recordStatus, recordedSeconds, selectedSound, postState, activeStickers, activeOverlays, overlayText, overlayFont, overlayColor, overlayFontSize, textPos, textRotation, textList]);
+  }, [stageStack, recordStatus, recordedSeconds, selectedSounds, postState, activeStickers, activeOverlays, overlayText, overlayFont, overlayColor, overlayFontSize, textPos, textRotation, textList]);
 
   // Synchronize composer edits in real-time to the selected item in textList
   useEffect(() => {
@@ -2882,15 +2906,10 @@ const CreatePage = () => {
   };
 
   const handleNextClick = () => {
-    const isAdjusted = imageAdjustments.brightness !== 100 ||
-      imageAdjustments.contrast !== 100 ||
-      imageAdjustments.saturate !== 100 ||
-      imageAdjustments.hueRotate !== 0 ||
-      imageAdjustments.invert !== 0 ||
-      imageAdjustments.grayscale !== 0 ||
-      imageAdjustments.sepia !== 0 ||
-      imageAdjustments.blur !== 0 ||
-      imageAdjustments.opacity !== 100;
+    const isAdjusted = Object.entries(imageAdjustments || {}).some(([k, v]) => {
+      const def = DEFAULT_ADJUSTMENTS[k] !== undefined ? DEFAULT_ADJUSTMENTS[k] : (k === 'opacity' ? 100 : 0);
+      return v !== def;
+    });
 
     const hasEdits = textList.length > 0 ||
       (overlayText && overlayText.trim() !== '') ||
@@ -3007,6 +3026,23 @@ const CreatePage = () => {
     });
 
     ctx.restore();
+  };
+
+  const renderAdjustmentCanvasOverlays = (ctx, canvas) => {
+    if (!imageAdjustments) return;
+    if (imageAdjustments.vignette > 0) {
+      ctx.save();
+      const grad = ctx.createRadialGradient(
+        canvas.width / 2, canvas.height / 2, canvas.width * 0.2,
+        canvas.width / 2, canvas.height / 2, canvas.width * 0.72
+      );
+      grad.addColorStop(0, 'rgba(0, 0, 0, 0)');
+      grad.addColorStop(0.7, `rgba(0, 0, 0, ${(imageAdjustments.vignette * 0.005).toFixed(3)})`);
+      grad.addColorStop(1, `rgba(0, 0, 0, ${(imageAdjustments.vignette * 0.01).toFixed(3)})`);
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.restore();
+    }
   };
 
   const renderEffectOverlayToCanvas = (ctx, canvas, globalTime = 0) => {
@@ -3261,6 +3297,7 @@ const CreatePage = () => {
             ctx.restore();
 
             renderEffectOverlayToCanvas(ctx, canvas, globalTime);
+            renderAdjustmentCanvasOverlays(ctx, canvas);
 
             effectiveTextList.forEach(item => {
               renderTextItemToCanvas(ctx, canvas, item, globalTime);
@@ -3328,6 +3365,7 @@ const CreatePage = () => {
             ctx.restore();
 
             renderEffectOverlayToCanvas(ctx, canvas, globalTime);
+            renderAdjustmentCanvasOverlays(ctx, canvas);
 
             effectiveTextList.forEach(item => {
               renderTextItemToCanvas(ctx, canvas, item, globalTime);
@@ -5334,6 +5372,216 @@ const CreatePage = () => {
   };
 
 
+  const renderAdjustTray = () => {
+    const activeTool = ADJUST_TOOLS.find((t) => t.id === selectedAdjustTopic) || ADJUST_TOOLS[1];
+    const currentValue = imageAdjustments[activeTool.id] !== undefined ? imageAdjustments[activeTool.id] : activeTool.default;
+    const min = activeTool.min;
+    const max = activeTool.max;
+    const isCenterOrigin = !!activeTool.centerOrigin;
+
+    // Calculate percentage for center-origin or linear tracks
+    let fillLeft = '0%';
+    let fillWidth = '0%';
+    const pct = ((currentValue - min) / (max - min)) * 100;
+
+    if (isCenterOrigin) {
+      if (currentValue >= 0) {
+        fillLeft = '50%';
+        fillWidth = `${(currentValue / max) * 50}%`;
+      } else {
+        const span = Math.abs(currentValue / min) * 50;
+        fillLeft = `${50 - span}%`;
+        fillWidth = `${span}%`;
+      }
+    } else {
+      fillLeft = '0%';
+      fillWidth = `${pct}%`;
+    }
+
+    const handleToolScroll = (e) => {
+      const el = e.currentTarget;
+      const scrollPercent = el.scrollLeft / (el.scrollWidth - el.clientWidth || 1);
+      setAdjustScrollPage(scrollPercent > 0.4 ? 1 : 0);
+    };
+
+    return (
+      <div className="absolute inset-0 z-50 flex flex-col justify-end pointer-events-auto animate-in slide-in-from-bottom duration-300">
+        {/* Semi-transparent Backdrop: lets user see photo/video preview clearly */}
+        <div
+          className="absolute inset-0 bg-black/40 backdrop-blur-[1px]"
+          onClick={() => setActiveSheet(null)}
+        />
+
+        {/* BOTTOM TRAY CARD */}
+        <div className="relative z-10 w-full max-w-lg mx-auto bg-[#141416]/95 backdrop-blur-2xl border-t border-white/10 rounded-t-[28px] pt-3 pb-5 px-3 shadow-[0_-12px_45px_rgba(0,0,0,0.9)] flex flex-col gap-3 select-none pointer-events-auto">
+          {/* HEADER ROW: Reset Button on Left, Active Tool on Center, Checkmark Button on Right */}
+          <div className="flex items-center justify-between px-2 pt-1 pb-1">
+            <button
+              type="button"
+              onClick={() => {
+                setImageAdjustments({ ...DEFAULT_ADJUSTMENTS });
+                showToast('Adjustments reset');
+              }}
+              className="flex items-center gap-1.5 text-white/70 hover:text-white active:scale-95 transition-all text-[14px] font-semibold px-2 py-1 rounded-lg hover:bg-white/5"
+            >
+              <BiRefresh size={20} className="stroke-[1]" />
+              <span>Reset</span>
+            </button>
+
+            <span className="text-[13px] font-bold text-white tracking-wide uppercase opacity-90">
+              {activeTool.label}
+            </span>
+
+            <button
+              type="button"
+              onClick={() => {
+                setActiveSheet(null);
+                showToast('Adjustments saved');
+              }}
+              className="flex items-center justify-center w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white active:scale-95 transition-all"
+              title="Done"
+            >
+              <BiCheck size={24} />
+            </button>
+          </div>
+
+          {/* ACTIVE TOOL SLIDER ROW */}
+          <div className="w-full px-5 py-2 flex flex-col items-center">
+            {/* Value Display */}
+            <div className="mb-2 flex items-center justify-center">
+              <span className="text-[14px] font-extrabold text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.95)]">
+                {currentValue > 0 && isCenterOrigin ? `+${currentValue}` : currentValue}
+                {activeTool.unit || ''}
+              </span>
+            </div>
+
+            {/* Custom Slider Track */}
+            <div className="relative w-full h-6 flex items-center">
+              {/* Background Track Bar */}
+              <div className="w-full h-1 bg-white/20 rounded-full overflow-hidden relative">
+                {/* Active Colored Fill Bar */}
+                <div
+                  className="absolute top-0 bottom-0 bg-[#fe2c55] rounded-full transition-all duration-75"
+                  style={{
+                    left: fillLeft,
+                    width: fillWidth,
+                  }}
+                />
+              </div>
+
+              {/* Center Origin Dot Marker */}
+              {isCenterOrigin && (
+                <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full bg-white/60 pointer-events-none z-10" />
+              )}
+
+              {/* Native Input Overlay */}
+              <input
+                type="range"
+                min={min}
+                max={max}
+                step={activeTool.step || 1}
+                value={currentValue}
+                onChange={(e) => {
+                  const val = parseInt(e.target.value, 10);
+                  setImageAdjustments((prev) => ({
+                    ...prev,
+                    [activeTool.id]: val,
+                  }));
+                }}
+                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20"
+              />
+
+              {/* Custom Thumb Visual Element */}
+              <div
+                className="absolute top-1/2 -translate-y-1/2 w-4 h-4 rounded-full bg-white shadow-[0_0_8px_rgba(0,0,0,0.6)] border-2 border-[#fe2c55] pointer-events-none z-10 transition-transform active:scale-125"
+                style={{
+                  left: `calc(${pct}% - 8px)`,
+                }}
+              />
+            </div>
+          </div>
+
+          {/* HORIZONTAL ADJUST TOOLS SCROLL ROW */}
+          <div
+            ref={adjustToolsScrollRef}
+            onScroll={handleToolScroll}
+            className="flex items-center gap-3 overflow-x-auto no-scrollbar px-2 py-1 scroll-smooth"
+          >
+            {ADJUST_TOOLS.map((tool) => {
+              const isSelected = selectedAdjustTopic === tool.id;
+              const val = imageAdjustments[tool.id] !== undefined ? imageAdjustments[tool.id] : tool.default;
+              const isModified = val !== tool.default;
+
+              return (
+                <button
+                  key={tool.id}
+                  type="button"
+                  onClick={() => {
+                    setSelectedAdjustTopic(tool.id);
+                  }}
+                  className="flex shrink-0 flex-col items-center gap-1.5 active:scale-95 transition-transform select-none"
+                >
+                  <div
+                    className={`relative flex h-[58px] w-[58px] items-center justify-center rounded-[18px] transition-all ${
+                      isSelected
+                        ? 'border-2 border-white bg-white/10 shadow-[0_0_12px_rgba(255,255,255,0.2)] text-white'
+                        : 'border border-white/5 bg-[#222225] text-white/70 hover:text-white hover:bg-white/10'
+                    }`}
+                  >
+                    {tool.icon}
+                    {isModified && (
+                      <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-[#fe2c55] ring-2 ring-[#141416]" />
+                    )}
+                  </div>
+                  <span
+                    className={`text-[11px] max-w-[62px] truncate transition-colors text-center ${
+                      isSelected ? 'font-bold text-white' : 'font-medium text-white/60'
+                    }`}
+                  >
+                    {tool.label}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* PAGINATION DOTS AT BOTTOM */}
+          <div className="flex items-center justify-center gap-2 pt-1 pb-0.5">
+            <button
+              type="button"
+              onClick={() => {
+                if (adjustToolsScrollRef.current) {
+                  adjustToolsScrollRef.current.scrollTo({ left: 0, behavior: 'smooth' });
+                  setAdjustScrollPage(0);
+                }
+              }}
+              className={`h-2 rounded-full transition-all duration-300 ${
+                adjustScrollPage === 0 ? 'w-5 bg-[#fe2c55]' : 'w-2 bg-white/20 hover:bg-white/40'
+              }`}
+              title="Page 1"
+            />
+            <button
+              type="button"
+              onClick={() => {
+                if (adjustToolsScrollRef.current) {
+                  adjustToolsScrollRef.current.scrollTo({
+                    left: adjustToolsScrollRef.current.scrollWidth / 2,
+                    behavior: 'smooth',
+                  });
+                  setAdjustScrollPage(1);
+                }
+              }}
+              className={`h-2 rounded-full transition-all duration-300 ${
+                adjustScrollPage === 1 ? 'w-5 bg-[#00f2fe]' : 'w-2 bg-white/20 hover:bg-white/40'
+              }`}
+              title="Page 2"
+            />
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   const renderEditorAdjustmentPanel = () => {
     if (editorAction === 'speed') {
       return null;
@@ -5649,6 +5897,28 @@ const CreatePage = () => {
         {/* Window Vintage Vignette Frame Overlay */}
         {selectedVideoEffect === 'window' && (
           <div className="absolute inset-0 pointer-events-none z-10 shadow-[inset_0_0_90px_35px_rgba(0,0,0,0.88)] border-[10px] border-black/70 rounded-[28px]" />
+        )}
+
+        {/* Adjust Vignette Overlay */}
+        {imageAdjustments && imageAdjustments.vignette > 0 && (
+          <div
+            className="absolute inset-0 pointer-events-none z-20 transition-opacity duration-150"
+            style={{
+              background: `radial-gradient(circle at center, transparent 35%, rgba(0, 0, 0, ${imageAdjustments.vignette * 0.009}) 95%, rgba(0, 0, 0, ${imageAdjustments.vignette * 0.01}) 100%)`
+            }}
+          />
+        )}
+
+        {/* Adjust Grain Overlay */}
+        {imageAdjustments && imageAdjustments.grain > 0 && (
+          <div
+            className="absolute inset-0 pointer-events-none z-20 mix-blend-overlay transition-opacity duration-150"
+            style={{
+              opacity: imageAdjustments.grain * 0.008,
+              backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")`,
+              backgroundRepeat: 'repeat'
+            }}
+          />
         )}
       </div>
     );
@@ -10421,48 +10691,7 @@ const CreatePage = () => {
           </div>
         </div>
       )}
-      {activeSheet === 'adjust-preview' && (
-        <BottomSheet title="Adjust" onClose={() => setActiveSheet(null)} scrollable transparentOverlay={true}>
-          <div className="flex flex-col gap-8 px-6 pb-12 pt-6">
-            {[
-              { id: 'brightness', label: 'Brightness', min: 0, max: 200, unit: '%' },
-              { id: 'contrast', label: 'Contrast', min: 0, max: 200, unit: '%' },
-              { id: 'saturate', label: 'Saturation', min: 0, max: 200, unit: '%' },
-              { id: 'hueRotate', label: 'Hue', min: 0, max: 360, unit: '°' },
-              { id: 'opacity', label: 'Opacity', min: 0, max: 100, unit: '%' },
-              { id: 'blur', label: 'Blur', min: 0, max: 20, unit: 'px' },
-              { id: 'grayscale', label: 'Grayscale', min: 0, max: 100, unit: '%' },
-              { id: 'sepia', label: 'Sepia', min: 0, max: 100, unit: '%' },
-              { id: 'invert', label: 'Invert', min: 0, max: 100, unit: '%' },
-            ].map((adj) => (
-              <div key={adj.id} className="flex flex-col gap-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-[13px] font-bold text-white">{adj.label}</span>
-                  <span className="text-[12px] font-medium text-white/60">{imageAdjustments[adj.id]}{adj.unit}</span>
-                </div>
-                <input
-                  type="range"
-                  min={adj.min}
-                  max={adj.max}
-                  value={imageAdjustments[adj.id]}
-                  onChange={(e) => setImageAdjustments(prev => ({ ...prev, [adj.id]: parseInt(e.target.value) }))}
-                  className="w-full accent-[#fe2c55] h-1.5 bg-white/20 rounded-lg appearance-none cursor-pointer"
-                />
-              </div>
-            ))}
-
-            <button
-              onClick={() => setImageAdjustments({
-                brightness: 100, contrast: 100, saturate: 100, hueRotate: 0,
-                invert: 0, grayscale: 0, sepia: 0, blur: 0, opacity: 100
-              })}
-              className="mt-4 w-full py-3 rounded-xl bg-white/10 text-[13px] font-bold text-white hover:bg-white/20 border border-white/10 active:scale-95 transition-all"
-            >
-              Reset Adjustments
-            </button>
-          </div>
-        </BottomSheet>
-      )}
+      {activeSheet === 'adjust-preview' && renderAdjustTray()}
       <style>{`
         .animate-music-bar-1 { animation: music-bar 0.8s infinite ease-in-out; }
         .animate-music-bar-2 { animation: music-bar 1s infinite ease-in-out; animation-delay: 0.2s; }

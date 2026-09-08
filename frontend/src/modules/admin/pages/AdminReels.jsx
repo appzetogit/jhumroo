@@ -684,7 +684,7 @@ const AdminReels = () => {
           transition: all 0.2s;
         }
         .admin-table-row--reels:hover {
-          background: rgba(254, 44, 85, 0.02);
+          background: #f8fafc;
         }
         .admin-user-cell {
           display: flex;

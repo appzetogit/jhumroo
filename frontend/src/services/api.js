@@ -135,9 +135,10 @@ api.interceptors.response.use(
                 localStorage.removeItem('jhumroo_token');
                 localStorage.removeItem('jhumroo_user');
                 localStorage.removeItem('jhumroo_refresh_token');
+                localStorage.removeItem('jhumroo_active_account_id');
                 const isBrowserOnAdminRoute = typeof window !== 'undefined' && window.location.pathname.startsWith('/admin');
-                if (!isBrowserOnAdminRoute && !window.location.pathname.includes('/auth')) {
-                  window.location.href = '/auth';
+                if (!isBrowserOnAdminRoute && window.location.pathname !== '/' && window.location.pathname !== '/login') {
+                  window.location.href = '/';
                 }
               }
               reject(err);
@@ -154,9 +155,10 @@ api.interceptors.response.use(
             localStorage.removeItem('jhumroo_token');
             localStorage.removeItem('jhumroo_user');
             localStorage.removeItem('jhumroo_refresh_token');
+            localStorage.removeItem('jhumroo_active_account_id');
             const isBrowserOnAdminRoute = typeof window !== 'undefined' && window.location.pathname.startsWith('/admin');
-            if (!isBrowserOnAdminRoute && typeof window !== 'undefined' && !window.location.pathname.includes('/auth')) {
-              window.location.href = '/auth';
+            if (!isBrowserOnAdminRoute && typeof window !== 'undefined' && window.location.pathname !== '/' && window.location.pathname !== '/login') {
+              window.location.href = '/';
             }
           } else if (
             data.message !== 'This account is private' && 

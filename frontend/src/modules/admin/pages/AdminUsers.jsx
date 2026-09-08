@@ -200,7 +200,7 @@ const AdminUsers = () => {
             borderRadius: '12px', 
             padding: '8px 14px', 
             width: '260px', 
-            boxShadow: '0 4px 12px rgba(254, 44, 85, 0.04)' 
+            boxShadow: '0 2px 6px rgba(0, 0, 0, 0.04)' 
           }}>
             <BiSearch size={18} style={{ color: 'var(--admin-muted)' }} />
             <input 

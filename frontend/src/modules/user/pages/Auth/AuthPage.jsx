@@ -18,7 +18,7 @@ const useProgressiveImage = (src) => {
 
   useEffect(() => {
     if (!src) return;
-    
+
     // Check if the image is already cached/loaded
     const img = new Image();
     img.src = src;
@@ -42,15 +42,14 @@ const BackgroundWrapper = ({ children, blur = false }) => {
     <div className="relative h-full min-h-0 w-full overflow-hidden bg-[#18110f]">
       {/* Warm gradient placeholder that renders instantly */}
       <div className="absolute inset-0 bg-gradient-to-br from-[#2c1a17] to-[#140d0c]" />
-      
+
       {/* The high-res background image, fading in smoothly when loaded */}
       <div
-        className={`absolute inset-0 bg-cover bg-center transition-all duration-[800ms] ease-out ${
-          blur ? 'blur-[8px] scale-110' : 'blur-0 scale-100'
-        } ${loadedBg ? 'opacity-100' : 'opacity-0'}`}
-        style={{ 
+        className={`absolute inset-0 bg-cover bg-center transition-all duration-[800ms] ease-out ${blur ? 'blur-[8px] scale-110' : 'blur-0 scale-100'
+          } ${loadedBg ? 'opacity-100' : 'opacity-0'}`}
+        style={{
           backgroundImage: loadedBg ? `url(${loadedBg})` : 'none',
-          willChange: 'opacity, transform' 
+          willChange: 'opacity, transform'
         }}
       />
       <div className="absolute inset-0 bg-black/75" />
@@ -72,7 +71,7 @@ const AuthCard = ({ children, title, subtitle }) => (
 const PrimaryButton = ({ onClick, children, variant = 'solid', disabled = false, className = "" }) => {
   const baseStyles = "w-full min-h-[54px] rounded-full px-4 py-3.5 text-[15px] sm:py-4 sm:text-[16px] font-bold transition-all duration-200 active:scale-[0.96] flex items-center justify-center gap-3";
   const variants = {
-    solid: "bg-[#fe2c55] text-white shadow-lg shadow-[#fe2c55]/30",
+    solid: "bg-[#fe2c55] text-white",
     outline: "bg-white/10 border border-white/30 text-white backdrop-blur-md",
     ghost: "bg-transparent text-white"
   };
@@ -161,65 +160,42 @@ const AuthPage = ({ onComplete, initialMode = 'signup' }) => {
   const months = config?.auth?.months || DEFAULT_MONTHS;
   const { user: authUser, completeProfile } = useAuth();
 
-  // Set mode based on current URL path
-  const [mode, setMode] = useState(pathname === '/login' ? 'login' : initialMode);
-
-  // Steps: 1=Welcome, 2=Methods, 3=Birthday, 4=PhoneInput, 5=OTP
+  // Steps: 1=Welcome, 4=PhoneInput, 5=OTP, 6=CompleteProfile
   const [step, setStep] = useState(() => {
-    const isSignupMode = pathname === '/signup';
     const isProfileCompleted = authUser?.isProfileCompleted !== undefined
       ? authUser.isProfileCompleted
       : (authUser?.username && !authUser.username.startsWith('user_') && authUser.fullName);
 
-    // Only force complete profile during signup if profile is incomplete
-    if (isSignupMode && authUser && !isProfileCompleted) {
+    if (authUser && !isProfileCompleted) {
       return 6;
     }
 
-    if (pathname === '/signup') {
-      const savedStep = sessionStorage.getItem('signup_step');
-      return savedStep !== null ? parseInt(savedStep, 10) : 3;
+    if (pathname === '/login' || pathname === '/signup') {
+      return 4;
     }
-    return pathname === '/login' ? 4 : 1;
+    return 1;
   });
 
   // Sync mode and step with URL changes
   useEffect(() => {
     const p = pathname;
-    const currentMode = p === '/login' ? 'login' : 'signup';
-    setMode(currentMode);
 
     const isProfileCompleted = authUser?.isProfileCompleted !== undefined
       ? authUser.isProfileCompleted
       : (authUser?.username && !authUser.username.startsWith('user_') && authUser.fullName);
 
-    // Only redirect to complete profile during signup flow
-    if (currentMode === 'signup' && authUser && !isProfileCompleted) {
+    if (authUser && !isProfileCompleted) {
       setStep(6);
       return;
     }
 
-    // Explicitly set step based on route
-    if (p === '/signup') {
-      if (authUser) {
-        setStep(6);
-      } else {
-        const savedStep = sessionStorage.getItem('signup_step');
-        setStep(savedStep !== null ? parseInt(savedStep, 10) : 3);
-      }
-    } else if (p === '/login') {
+    if (p === '/login' || p === '/signup') {
       setStep(4);
     } else if (p === '/' || p === '' || p === '/welcome' || p.includes('index.html')) {
-      // Clear saved signup state when going back to welcome screen
       sessionStorage.removeItem('signup_step');
-      sessionStorage.removeItem('signup_month_idx');
-      sessionStorage.removeItem('signup_day_idx');
-      sessionStorage.removeItem('signup_year_idx');
-      sessionStorage.removeItem('signup_birthday_selected');
       sessionStorage.removeItem('temp_phone_number');
-      setStep(1); // Force welcome screen on root or /welcome
+      setStep(1);
     } else {
-      // For any other subroutes during auth, keep as welcome or default to methods
       setStep(1);
     }
   }, [pathname, authUser]);
@@ -244,29 +220,6 @@ const AuthPage = ({ onComplete, initialMode = 'signup' }) => {
     return sessionStorage.getItem('signup_birthday_selected') === 'true';
   });
 
-  // Sync state changes with sessionStorage
-  useEffect(() => {
-    if (mode === 'signup' && step > 2) {
-      sessionStorage.setItem('signup_step', step.toString());
-    }
-  }, [step, mode]);
-
-  useEffect(() => {
-    sessionStorage.setItem('signup_month_idx', monthIdx.toString());
-  }, [monthIdx]);
-
-  useEffect(() => {
-    sessionStorage.setItem('signup_day_idx', dayIdx.toString());
-  }, [dayIdx]);
-
-  useEffect(() => {
-    sessionStorage.setItem('signup_year_idx', yearIdx.toString());
-  }, [yearIdx]);
-
-  useEffect(() => {
-    sessionStorage.setItem('signup_birthday_selected', birthdaySelected.toString());
-  }, [birthdaySelected]);
-
   const selectedDate = new Date(YEARS[yearIdx], months.indexOf(months[monthIdx]), DAYS[dayIdx]).toISOString();
   const displayDate = `${DAYS[dayIdx]} ${months[monthIdx]} ${YEARS[yearIdx]}`;
 
@@ -285,24 +238,21 @@ const AuthPage = ({ onComplete, initialMode = 'signup' }) => {
 
   const handleAuthSuccess = useCallback(async (userData) => {
     console.log('✅ Auth success triggered!', userData);
-    
+
     // Auto-complete and go to home
     if (document.activeElement instanceof HTMLElement) {
       document.activeElement.blur();
     }
-    
+
     // Clear temp phone number from sessionStorage
     sessionStorage.removeItem('temp_phone_number');
 
-    // Only force profile completion for new users during signup flow
-    // Existing users logging in should always proceed to home
-    const isNewUser = mode === 'signup' && (
-      userData?.isProfileCompleted !== undefined
-        ? !userData.isProfileCompleted
-        : (userData?.username?.startsWith('user_') || !userData?.fullName)
-    );
+    // Check if user is newly registered / profile incomplete
+    const isNewUser = userData?.isProfileCompleted !== undefined
+      ? !userData.isProfileCompleted
+      : (!userData?.fullName || !userData?.username || userData?.username?.startsWith('user_'));
     const needsOnboarding = !userData?.isOnboarded;
-    
+
     if (isNewUser) {
       setStep(6);
     } else {
@@ -312,14 +262,14 @@ const AuthPage = ({ onComplete, initialMode = 'signup' }) => {
       sessionStorage.removeItem('signup_day_idx');
       sessionStorage.removeItem('signup_year_idx');
       sessionStorage.removeItem('signup_birthday_selected');
-      
+
       if (needsOnboarding) {
         onComplete(true);
       } else {
         onComplete(false);
       }
     }
-  }, [onComplete, mode]);
+  }, [onComplete]);
 
 
   /* ─── Step 6: Complete Profile ─── */
@@ -353,12 +303,12 @@ const AuthPage = ({ onComplete, initialMode = 'signup' }) => {
   const [stateError, setStateError] = useState('');
 
   const INDIAN_STATES = [
-    'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh', 
-    'Goa', 'Gujarat', 'Haryana', 'Himachal Pradesh', 'Jharkhand', 'Karnataka', 
-    'Kerala', 'Madhya Pradesh', 'Maharashtra', 'Manipur', 'Meghalaya', 'Mizoram', 
-    'Nagaland', 'Odisha', 'Punjab', 'Rajasthan', 'Sikkim', 'Tamil Nadu', 
+    'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh',
+    'Goa', 'Gujarat', 'Haryana', 'Himachal Pradesh', 'Jharkhand', 'Karnataka',
+    'Kerala', 'Madhya Pradesh', 'Maharashtra', 'Manipur', 'Meghalaya', 'Mizoram',
+    'Nagaland', 'Odisha', 'Punjab', 'Rajasthan', 'Sikkim', 'Tamil Nadu',
     'Telangana', 'Tripura', 'Uttar Pradesh', 'Uttarakhand', 'West Bengal',
-    'Andaman and Nicobar Islands', 'Chandigarh', 'Dadra and Nagar Haveli and Daman and Diu', 
+    'Andaman and Nicobar Islands', 'Chandigarh', 'Dadra and Nagar Haveli and Daman and Diu',
     'Delhi', 'Jammu and Kashmir', 'Ladakh', 'Lakshadweep', 'Puducherry'
   ];
 
@@ -448,98 +398,98 @@ const AuthPage = ({ onComplete, initialMode = 'signup' }) => {
       <BackgroundWrapper blur>
         <div className="flex-1 flex flex-col justify-center items-center px-4 py-6 sm:p-6 overflow-y-auto">
           <div className="w-full max-w-md animate-scale-in">
-          <AuthCard title="Complete your profile" subtitle="Choose how you'll appear on Jhumroo">
-            <div className="flex flex-col gap-4 max-h-[60vh] overflow-y-auto no-scrollbar py-2">
-              <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-bold text-gray-400 ml-1">FULL NAME</label>
-                <input
-                  type="text"
-                  placeholder="Your Name"
-                  value={fullName}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    if (/^[a-zA-Z\s]*$/.test(val)) {
-                      setFullName(val);
-                      setFullNameError('');
-                    }
-                  }}
-                  className={`w-full h-[54px] bg-white/5 border ${fullNameError ? 'border-[#fe2c55]' : 'border-white/10'} rounded-2xl px-4 text-white outline-none focus:border-[#fe2c55] transition-all`}
-                />
-                {fullNameError && (
-                  <p className="text-[#fe2c55] text-xs font-semibold ml-1 mt-1">{fullNameError}</p>
-                )}
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-bold text-gray-400 ml-1">USERNAME</label>
-                <input
-                  type="text"
-                  placeholder="username"
-                  value={username}
-                  onChange={(e) => {
-                    setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9._]/g, ''));
-                    setUsernameError('');
-                  }}
-                  className={`w-full h-[54px] bg-white/5 border ${usernameError ? 'border-[#fe2c55]' : 'border-white/10'} rounded-2xl px-4 text-white outline-none focus:border-[#fe2c55] transition-all`}
-                />
-                {usernameError && (
-                  <p className="text-[#fe2c55] text-xs font-semibold ml-1 mt-1">{usernameError}</p>
-                )}
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-bold text-gray-400 ml-1">EMAIL (OPTIONAL)</label>
-                <input
-                  type="email"
-                  placeholder="email@example.com"
-                  value={email}
-                  onChange={(e) => {
-                    setEmail(e.target.value);
-                    setEmailError('');
-                  }}
-                  className={`w-full h-[54px] bg-white/5 border ${emailError ? 'border-[#fe2c55]' : 'border-white/10'} rounded-2xl px-4 text-white outline-none focus:border-[#fe2c55] transition-all`}
-                />
-                {emailError && (
-                  <p className="text-[#fe2c55] text-xs font-semibold ml-1 mt-1">{emailError}</p>
-                )}
-              </div>
-              <div className="grid grid-cols-2 gap-3">
+            <AuthCard title="Complete your profile" subtitle="Choose how you'll appear on Jhumroo">
+              <div className="flex flex-col gap-4 max-h-[60vh] overflow-y-auto no-scrollbar py-2">
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-xs font-bold text-gray-400 ml-1">COUNTRY</label>
-                  <select
-                    value={country}
-                    onChange={(e) => setCountry(e.target.value)}
-                    className="w-full h-[54px] bg-white/5 border border-white/10 rounded-2xl px-4 text-white outline-none focus:border-[#fe2c55] transition-all appearance-none"
-                  >
-                    <option value="India" className="bg-[#1a1a1a]">India</option>
-                  </select>
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-xs font-bold text-gray-400 ml-1">STATE</label>
-                  <select
-                    value={state}
+                  <label className="text-xs font-bold text-gray-400 ml-1">FULL NAME</label>
+                  <input
+                    type="text"
+                    placeholder="Your Name"
+                    value={fullName}
                     onChange={(e) => {
-                      setState(e.target.value);
-                      setStateError('');
+                      const val = e.target.value;
+                      if (/^[a-zA-Z\s]*$/.test(val)) {
+                        setFullName(val);
+                        setFullNameError('');
+                      }
                     }}
-                    className={`w-full h-[54px] bg-white/5 border ${stateError ? 'border-[#fe2c55]' : 'border-white/10'} rounded-2xl px-4 text-white outline-none focus:border-[#fe2c55] transition-all appearance-none`}
-                  >
-                    <option value="" disabled className="bg-[#1a1a1a]">Select State</option>
-                    {INDIAN_STATES.map(s => (
-                      <option key={s} value={s} className="bg-[#1a1a1a]">{s}</option>
-                    ))}
-                  </select>
-                  {stateError && (
-                    <p className="text-[#fe2c55] text-xs font-semibold ml-1 mt-1">{stateError}</p>
+                    className={`w-full h-[54px] bg-white/5 border ${fullNameError ? 'border-[#fe2c55]' : 'border-white/10'} rounded-2xl px-4 text-white outline-none focus:border-[#fe2c55] transition-all`}
+                  />
+                  {fullNameError && (
+                    <p className="text-[#fe2c55] text-xs font-semibold ml-1 mt-1">{fullNameError}</p>
                   )}
                 </div>
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-bold text-gray-400 ml-1">USERNAME</label>
+                  <input
+                    type="text"
+                    placeholder="username"
+                    value={username}
+                    onChange={(e) => {
+                      setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9._]/g, ''));
+                      setUsernameError('');
+                    }}
+                    className={`w-full h-[54px] bg-white/5 border ${usernameError ? 'border-[#fe2c55]' : 'border-white/10'} rounded-2xl px-4 text-white outline-none focus:border-[#fe2c55] transition-all`}
+                  />
+                  {usernameError && (
+                    <p className="text-[#fe2c55] text-xs font-semibold ml-1 mt-1">{usernameError}</p>
+                  )}
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-bold text-gray-400 ml-1">EMAIL (OPTIONAL)</label>
+                  <input
+                    type="email"
+                    placeholder="email@example.com"
+                    value={email}
+                    onChange={(e) => {
+                      setEmail(e.target.value);
+                      setEmailError('');
+                    }}
+                    className={`w-full h-[54px] bg-white/5 border ${emailError ? 'border-[#fe2c55]' : 'border-white/10'} rounded-2xl px-4 text-white outline-none focus:border-[#fe2c55] transition-all`}
+                  />
+                  {emailError && (
+                    <p className="text-[#fe2c55] text-xs font-semibold ml-1 mt-1">{emailError}</p>
+                  )}
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs font-bold text-gray-400 ml-1">COUNTRY</label>
+                    <select
+                      value={country}
+                      onChange={(e) => setCountry(e.target.value)}
+                      className="w-full h-[54px] bg-white/5 border border-white/10 rounded-2xl px-4 text-white outline-none focus:border-[#fe2c55] transition-all appearance-none"
+                    >
+                      <option value="India" className="bg-[#1a1a1a]">India</option>
+                    </select>
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs font-bold text-gray-400 ml-1">STATE</label>
+                    <select
+                      value={state}
+                      onChange={(e) => {
+                        setState(e.target.value);
+                        setStateError('');
+                      }}
+                      className={`w-full h-[54px] bg-white/5 border ${stateError ? 'border-[#fe2c55]' : 'border-white/10'} rounded-2xl px-4 text-white outline-none focus:border-[#fe2c55] transition-all appearance-none`}
+                    >
+                      <option value="" disabled className="bg-[#1a1a1a]">Select State</option>
+                      {INDIAN_STATES.map(s => (
+                        <option key={s} value={s} className="bg-[#1a1a1a]">{s}</option>
+                      ))}
+                    </select>
+                    {stateError && (
+                      <p className="text-[#fe2c55] text-xs font-semibold ml-1 mt-1">{stateError}</p>
+                    )}
+                  </div>
+                </div>
               </div>
-            </div>
 
-            <div className="mt-8">
-              <PrimaryButton onClick={handleCompleteProfile} disabled={!username || username.length < 3 || isCompleting}>
-                {isCompleting ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : 'Next'}
-              </PrimaryButton>
-            </div>
-          </AuthCard>
+              <div className="mt-8">
+                <PrimaryButton onClick={handleCompleteProfile} disabled={!username || username.length < 3 || isCompleting}>
+                  {isCompleting ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : 'Next'}
+                </PrimaryButton>
+              </div>
+            </AuthCard>
           </div>
         </div>
       </BackgroundWrapper>
@@ -551,10 +501,10 @@ const AuthPage = ({ onComplete, initialMode = 'signup' }) => {
     return (
       <BackgroundWrapper>
         <div
-          className="flex-1 min-h-0 flex flex-col items-start overflow-y-auto px-5 sm:px-8"
+          className="flex-1 min-h-0 flex flex-col justify-between items-start overflow-y-auto px-5 sm:px-8"
           style={{
             paddingTop: 'max(1.5rem, calc(env(safe-area-inset-top) + 1rem))',
-            paddingBottom: 'max(1.5rem, calc(env(safe-area-inset-bottom) + 1.25rem))',
+            paddingBottom: 'max(1rem, calc(env(safe-area-inset-bottom) + 0.75rem))',
           }}
         >
           {/* Logo Section */}
@@ -576,26 +526,19 @@ const AuthPage = ({ onComplete, initialMode = 'signup' }) => {
             </h1>
           </div>
 
-          {/* Spacer that pushes buttons to ~65% from top */}
-          <div className="flex-1" style={{ maxHeight: '52vh' }} />
-
-          {/* Action Buttons */}
-          <div className="w-full self-stretch max-w-none sm:max-w-[360px] flex flex-col gap-4 animate-slide-up pb-2">
+          {/* Action Button & Terms at the very bottom */}
+          <div className="w-full self-stretch max-w-none sm:max-w-[360px] flex flex-col gap-3 animate-slide-up mt-auto pt-6 pb-2">
             <button
               type="button"
-              onClick={() => navigate('/login')}
-              className="flex min-h-[56px] w-full items-center justify-center rounded-full border border-[#ff7ba5]/30 bg-[linear-gradient(180deg,#ff5d90_0%,#ff2e69_55%,#ff245f_100%)] px-4 text-[1.05rem] font-extrabold text-white shadow-[0_10px_30px_rgba(255,53,108,0.45)] transition-transform duration-200 active:scale-[0.97] sm:min-h-[60px] sm:text-[1.15rem]"
+              onClick={() => {
+                navigate('/login');
+                setStep(4);
+              }}
+              className="flex min-h-[56px] w-full items-center justify-center rounded-full border border-[#ff7ba5]/30 bg-[linear-gradient(180deg,#ff5d90_0%,#ff2e69_55%,#ff245f_100%)] px-4 text-[1.05rem] font-extrabold text-white transition-transform duration-200 active:scale-[0.97] sm:min-h-[60px] sm:text-[1.15rem]"
             >
               Log in
             </button>
-            <button
-              type="button"
-              onClick={() => navigate('/signup')}
-              className="flex min-h-[56px] w-full items-center justify-center rounded-full border border-white/55 bg-[linear-gradient(180deg,rgba(255,255,255,0.18)_0%,rgba(255,255,255,0.08)_100%)] px-4 text-[1rem] font-extrabold text-white shadow-[0_12px_28px_rgba(0,0,0,0.28),inset_0_1px_0_rgba(255,255,255,0.18)] backdrop-blur-md transition-transform duration-200 active:scale-[0.97] sm:min-h-[60px] sm:text-[1.1rem]"
-            >
-              Sign Up
-            </button>
-            <p className="text-[11px] sm:text-[12px] text-gray-400 text-center px-2 sm:px-4 mt-2 sm:mt-4 leading-snug">
+            <p className="text-[11px] sm:text-[12px] text-gray-400 text-center px-2 sm:px-4 mt-2 sm:mt-3 leading-snug">
               By continuing you agree to our <span onClick={() => navigate('/settings/terms-and-condition')} className="text-white font-semibold cursor-pointer hover:underline">Terms</span> and <span onClick={() => navigate('/settings/privacy-policy')} className="text-white font-semibold cursor-pointer hover:underline">Privacy</span>
             </p>
           </div>
@@ -754,18 +697,15 @@ const AuthPage = ({ onComplete, initialMode = 'signup' }) => {
             className="min-h-[56px] flex items-center px-4 shrink-0"
             style={{ paddingTop: 'max(0px, env(safe-area-inset-top))' }}
           >
-            <button 
+            <button
               onClick={() => {
                 if (step === 4) {
-                  if (mode === 'signup') {
-                    setStep(3);
-                  } else {
-                    navigate('/');
-                  }
+                  navigate('/');
+                  setStep(1);
                 } else {
                   setStep(4);
                 }
-              }} 
+              }}
               className="w-10 h-10 flex items-center justify-center bg-white/10 rounded-full text-white"
             >
               <BiChevronLeft size={28} />
@@ -777,19 +717,15 @@ const AuthPage = ({ onComplete, initialMode = 'signup' }) => {
               <AuthCard>
                 {step === 4 ? (
                   <PhoneInput
-                    mode={mode}
+                    mode="unified"
                     onNext={(phone) => {
                       setPhoneNumber(phone);
                       setStep(5);
                     }}
                     onBack={() => {
-                      if (mode === 'signup') {
-                        setStep(3);
-                      } else {
-                        navigate('/');
-                      }
+                      navigate('/');
+                      setStep(1);
                     }}
-                    onSwitchMode={() => navigate(mode === 'signup' ? '/login' : '/signup')}
                     isThemed={true}
                   />
                 ) : (

@@ -12,6 +12,8 @@ import ProfileMoreOptionsSheet from '../../components/modals/ProfileMoreOptionsS
 import ReportSheet from '../../components/modals/ReportSheet';
 import ReportUserSheet from '../../components/modals/ReportUserSheet';
 import PhotoPickerSheet from '../../components/modals/PhotoPickerSheet';
+import SwitchAccountSheet from '../../components/modals/SwitchAccountSheet';
+import AddAccountSheet from '../../components/modals/AddAccountSheet';
 import VideoCard from '../../components/video/VideoCard';
 
 const LazyVideo = ({ src, className }) => {
@@ -197,6 +199,8 @@ const ProfilePage = () => {
   const [showReport, setShowReport] = useState(false);
   const [isBlocked, setIsBlocked] = useState(false);
   const [isBlockedByThem, setIsBlockedByThem] = useState(false);
+  const [showSwitchAccount, setShowSwitchAccount] = useState(false);
+  const [showAddAccount, setShowAddAccount] = useState(false);
 
   const [overlayVideos, setOverlayVideos] = useState([]);
   const [activeOverlayIndex, setActiveOverlayIndex] = useState(null);
@@ -206,12 +210,12 @@ const ProfilePage = () => {
   const displayUsername = profileUsername || currentUser?.username || 'user';
   const isOwnProfile = !profileUsername || 
     (profileUsername && currentUser?.username && profileUsername.toLowerCase() === currentUser.username.toLowerCase());
-  const activeProfile = profile || (isOwnProfile ? currentUser : null);
+  const activeProfile = isOwnProfile ? (currentUser || profile) : (profile || currentUser);
   const isPrivateAndLocked = !isOwnProfile && profile?.isPrivate && !isFollowing;
 
   useEffect(() => {
+    setProfile(null);
     if (!isOwnProfile) {
-      setProfile(null);
       setUserVideos([]);
       setIsFollowing(false);
       setFollowStatus(null);
@@ -381,13 +385,6 @@ const ProfilePage = () => {
         setIncomingFollowStatus(profileRes.user.incomingFollowStatus);
         setIsBlocked(currentUser?.blockedUsers?.includes(profileRes.user._id));
         setIsBlockedByThem(profileRes.user.isBlockedByThem || false);
-
-        if (isOwnProfile && updateUser) {
-          updateUser({
-            ...currentUser,
-            ...profileRes.user
-          });
-        }
 
         if (!profileRes.user.isBlockedByThem && reelsRes.success) {
           setUserVideos(reelsRes.reels);
@@ -705,7 +702,7 @@ const ProfilePage = () => {
         <div className="scrollable flex-1">
           <div className="flex flex-col items-center pt-4 pb-6 px-4">
             {/* Avatar Skeleton */}
-            <div className="w-24 h-24 mb-4 rounded-full bg-white/10 animate-pulse" />
+            <div className="w-[116px] h-[116px] sm:w-32 sm:h-32 mb-2.5 rounded-full bg-white/10 animate-pulse" />
             
             {/* Name Skeleton */}
             <div className="w-32 h-5 bg-white/10 rounded-md mb-2 animate-pulse" />
@@ -824,9 +821,9 @@ const ProfilePage = () => {
 
       <div className="scrollable flex-1">
         {/* Profile Info */}
-        <div className="flex flex-col items-center pt-4 pb-6 px-4">
-          <div className="relative w-24 h-24 mb-4">
-            <div className="w-full h-full rounded-full p-[2px] bg-white">
+        <div className="flex flex-col items-center pt-0.5 pb-5 px-4">
+          <div className="relative w-[116px] h-[116px] sm:w-32 sm:h-32 mb-2.5">
+            <div className="w-full h-full rounded-full p-[2.5px] bg-white">
               <div className="w-full h-full rounded-full overflow-hidden bg-[#242424]">
                 <img 
                   src={activeProfile?.profilePicture?.url || (typeof activeProfile?.profilePicture === 'string' ? activeProfile?.profilePicture : null) || `https://api.dicebear.com/7.x/avataaars/svg?seed=${displayUsername}`} 
@@ -838,28 +835,43 @@ const ProfilePage = () => {
             {isOwnProfile && (
               <div 
                 onClick={() => setShowPhotoPicker(true)}
-                className="absolute right-0 bottom-0 w-7 h-7 bg-white rounded-full p-[2.5px] flex items-center justify-center cursor-pointer shadow-md active:scale-90 transition-transform"
+                className="absolute right-0.5 bottom-0.5 w-[33px] h-[33px] bg-white rounded-full p-[2.5px] flex items-center justify-center cursor-pointer shadow-md active:scale-90 transition-transform"
               >
                 <div className="w-full h-full bg-[#00D2E5] rounded-full flex items-center justify-center text-white">
                   {uploading ? (
-                    <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                   ) : (
-                    <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="3" viewBox="0 0 24 24"><path d="M12 5v14m-7-7h14"/></svg>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="3" viewBox="0 0 24 24"><path d="M12 5v14m-7-7h14"/></svg>
                   )}
                 </div>
               </div>
             )}
           </div>
           
-          {/* Name + Edit Pill */}
-          <div className="flex items-center justify-center gap-2 mb-0.5">
-            <h1 className="text-[15px] font-bold text-white">
-              {activeProfile?.fullName || displayUsername}
-            </h1>
+          {/* Name + Down Chevron + Edit Pill */}
+          <div className="flex items-center justify-center gap-2 mb-0.5 translate-x-6">
+            {isOwnProfile ? (
+              <button 
+                type="button"
+                onClick={() => setShowSwitchAccount(true)}
+                className="flex items-center gap-1.5 cursor-pointer active:opacity-75 transition-opacity py-0.5 group"
+                title="Switch account"
+              >
+                <h1 className="text-[17px] font-bold text-white group-hover:text-white/90">
+                  {activeProfile?.fullName || displayUsername}
+                </h1>
+                <BiChevronDown size={22} className="text-white shrink-0 -mt-0.5 opacity-90 group-hover:opacity-100" />
+              </button>
+            ) : (
+              <h1 className="text-[17px] font-bold text-white">
+                {activeProfile?.fullName || displayUsername}
+              </h1>
+            )}
+            
             {isOwnProfile && (
               <button 
                 onClick={() => navigate('/settings/edit-profile')}
-                className="px-3.5 py-0.5 bg-gray-200 hover:bg-gray-300 text-black text-[13px] font-semibold rounded-full active:scale-95 transition-all ml-1"
+                className="px-4 py-1 bg-gray-200 hover:bg-gray-300 text-black text-[13.5px] font-semibold rounded-full active:scale-95 transition-all ml-3"
               >
                 Edit
               </button>
@@ -867,7 +879,7 @@ const ProfilePage = () => {
           </div>
 
           {/* Username Handle */}
-          <p className="text-[12px] font-normal text-white/50 mb-4">@{displayUsername}</p>
+          <p className="text-[13px] font-normal text-white/50 mb-3">@{displayUsername}</p>
 
           {/* Stats Section with Dividers (Matching TikTok screenshot) */}
           <div className="flex items-center justify-center w-full mb-3">
@@ -1116,6 +1128,25 @@ const ProfilePage = () => {
         onClose={() => setShowPhotoPicker(false)}
         onFileSelected={handleFileSelected}
         hasExistingPhoto={!!currentUser?.profilePicture?.url}
+      />
+
+      {/* Switch Account Bottom Sheet */}
+      <SwitchAccountSheet
+        isOpen={showSwitchAccount}
+        onClose={() => setShowSwitchAccount(false)}
+        onAddAccount={() => {
+          setShowSwitchAccount(false);
+          setShowAddAccount(true);
+        }}
+      />
+
+      {/* Add Account Modal */}
+      <AddAccountSheet
+        isOpen={showAddAccount}
+        onClose={() => setShowAddAccount(false)}
+        onAccountAdded={() => {
+          fetchProfileData();
+        }}
       />
 
       {/* Vertical Reel Overlay Player */}

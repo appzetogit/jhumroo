@@ -38,7 +38,12 @@ export const SocketProvider = ({ children }) => {
       });
 
       newSocket.on('connect_error', (error) => {
-        console.error('Socket connection error:', error);
+        if (error?.message?.includes('Authentication error') || error?.message?.includes('User not found')) {
+          console.warn('Socket auth invalid:', error.message);
+          newSocket.disconnect();
+        } else {
+          console.error('Socket connection error:', error);
+        }
       });
 
       return () => {

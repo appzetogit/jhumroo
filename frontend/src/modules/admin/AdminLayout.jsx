@@ -118,11 +118,12 @@ const AdminLayout = () => {
     '--admin-primary': primary,
     '--admin-secondary': secondary,
     '--admin-accent': accent,
-    '--admin-text': ink,
-    '--admin-surface': surface,
-    '--admin-muted': muted,
-    '--admin-border': 'rgba(254, 44, 85, 0.15)',
-    '--admin-bg': 'linear-gradient(180deg, #fff8f9 0%, #fff2f4 48%, #ffffff 100%)',
+    '--admin-text': '#1e293b',
+    '--admin-surface': '#ffffff',
+    '--admin-muted': '#64748b',
+    '--admin-strong': '#0f172a',
+    '--admin-border': '#f1f5f9',
+    '--admin-bg': '#ffffff',
   };
 
   return (

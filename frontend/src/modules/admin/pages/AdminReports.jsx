@@ -517,7 +517,7 @@ const AdminReports = () => {
           transition: all 0.2s;
         }
         .admin-table-row--reports:hover {
-          background: rgba(254, 44, 85, 0.02);
+          background: #f8fafc;
         }
         .admin-user-cell {
           display: flex;

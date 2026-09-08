@@ -20,24 +20,8 @@ export const sendOTP = asyncHandler(async (req, res) => {
     });
   }
 
-  // Check if user exists
+  // Check if user exists, or create a new user if first-time
   let user = await User.findOne({ phoneNumber });
-
-  if (mode === 'signup' && user) {
-    return res.status(400).json({
-      success: false,
-      message: 'User already registered with this phone number, please login.',
-      requireLogin: true
-    });
-  }
-
-  if (mode === 'login' && !user) {
-    return res.status(404).json({
-      success: false,
-      message: 'User not found. Please sign up first.',
-      requireSignup: true
-    });
-  }
 
   if (!user) {
     // Create new user if doesn't exist
@@ -333,21 +317,22 @@ export const getMe = asyncHandler(async (req, res) => {
  * @access  Private
  */
 export const logout = asyncHandler(async (req, res) => {
-  const token = req.cookies.refreshToken || req.body.refreshToken || req.headers['x-refresh-token'];
+  const token = req.cookies?.refreshToken || req.body?.refreshToken || req.headers?.['x-refresh-token'];
 
-  // Clear refresh token in database
-  if (token) {
-    if (req.user.refreshTokens) {
-      req.user.refreshTokens = req.user.refreshTokens.filter(t => t.token !== token);
+  // Clear refresh token in database if user is present
+  if (req.user) {
+    if (token) {
+      if (req.user.refreshTokens) {
+        req.user.refreshTokens = req.user.refreshTokens.filter(t => t.token !== token);
+      }
+    } else {
+      req.user.refreshTokens = [];
     }
-  } else {
-    req.user.refreshTokens = [];
+    req.user.refreshToken = undefined;
+    req.user.fcmToken = undefined;
+    req.user.fcmTokenMobile = undefined;
+    await req.user.save({ validateBeforeSave: false }).catch(() => {});
   }
-  req.user.refreshToken = undefined;
-  // Fallback in case the client's own FCM token removal request lost the race with logout
-  req.user.fcmToken = undefined;
-  req.user.fcmTokenMobile = undefined;
-  await req.user.save({ validateBeforeSave: false });
 
   // Clear refresh token cookie
   res.cookie('refreshToken', 'none', {

@@ -30,15 +30,13 @@ const PhoneInput = ({ onNext, onBack, onSwitchMode, mode = 'signup', isThemed = 
     
     try {
       // Call backend API to send OTP
-      await sendOTP(phoneNumber, '+91', mode);
+      await sendOTP(phoneNumber, '+91');
       console.log('📱 OTP sent successfully');
       
       setLoading(false);
       onNext(phoneNumber);
     } catch (err) {
-      if (!err?.requireSignup) {
-        console.error('❌ Failed to send OTP:', err);
-      }
+      console.error('❌ Failed to send OTP:', err);
       setError(err?.message || 'Failed to send code. Please try again.');
       setLoading(false);
     }
@@ -52,7 +50,7 @@ const PhoneInput = ({ onNext, onBack, onSwitchMode, mode = 'signup', isThemed = 
             <BiChevronLeft size={26} className="text-black" />
           </button>
           <h3 className="flex-1 text-center font-bold text-black text-[15px] pr-10">
-            {mode === 'login' ? 'Log in' : 'Sign up'}
+            Log in or Sign up
           </h3>
         </div>
       )}
@@ -87,30 +85,6 @@ const PhoneInput = ({ onNext, onBack, onSwitchMode, mode = 'signup', isThemed = 
          {error && (
            <div className="mb-6 flex flex-col items-center">
              <p className="text-[#fe2c55] text-xs font-semibold animate-shake">{error}</p>
-             {error.includes('sign up') && mode === 'login' && (
-               <button
-                 type="button"
-                 onClick={() => {
-                   setError('');
-                   (onSwitchMode || onBack)();
-                 }}
-                 className="mt-2 text-[13px] text-[#fe2c55] font-bold hover:underline"
-               >
-                 Switch to Sign up
-               </button>
-             )}
-             {error.includes('already registered') && mode === 'signup' && (
-               <button
-                 type="button"
-                 onClick={() => {
-                   setError('');
-                   (onSwitchMode || onBack)();
-                 }}
-                 className="mt-2 text-[13px] text-[#fe2c55] font-bold hover:underline"
-               >
-                 Switch to Log in
-               </button>
-             )}
            </div>
          )}
          {!error && <p className={`text-[11px] leading-relaxed mb-6 sm:mb-8 ${isThemed ? 'text-white/50' : 'text-gray-400'}`}>
@@ -120,10 +94,10 @@ const PhoneInput = ({ onNext, onBack, onSwitchMode, mode = 'signup', isThemed = 
          <button
            onClick={handleSendCode}
            disabled={loading || phoneNumber.length < 10}
-           className={`w-full min-h-[54px] rounded-full px-4 py-3.5 sm:py-4 font-bold text-[15px] sm:text-[16px] transition-all active:scale-[0.96] flex justify-center items-center gap-2 shadow-xl ${
+           className={`w-full min-h-[54px] rounded-full px-4 py-3.5 sm:py-4 font-bold text-[15px] sm:text-[16px] transition-all active:scale-[0.96] flex justify-center items-center gap-2 ${
              phoneNumber.length >= 10 
-              ? 'bg-[#fe2c55] text-white shadow-[#fe2c55]/30' 
-              : isThemed ? 'bg-white/10 text-white/60 shadow-none' : 'bg-gray-100 text-gray-300 shadow-none'
+              ? 'bg-[#fe2c55] text-white' 
+              : isThemed ? 'bg-white/10 text-white/60' : 'bg-gray-100 text-gray-300'
            }`}
          >
            {loading ? (

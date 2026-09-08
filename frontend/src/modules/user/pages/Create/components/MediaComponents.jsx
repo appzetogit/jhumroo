@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState, memo } from 'react';
 import { FILTER_PRESETS, ALL_FILTERS_MAP } from '../utils/createConstants';
-import { parseDurationSeconds } from '../utils/createUtils';
+import { parseDurationSeconds, computeAdjustmentFilterCss } from '../utils/createUtils';
 
 export const DynamicAudioDuration = ({ soundItem }) => {
   const [duration, setDuration] = useState(() => parseDurationSeconds(soundItem.duration));
@@ -27,7 +27,7 @@ export const MediaPreview = ({ image, rotation = 0, className = '', filter = 'No
   const getFilter = () => {
     const base = filter === 'Normal' ? '' : (ALL_FILTERS_MAP[filter] || FILTER_PRESETS[filter] || '');
     if (!adjustments) return base || 'none';
-    const adj = `brightness(${adjustments.brightness}%) contrast(${adjustments.contrast}%) saturate(${adjustments.saturate}%) hue-rotate(${adjustments.hueRotate}deg) invert(${adjustments.invert}%) grayscale(${adjustments.grayscale}%) sepia(${adjustments.sepia}%) blur(${adjustments.blur}px) opacity(${adjustments.opacity}%)`;
+    const adj = computeAdjustmentFilterCss(adjustments);
     return `${base} ${adj}`.trim() || 'none';
   };
 
@@ -46,8 +46,28 @@ export const MediaPreview = ({ image, rotation = 0, className = '', filter = 'No
           }}
         />
       )}
-      <div className="absolute inset-0 bg-gradient-to-b from-black/15 via-transparent to-black/25" />
-      {framed && <div className="absolute inset-0 ring-1 ring-white/10" />}
+      {/* Vignette Overlay */}
+      {adjustments && adjustments.vignette > 0 && (
+        <div
+          className="pointer-events-none absolute inset-0 z-10 transition-opacity duration-150"
+          style={{
+            background: `radial-gradient(circle at center, transparent 35%, rgba(0, 0, 0, ${adjustments.vignette * 0.009}) 95%, rgba(0, 0, 0, ${adjustments.vignette * 0.01}) 100%)`
+          }}
+        />
+      )}
+      {/* Grain Overlay */}
+      {adjustments && adjustments.grain > 0 && (
+        <div
+          className="pointer-events-none absolute inset-0 z-10 mix-blend-overlay transition-opacity duration-150"
+          style={{
+            opacity: adjustments.grain * 0.008,
+            backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")`,
+            backgroundRepeat: 'repeat'
+          }}
+        />
+      )}
+      <div className="absolute inset-0 bg-gradient-to-b from-black/15 via-transparent to-black/25 pointer-events-none" />
+      {framed && <div className="absolute inset-0 ring-1 ring-white/10 pointer-events-none" />}
     </div>
   );
 };

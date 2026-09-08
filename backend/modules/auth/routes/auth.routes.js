@@ -30,7 +30,11 @@ router.get('/check-username/:username', checkUsername);
 // Protected routes
 router.post('/complete-profile', protect, registerValidation, validate, completeProfile);
 router.get('/me', protect, getMe);
-router.post('/logout', protect, logout);
+router.post('/logout', (req, res, next) => {
+  protect(req, res, () => {
+    next();
+  }).catch(() => next());
+}, logout);
 router.post('/interests', protect, updateInterests);
 
 // FCM token update reference route

@@ -188,3 +188,25 @@ export const PREVIEW_TOOLS = [
   { id: 'overlay', label: 'Overlay' },
   { id: 'volume', label: 'Volume' },
 ];
+
+export const DEFAULT_ADJUSTMENTS = {
+  autoAdjust: 0,
+  brightness: 0,
+  contrast: 0,
+  saturate: 0,
+  brilliance: 0,
+  sharpness: 0,
+  hueRotate: 0,
+  shadow: 0,
+  temp: 0,
+  tint: 0,
+  fade: 0,
+  vignette: 0,
+  grain: 0,
+  blur: 0,
+  opacity: 100,
+  grayscale: 0,
+  sepia: 0,
+  invert: 0,
+};
+

@@ -288,7 +288,7 @@ const ReelsGrowthChart = () => {
                 backgroundColor: '#ffffff',
                 border: '1.5px solid var(--admin-border)',
                 borderRadius: '12px',
-                boxShadow: '0 8px 24px rgba(254, 44, 85, 0.08)',
+                boxShadow: '0 8px 24px rgba(0, 0, 0, 0.08)',
                 color: 'var(--admin-text)',
                 fontSize: '12px',
                 fontFamily: 'inherit'

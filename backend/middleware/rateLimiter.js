@@ -1,14 +1,24 @@
 import rateLimit from 'express-rate-limit';
 
+const isDev = process.env.NODE_ENV !== 'production';
+const isLocal = (req) => {
+  const ip = req.ip || req.connection?.remoteAddress || '';
+  return isDev || ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1' || ip.includes('localhost');
+};
+
 /**
  * General API rate limiter
  */
 export const rateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 1000, // Increased for development/testing
-  message: 'Too many requests from this IP, please try again later',
+  max: isDev ? 100000 : 2000,
+  message: {
+    success: false,
+    message: 'Too many requests from this IP, please try again later'
+  },
   standardHeaders: true,
   legacyHeaders: false,
+  skip: (req) => isLocal(req),
 });
 
 /**
@@ -16,9 +26,13 @@ export const rateLimiter = rateLimit({
  */
 export const authRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // Increased for development
-  message: 'Too many authentication attempts, please try again later',
+  max: isDev ? 5000 : 100,
+  message: {
+    success: false,
+    message: 'Too many authentication attempts, please try again later'
+  },
   skipSuccessfulRequests: true,
+  skip: (req) => isLocal(req),
 });
 
 /**
@@ -26,9 +40,13 @@ export const authRateLimiter = rateLimit({
  */
 export const otpRateLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour
-  max: 50, // Increased for development
-  message: 'Too many OTP requests, please try again later',
+  max: isDev ? 5000 : 50,
+  message: {
+    success: false,
+    message: 'Too many OTP requests, please try again later'
+  },
   skipSuccessfulRequests: true,
+  skip: (req) => isLocal(req),
 });
 
 /**
@@ -36,6 +54,11 @@ export const otpRateLimiter = rateLimit({
  */
 export const uploadRateLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour
-  max: 20, // Limit each IP to 20 uploads per hour
-  message: 'Too many uploads, please try again later',
+  max: isDev ? 1000 : 30,
+  message: {
+    success: false,
+    message: 'Too many uploads, please try again later'
+  },
+  skip: (req) => isLocal(req),
 });
+
