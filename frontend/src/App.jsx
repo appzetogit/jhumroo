@@ -35,6 +35,11 @@ import { TermsAndConditionPage, PrivacyPolicyPage } from './modules/user/pages/S
 import AdsManagerPage from './modules/user/pages/Settings/AdsManagerPage';
 import CreateAdPage from './modules/user/pages/Settings/CreateAdPage';
 import AdAnalyticsPage from './modules/user/pages/Settings/AdAnalyticsPage';
+import ActivityCenterPage from './modules/user/pages/Settings/ActivityCenterPage';
+import QrProfilePage from './modules/user/pages/Settings/QrProfilePage';
+import ScreenTimePage from './modules/user/pages/Settings/ScreenTimePage';
+import SearchHistoryPage from './modules/user/pages/Settings/SearchHistoryPage';
+import WatchHistoryPage from './modules/user/pages/Settings/WatchHistoryPage';
 import Splash from './modules/user/components/common/Splash';
 import AuthPage from './modules/user/pages/Auth/AuthPage';
 import OnboardingPage from './modules/user/pages/Auth/components/OnboardingPage';
@@ -61,11 +66,44 @@ import AdminLayout from './modules/admin/AdminLayout';
 import AdminLogin from './modules/admin/pages/AdminLogin';
 import { useAuth } from './context/AuthContext';
 import adminAuthService from './services/adminAuthService';
+import userService from './services/userService';
 import LenisProvider from './components/LenisProvider';
+import { ensureInitialScreenTimeData, recordScreenTimeMinutes } from './utils/screenTimeTracker';
 
 const MainLayout = ({ onLogout }) => {
   const { pathname } = useLocation();
   const [showNav, setShowNav] = useState(true);
+
+  // Initialize and track active screen time continuously across app
+  useEffect(() => {
+    ensureInitialScreenTimeData();
+
+    let lastActiveTime = Date.now();
+    const handleActivity = () => {
+      lastActiveTime = Date.now();
+    };
+
+    window.addEventListener('touchstart', handleActivity, { passive: true });
+    window.addEventListener('mousemove', handleActivity, { passive: true });
+    window.addEventListener('keydown', handleActivity, { passive: true });
+    window.addEventListener('scroll', handleActivity, { passive: true });
+
+    // Every 30s of active user interaction, record 0.5 minutes (30s) of screen time
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible' && Date.now() - lastActiveTime < 60000) {
+        recordScreenTimeMinutes(0.5);
+        userService.recordScreenTimeHeartbeat(30).catch(() => {});
+      }
+    }, 30000);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('touchstart', handleActivity);
+      window.removeEventListener('mousemove', handleActivity);
+      window.removeEventListener('keydown', handleActivity);
+      window.removeEventListener('scroll', handleActivity);
+    };
+  }, []);
 
   // Hide nav on certain pages if needed, and handle theme
   useEffect(() => {
@@ -131,6 +169,15 @@ const MainLayout = ({ onLogout }) => {
         <Route path="/settings/ads-manager" element={<AdsManagerPage />} />
         <Route path="/settings/ads-manager/create" element={<CreateAdPage />} />
         <Route path="/settings/ads-manager/analytics/:id" element={<AdAnalyticsPage />} />
+        <Route path="/settings/activity-center" element={<ActivityCenterPage />} />
+        <Route path="/settings/activity-center/qr-profile" element={<QrProfilePage />} />
+        <Route path="/settings/activity-center/screen-time" element={<ScreenTimePage />} />
+        <Route path="/settings/activity-center/search-history" element={<SearchHistoryPage />} />
+        <Route path="/settings/activity-center/watch-history" element={<WatchHistoryPage />} />
+        <Route path="/settings/qr-code" element={<QrProfilePage />} />
+        <Route path="/settings/screen-time" element={<ScreenTimePage />} />
+        <Route path="/settings/search-history" element={<SearchHistoryPage />} />
+        <Route path="/settings/watch-history" element={<WatchHistoryPage />} />
         <Route path="/settings/language" element={<LanguagePage />} />
         <Route path="/settings/help-center" element={<HelpCenterPage />} />
         <Route path="/settings/support" element={<SupportPage />} />

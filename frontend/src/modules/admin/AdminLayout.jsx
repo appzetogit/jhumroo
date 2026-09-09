@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { NavLink, Route, Routes, Navigate, useLocation } from 'react-router-dom';
 import {
   BiBarChartAlt2,
@@ -39,7 +39,6 @@ import AdminAdsPaymentRecords from './pages/AdminAdsPaymentRecords';
 import { useAdminConfig } from '../../context/AdminConfigContext';
 import { useNavigate } from 'react-router-dom';
 import adminAuthService from '../../services/adminAuthService';
-import api from '../../services/api';
 
 const isVeryLightHex = (hex) => {
   if (typeof hex !== 'string') {
@@ -89,21 +88,6 @@ const AdminLayout = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const currentNavItem = NAV_ITEMS.find(item => location.pathname.startsWith(item.path));
-  const [hasUnreadAlerts, setHasUnreadAlerts] = useState(false);
-
-  useEffect(() => {
-    const fetchUnreadAlerts = async () => {
-      try {
-        const res = await api.get('/admin/notifications/alerts');
-        if (res.success) {
-          setHasUnreadAlerts((res.alerts || []).some(a => !a.isRead));
-        }
-      } catch (err) {
-        console.error('Failed to fetch admin alerts:', err);
-      }
-    };
-    fetchUnreadAlerts();
-  }, [location.pathname]);
 
   const branding = config?.branding || {};
   const palette = branding.palette || {};
@@ -169,33 +153,6 @@ const AdminLayout = () => {
         <header className="admin-topbar">
           <div className="admin-topbar-title">{currentNavItem?.label || ''}</div>
           <div className="admin-top-actions">
-            <button
-              type="button"
-              className="admin-icon-btn"
-              aria-label="Notifications"
-              onClick={() => {
-                setHasUnreadAlerts(false);
-                navigate('/admin/notifications');
-              }}
-              style={{ position: 'relative' }}
-            >
-              <BiBell size={18} />
-              {hasUnreadAlerts && (
-                <span
-                  aria-hidden="true"
-                  style={{
-                    position: 'absolute',
-                    top: 4,
-                    right: 4,
-                    width: 8,
-                    height: 8,
-                    borderRadius: '50%',
-                    background: '#fe2c55',
-                    border: '1.5px solid var(--admin-surface, #fff)'
-                  }}
-                />
-              )}
-            </button>
             <button 
               type="button" 
               className="admin-profile"

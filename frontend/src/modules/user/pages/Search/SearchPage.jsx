@@ -5,6 +5,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../../../context/AuthContext';
 import userService from '../../../../services/userService';
 import followService from '../../../../services/followService';
+import { addSearchItem } from '../../../../utils/searchHistoryStorage';
 
 // Default silhouette avatar SVG component matching image 2 & zoomed crop screenshot
 const DefaultAvatar = () => (
@@ -255,7 +256,15 @@ const SearchPage = () => {
                   <UserRow
                     key={user.id}
                     user={user}
-                    onOpenUser={() => navigate(`/user/${user.username}`)}
+                    onOpenUser={() => {
+                      addSearchItem(`@${user.username}`, {
+                        type: 'user',
+                        username: user.username,
+                        displayName: user.displayName,
+                        avatar: user.avatar,
+                      });
+                      navigate(`/user/${user.username}`);
+                    }}
                     onToggleFollow={() => handleToggleFollow(user)}
                     onRemove={(e) => handleRemoveUser(user.id, e)}
                   />

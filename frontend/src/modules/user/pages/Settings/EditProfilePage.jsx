@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BiChevronLeft, BiChevronRight, BiCamera, BiX, BiCopy, BiCheck } from 'react-icons/bi';
+import { BiChevronLeft, BiChevronRight, BiCamera, BiX } from 'react-icons/bi';
 import { useAuth } from '../../../../context/AuthContext';
 import { useToast } from '../../../../context/ToastContext';
 import userService from '../../../../services/userService';
@@ -11,45 +11,63 @@ const EditProfilePage = () => {
     const { user: currentUser, updateUser } = useAuth();
     const { showToast } = useToast();
 
-    // View state: 'main' | 'name' | 'username' | 'bio'
+    // View state: 'main' | 'name' | 'username' | 'bio' | 'email'
     const [activeView, setActiveView] = useState('main');
 
     // Values in state
     const [fullName, setFullName] = useState(currentUser?.fullName || '');
     const [username, setUsername] = useState(currentUser?.username || '');
+    const [email, setEmail] = useState(currentUser?.email || '');
     const [bio, setBio] = useState(currentUser?.bio || '');
 
     // Temporary editing values for sub-views
     const [tempName, setTempName] = useState(currentUser?.fullName || '');
     const [tempUsername, setTempUsername] = useState(currentUser?.username || '');
+    const [tempEmail, setTempEmail] = useState(currentUser?.email || '');
     const [tempBio, setTempBio] = useState(currentUser?.bio || '');
 
     const [saving, setSaving] = useState(false);
     const [uploading, setUploading] = useState(false);
     const [showPhotoPicker, setShowPhotoPicker] = useState(false);
-    const [copied, setCopied] = useState(false);
 
     // Synchronize with currentUser updates
     useEffect(() => {
         if (currentUser) {
             setFullName(currentUser.fullName || '');
             setUsername(currentUser.username || '');
+            setEmail(currentUser.email || '');
             setBio(currentUser.bio || '');
         }
     }, [currentUser]);
 
-    // Handle copying profile link
-    const handleCopyProfileUrl = (e) => {
-        e?.stopPropagation?.();
-        const host = window.location.host.includes('localhost') ? 'jhumroo.com' : (window.location.host || 'jhumroo.com');
-        const urlToCopy = `https://${host}/@${username || currentUser?.username || 'user'}`;
-        navigator.clipboard.writeText(urlToCopy).then(() => {
-            setCopied(true);
-            showToast('Link copied to clipboard', 'success');
-            setTimeout(() => setCopied(false), 2000);
-        }).catch(() => {
-            showToast('Failed to copy link', 'error');
-        });
+    // Save Email
+    const handleSaveEmail = async () => {
+        const cleanEmail = tempEmail.trim().toLowerCase();
+        if (cleanEmail) {
+            const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+            if (!emailRegex.test(cleanEmail)) {
+                showToast('Please enter a valid email address (e.g. name@domain.com)', 'error');
+                return;
+            }
+        }
+
+        setSaving(true);
+        try {
+            const response = await userService.updateProfile({
+                email: cleanEmail
+            });
+            if (response.success) {
+                setEmail(cleanEmail);
+                updateUser(response.user);
+                showToast('Email updated successfully!', 'success');
+                setActiveView('main');
+            }
+        } catch (error) {
+            console.error('Failed to update email:', error);
+            showToast(error?.message || 'Failed to update email', 'error');
+        } finally {
+            setSaving(false);
+        }
     };
 
     // Save Name
@@ -353,6 +371,65 @@ const EditProfilePage = () => {
         );
     }
 
+    // Sub-view: Edit Email
+    if (activeView === 'email') {
+        const isModified = tempEmail.trim().toLowerCase() !== (email || '').toLowerCase();
+        return (
+            <div className="min-h-screen bg-white flex flex-col font-sans">
+                {/* Header */}
+                <div className="flex items-center justify-between px-4 pt-4 pb-2 border-b border-gray-100">
+                    <button 
+                        onClick={() => setActiveView('main')}
+                        className="text-[16px] text-black active:opacity-60 font-normal py-1"
+                    >
+                        Cancel
+                    </button>
+                    <button 
+                        onClick={handleSaveEmail}
+                        disabled={saving || !isModified}
+                        className={`text-[16px] font-semibold py-1 transition-colors ${
+                            isModified && !saving 
+                                ? 'text-[#FE2C55] active:opacity-75 cursor-pointer' 
+                                : 'text-[#FE2C55]/40 cursor-not-allowed'
+                        }`}
+                    >
+                        {saving ? 'Saving...' : 'Save'}
+                    </button>
+                </div>
+
+                {/* Form Body */}
+                <div className="p-4 flex-1">
+                    <h1 className="text-[22px] font-bold text-black tracking-tight mb-2">Email</h1>
+                    <p className="text-[#8a8b91] text-[13.5px] leading-snug mb-4">
+                        Enter your email address to receive important updates and notifications.
+                    </p>
+
+                    {/* Input Container */}
+                    <div className="bg-[#f1f1f2] rounded-xl px-4 py-3 flex items-center justify-between">
+                        <input 
+                            type="email"
+                            value={tempEmail}
+                            maxLength={100}
+                            autoFocus
+                            onChange={(e) => setTempEmail(e.target.value)}
+                            placeholder="Add email"
+                            className="bg-transparent text-black text-[15px] font-medium outline-none w-full caret-[#FE2C55]"
+                        />
+                        {tempEmail.length > 0 && (
+                            <button 
+                                type="button"
+                                onClick={() => setTempEmail('')}
+                                className="w-5 h-5 rounded-full bg-[#8a8b91]/70 text-white flex items-center justify-center shrink-0 ml-2 active:scale-90 transition-transform"
+                            >
+                                <BiX size={15} />
+                            </button>
+                        )}
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
 
     // Main Edit Profile View
     return (
@@ -379,7 +456,7 @@ const EditProfilePage = () => {
                         className="relative cursor-pointer active:scale-95 transition-transform"
                         onClick={() => setShowPhotoPicker(true)}
                     >
-                        <div className="w-[96px] h-[96px] rounded-full overflow-hidden bg-gray-200 relative shadow-inner">
+                        <div className="w-[124px] h-[124px] rounded-full overflow-hidden bg-gray-200 relative shadow-md">
                             <img 
                                 src={
                                     currentUser?.profilePicture?.url ||
@@ -390,12 +467,12 @@ const EditProfilePage = () => {
                             />
                             {/* Dark Camera Overlay in Center */}
                             <div className="absolute inset-0 bg-black/35 flex items-center justify-center">
-                                <BiCamera size={26} className="text-white" />
+                                <BiCamera size={32} className="text-white" />
                             </div>
                             {/* Upload spinner */}
                             {uploading && (
                                 <div className="absolute inset-0 flex items-center justify-center bg-black/40">
-                                    <div className="w-6 h-6 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                    <div className="w-8 h-8 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                                 </div>
                             )}
                         </div>
@@ -403,7 +480,7 @@ const EditProfilePage = () => {
                     {/* Change Photo Teal Link */}
                     <button
                         onClick={() => setShowPhotoPicker(true)}
-                        className="text-[#009688] text-[14px] font-semibold mt-2.5 active:opacity-75 transition-opacity"
+                        className="text-[#009688] text-[15px] font-semibold mt-3 active:opacity-75 transition-opacity"
                     >
                         {uploading ? 'Uploading...' : 'Change photo'}
                     </button>
@@ -446,25 +523,33 @@ const EditProfilePage = () => {
                             </div>
                         </div>
 
-                        {/* Profile Link Row */}
+                        {/* Email Row (Editable) */}
                         <div 
-                            onClick={handleCopyProfileUrl}
-                            className="flex items-center justify-between px-4 py-4 cursor-pointer active:bg-gray-50/80 transition-colors"
+                            onClick={() => {
+                                setTempEmail(email);
+                                setActiveView('email');
+                            }}
+                            className="flex items-center justify-between px-4 py-4 cursor-pointer active:bg-gray-50/80 transition-colors border-b border-gray-100/80"
                         >
-                            <span className="text-[#161823] text-[14.5px] font-medium truncate max-w-[80%]">
-                                jhumroo.com/@{username || 'user'}
-                            </span>
-                            <button 
-                                onClick={handleCopyProfileUrl}
-                                className="text-[#737373] hover:text-black p-1 active:scale-90 transition-transform"
-                                aria-label="Copy profile link"
-                            >
-                                {copied ? (
-                                    <BiCheck size={18} className="text-[#00C48C]" />
-                                ) : (
-                                    <BiCopy size={18} />
-                                )}
-                            </button>
+                            <span className="text-[#737373] text-[15px] font-normal">Email</span>
+                            <div className="flex items-center gap-1.5 max-w-[65%]">
+                                <span className={`text-[15px] truncate ${email ? 'text-[#161823] font-medium' : 'text-[#8a8b91] font-normal'}`}>
+                                    {email || 'Add email'}
+                                </span>
+                                <BiChevronRight size={22} className="text-[#c4c4c4] shrink-0" />
+                            </div>
+                        </div>
+
+                        {/* Phone Number Row (Non-editable) */}
+                        <div className="flex items-center justify-between px-4 py-4">
+                            <span className="text-[#737373] text-[15px] font-normal">Phone number</span>
+                            <div className="flex items-center gap-1.5 max-w-[65%]">
+                                <span className={`text-[15px] truncate ${currentUser?.phoneNumber ? 'text-[#161823] font-medium' : 'text-[#8a8b91] font-normal'}`}>
+                                    {currentUser?.phoneNumber 
+                                        ? `${currentUser?.countryCode ? currentUser.countryCode + ' ' : ''}${currentUser.phoneNumber}`
+                                        : 'Not provided'}
+                                </span>
+                            </div>
                         </div>
                     </div>
                 </div>

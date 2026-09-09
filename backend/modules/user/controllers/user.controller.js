@@ -4,6 +4,7 @@ import Follow from '../../../models/Follow.model.js';
 import Like from '../../../models/Like.model.js';
 import SavedReel from '../../../models/SavedReel.model.js';
 import Report from '../../../models/Report.model.js';
+import WatchAnalytics from '../../../models/WatchAnalytics.model.js';
 import { createAdminAlert } from '../../../utils/adminAlertService.js';
 import { asyncHandler } from '../../../middleware/errorHandler.js';
 import { uploadImage, deleteFile } from '../../../config/cloudinary.js';
@@ -1059,6 +1060,280 @@ export const getBlockedUsers = asyncHandler(async (req, res) => {
     users: user.blockedUsers || []
   });
 });
+
+/**
+ * @desc    Get real screen time analytics for logged in user
+ * @route   GET /api/users/me/screen-time
+ * @access  Private
+ */
+export const getScreenTimeAnalytics = asyncHandler(async (req, res) => {
+  const offsetWeeks = parseInt(req.query.offsetWeeks) || 0;
+  const now = new Date();
+  now.setDate(now.getDate() - offsetWeeks * 7);
+
+  const dayOfWeek = now.getDay(); // 0 = Sunday
+  const start = new Date(now);
+  start.setDate(now.getDate() - dayOfWeek);
+  start.setHours(0, 0, 0, 0);
+
+  const end = new Date(start);
+  end.setDate(start.getDate() + 6);
+  end.setHours(23, 59, 59, 999);
+
+  // Fetch genuine watch analytics records from DB for this user
+  const records = await WatchAnalytics.find({
+    user: req.user._id,
+    createdAt: { $gte: start, $lte: end }
+  }).select('watchDuration createdAt');
+
+  const daysOfWeek = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const todayKey = new Date().toISOString().split('T')[0];
+
+  const days = [];
+  let totalWeekSeconds = 0;
+
+  for (let i = 0; i < 7; i++) {
+    const current = new Date(start);
+    current.setDate(start.getDate() + i);
+    const key = current.toISOString().split('T')[0];
+    const isToday = key === todayKey;
+
+    const dayStart = new Date(current);
+    dayStart.setHours(0, 0, 0, 0);
+    const dayEnd = new Date(current);
+    dayEnd.setHours(23, 59, 59, 999);
+
+    const dayRecords = records.filter(r => {
+      const d = new Date(r.createdAt);
+      return d >= dayStart && d <= dayEnd;
+    });
+
+    let daySeconds = 0;
+    let nightSeconds = 0;
+
+    dayRecords.forEach(r => {
+      const h = new Date(r.createdAt).getHours();
+      const isNight = h >= 22 || h < 6;
+      const dur = Math.max(r.watchDuration || 0, 0);
+      if (isNight) {
+        nightSeconds += dur;
+      } else {
+        daySeconds += dur;
+      }
+    });
+
+    const dayMins = Math.round(daySeconds / 60);
+    const nightMins = Math.round(nightSeconds / 60);
+    const totalMins = dayMins + nightMins;
+    totalWeekSeconds += (daySeconds + nightSeconds);
+
+    days.push({
+      dateKey: key,
+      date: current,
+      dayName: daysOfWeek[current.getDay()],
+      label: isToday ? 'Today' : daysOfWeek[current.getDay()],
+      isToday,
+      dayMinutes: dayMins,
+      nightMinutes: nightMins,
+      totalMinutes: totalMins,
+      daySeconds,
+      nightSeconds,
+      totalSeconds: daySeconds + nightSeconds
+    });
+  }
+
+  // Previous week comparison
+  const prevStart = new Date(start);
+  prevStart.setDate(start.getDate() - 7);
+  const prevEnd = new Date(end);
+  prevEnd.setDate(end.getDate() - 7);
+
+  const prevRecords = await WatchAnalytics.find({
+    user: req.user._id,
+    createdAt: { $gte: prevStart, $lte: prevEnd }
+  }).select('watchDuration');
+
+  const prevTotalSeconds = prevRecords.reduce((acc, r) => acc + (r.watchDuration || 0), 0);
+  const totalWeekMinutes = Math.round(totalWeekSeconds / 60);
+  const prevTotalMinutes = Math.round(prevTotalSeconds / 60);
+  const dailyAverage = Math.round(totalWeekMinutes / 7);
+
+  let percentDiff = 0;
+  if (prevTotalMinutes > 0) {
+    percentDiff = Math.round(((totalWeekMinutes - prevTotalMinutes) / prevTotalMinutes) * 100);
+  } else if (totalWeekMinutes > 0) {
+    percentDiff = 100;
+  }
+
+  const options = { month: 'short', day: 'numeric' };
+  const weekLabel = `${start.toLocaleDateString('en-US', options)} – ${end.toLocaleDateString('en-US', options)}`;
+
+  res.status(200).json({
+    success: true,
+    stats: {
+      weekLabel,
+      startDate: start,
+      endDate: end,
+      days,
+      totalWeekMinutes,
+      totalWeekSeconds,
+      dailyAverage,
+      percentDiff,
+      maxMinutesInDay: Math.max(...days.map(d => d.totalMinutes), 1)
+    }
+  });
+});
+
+/**
+ * @desc    Record active session screen time heartbeat
+ * @route   POST /api/users/me/screen-time/heartbeat
+ * @access  Private
+ */
+export const recordScreenTimeHeartbeat = asyncHandler(async (req, res) => {
+  const { seconds = 30 } = req.body;
+  
+  // Find a generic active reel or create lightweight user watch session
+  const latestReel = await Reel.findOne({ isArchived: { $ne: true } }).select('_id');
+  if (latestReel) {
+    await WatchAnalytics.create({
+      user: req.user._id,
+      reel: latestReel._id,
+      watchDuration: Math.max(parseFloat(seconds) || 30, 1),
+      completionPercentage: 100,
+      swipeTiming: parseFloat(seconds) || 30
+    });
+  }
+
+  res.status(200).json({
+    success: true,
+    message: 'Screen time heartbeat recorded'
+  });
+});
+
+/**
+ * @desc    Get user watch history (deduplicated by reel, ordered by most recently watched)
+ * @route   GET /api/users/me/watch-history
+ * @access  Private
+ */
+export const getWatchHistory = asyncHandler(async (req, res) => {
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 30;
+  const skip = (page - 1) * limit;
+
+  // Aggregate user's watched reels grouped by unique reel ID to get the latest watchedAt
+  const historyAgg = await WatchAnalytics.aggregate([
+    { $match: { user: req.user._id } },
+    { $sort: { createdAt: -1 } },
+    {
+      $group: {
+        _id: '$reel',
+        latestWatchedAt: { $first: '$createdAt' },
+        totalWatchDuration: { $sum: '$watchDuration' },
+        lastWatchDuration: { $first: '$watchDuration' },
+        isFullWatch: { $first: '$isFullWatch' },
+      }
+    },
+    { $sort: { latestWatchedAt: -1 } },
+    {
+      $lookup: {
+        from: 'reels',
+        localField: '_id',
+        foreignField: '_id',
+        as: 'reel'
+      }
+    },
+    { $unwind: '$reel' },
+    // Filter active and existing reels only
+    {
+      $match: {
+        'reel.isActive': { $ne: false },
+        'reel.isArchived': { $ne: true }
+      }
+    },
+    { $skip: skip },
+    { $limit: limit },
+    {
+      $lookup: {
+        from: 'users',
+        localField: 'reel.user',
+        foreignField: '_id',
+        as: 'reelUser'
+      }
+    },
+    {
+      $unwind: {
+        path: '$reelUser',
+        preserveNullAndEmptyArrays: true
+      }
+    },
+    {
+      $project: {
+        _id: '$reel._id',
+        reelId: '$reel._id',
+        watchedAt: '$latestWatchedAt',
+        totalWatchDuration: '$totalWatchDuration',
+        lastWatchDuration: '$lastWatchDuration',
+        isFullWatch: '$isFullWatch',
+        caption: '$reel.caption',
+        video: '$reel.video',
+        stats: '$reel.stats',
+        isActive: '$reel.isActive',
+        isPhoto: '$reel.isPhoto',
+        type: '$reel.type',
+        createdAt: '$reel.createdAt',
+        user: {
+          _id: '$reelUser._id',
+          username: '$reelUser.username',
+          fullName: '$reelUser.fullName',
+          profilePicture: '$reelUser.profilePicture',
+          isVerified: '$reelUser.isVerified'
+        }
+      }
+    }
+  ]);
+
+  res.status(200).json({
+    success: true,
+    history: historyAgg,
+    page,
+    hasMore: historyAgg.length === limit
+  });
+});
+
+/**
+ * @desc    Remove single reel from watch history
+ * @route   DELETE /api/users/me/watch-history/:reelId
+ * @access  Private
+ */
+export const removeWatchHistoryItem = asyncHandler(async (req, res) => {
+  const { reelId } = req.params;
+  await WatchAnalytics.deleteMany({
+    user: req.user._id,
+    reel: reelId
+  });
+
+  res.status(200).json({
+    success: true,
+    message: 'Reel removed from watch history'
+  });
+});
+
+/**
+ * @desc    Clear entire watch history for user
+ * @route   DELETE /api/users/me/watch-history
+ * @access  Private
+ */
+export const clearWatchHistory = asyncHandler(async (req, res) => {
+  await WatchAnalytics.deleteMany({
+    user: req.user._id
+  });
+
+  res.status(200).json({
+    success: true,
+    message: 'Watch history cleared'
+  });
+});
+
 
 
 

@@ -1367,8 +1367,17 @@ export const addView = asyncHandler(async (req, res) => {
   }
 
   // ─── Unique View Logic ───
-  // If user is logged in, only count view if they haven't seen it before
+  // If user is logged in, record WatchAnalytics and unique view
   if (userId) {
+    // Asynchronously record watch analytics for watch history tracking
+    WatchAnalytics.create({
+      user: userId,
+      reel: reelId,
+      watchDuration: 2,
+      completionPercentage: 20,
+      isFullWatch: false
+    }).catch(() => {});
+
     const hasViewed = reel.views.some(v => v.user && v.user.toString() === userId.toString());
     
     if (!hasViewed) {

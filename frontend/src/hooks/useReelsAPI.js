@@ -94,7 +94,7 @@ export const useReelsAPI = () => {
     setLoading(true);
     try {
       const response = await reelService.getReelById(reelId);
-      if (response.success) {
+      if (response && response.success && response.reel) {
         const reel = response.reel;
         const normalizedReel = {
           ...reel,
@@ -113,14 +113,16 @@ export const useReelsAPI = () => {
         };
         setReels([normalizedReel]);
         setHasMore(false);
+      } else {
+        fetchFeed('foryou', true);
       }
     } catch (err) {
-      console.error('Error fetching single reel:', err);
-      setError(err.message || 'Failed to fetch reel');
+      // Gracefully fall back to feed if reel was removed or not found
+      fetchFeed('foryou', true);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [fetchFeed]);
 
   return { 
     reels, 

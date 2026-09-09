@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { BiChevronLeft, BiChevronRight, BiUser, BiLockAlt, BiShieldAlt, BiBell, BiMoon, BiGlobe, BiQuestionMark, BiLogOut, BiFile, BiTrash, BiSupport, BiHelpCircle } from 'react-icons/bi';
+import { BiChevronLeft, BiChevronRight, BiUser, BiLockAlt, BiShieldAlt, BiBell, BiMoon, BiGlobe, BiQuestionMark, BiLogOut, BiFile, BiTrash, BiSupport, BiHelpCircle, BiPulse } from 'react-icons/bi';
 import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../../../../context/ThemeContext';
 import { useAuth } from '../../../../context/AuthContext';
@@ -22,6 +22,7 @@ const SettingsPage = ({ onLogout }) => {
       bell: BiBell,
       moon: BiMoon,
       globe: BiGlobe,
+      activity: BiPulse,
       help: BiQuestionMark,
       helpCircle: BiHelpCircle,
       support: BiSupport,
@@ -89,7 +90,7 @@ const SettingsPage = ({ onLogout }) => {
     return (
         <div className="page-container pb-0 theme-surface-page flex flex-col min-h-screen">
             {/* Header */}
-            <div className="flex items-center justify-between px-4 pt-6 pb-6 shrink-0 relative">
+            <div className="flex items-center justify-between px-4 pt-4 pb-3 shrink-0 relative">
                 <div 
                   className="theme-icon-button w-10 h-10 rounded-full flex items-center justify-center cursor-pointer active:scale-95 transition-transform z-10"
                   onClick={() => navigate(-1)}
@@ -103,7 +104,7 @@ const SettingsPage = ({ onLogout }) => {
             <div className={`scrollable flex-1 px-4 pb-8 ${showLogoutModal ? 'overflow-hidden' : ''}`}>
                 {/* User Profile Section */}
                 <div 
-                  className="theme-panel-card rounded-[18px] p-4 flex items-center justify-between mb-4 shadow-sm"
+                  className="theme-panel-card rounded-[18px] p-4 flex items-center justify-between mb-3 shadow-sm"
                 >
                     <div className="flex items-center gap-3">
                         <div className="w-12 h-12 rounded-full overflow-hidden shrink-0 border border-white/10 bg-black/20">
@@ -123,7 +124,7 @@ const SettingsPage = ({ onLogout }) => {
                 {/* Upgrade to Premium Card */}
                 <div 
                   onClick={() => navigate('/profile/premium')}
-                  className="w-full bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-600 rounded-[18px] p-4 text-white flex items-center justify-between shadow-md shadow-yellow-100/50 cursor-pointer active:scale-[0.98] transition-all border border-white/20 hover:brightness-105 mb-8"
+                  className="w-full bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-600 rounded-[18px] p-4 text-white flex items-center justify-between shadow-md shadow-yellow-100/50 cursor-pointer active:scale-[0.98] transition-all border border-white/20 hover:brightness-105 mb-3"
                 >
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center shrink-0 border border-white/30 backdrop-blur-md">
@@ -165,10 +166,9 @@ const SettingsPage = ({ onLogout }) => {
                   </div>
                 </div>
 
-                {sections.map((section, idx) => (
-                    <div key={idx} className="mb-6">
-                        <h4 className="theme-section-title text-[11px] font-bold uppercase tracking-widest mb-3 ml-1">{section.title}</h4>
-                        <div className="theme-panel-card rounded-[18px] overflow-hidden shadow-sm">
+                <div className="flex flex-col gap-3">
+                    {sections.map((section, idx) => (
+                        <div key={idx} className="theme-panel-card rounded-[18px] overflow-hidden shadow-sm">
                             {section.items.map((item, itemIdx) => {
                                 const isLast = itemIdx === section.items.length - 1;
                                 return (
@@ -201,8 +201,8 @@ const SettingsPage = ({ onLogout }) => {
                                 );
                             })}
                         </div>
-                    </div>
-                ))}
+                    ))}
+                </div>
             </div>
 
             {showLogoutModal && (

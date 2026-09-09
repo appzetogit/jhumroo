@@ -15,7 +15,12 @@ import {
   deleteAccount,
   toggleBlockCommenter,
   getBlockedCommenters,
-  getBlockedUsers
+  getBlockedUsers,
+  getScreenTimeAnalytics,
+  recordScreenTimeHeartbeat,
+  getWatchHistory,
+  removeWatchHistoryItem,
+  clearWatchHistory
 } from '../controllers/user.controller.js';
 import {
   getPreferences,
@@ -43,6 +48,11 @@ router.put('/profile', protect, profileUpdateValidation, validate, updateProfile
 router.post('/profile-picture', protect, uploadImage, handleMulterError, uploadProfilePicture);
 router.get('/me/liked-reels', protect, getLikedReels);
 router.get('/me/saved-reels', protect, getSavedReels);
+router.get('/me/screen-time', protect, getScreenTimeAnalytics);
+router.post('/me/screen-time/heartbeat', protect, recordScreenTimeHeartbeat);
+router.get('/me/watch-history', protect, getWatchHistory);
+router.delete('/me/watch-history/:reelId', protect, removeWatchHistoryItem);
+router.delete('/me/watch-history', protect, clearWatchHistory);
 router.post('/fcm-token', protect, updateFCMToken);
 router.delete('/profile', protect, deleteAccount);
 

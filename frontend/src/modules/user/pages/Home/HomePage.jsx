@@ -193,7 +193,7 @@ const HomePage = () => {
   const handleTabChange = (nextTab) => {
     setCurrentTab(nextTab);
     setActiveVideoIndex(0);
-    if (isSearchFeed) navigate('/', { replace: true });
+    if (reelId || isSearchFeed) navigate('/', { replace: true });
     if (containerRef.current) containerRef.current.scrollTop = 0;
   };
 
@@ -220,33 +220,27 @@ const HomePage = () => {
       <div className="absolute top-[calc(var(--safe-area-top)+8px)] left-0 w-full flex justify-between items-center px-4 z-[50] pointer-events-none">
         <div className="w-8" />
         <div className="flex items-center gap-6 pointer-events-auto">
-          {reelId ? (
-            <div className="flex items-center gap-1 text-white font-bold cursor-pointer drop-shadow-md" onClick={() => navigate('/')}>
-              <BiChevronLeft size={28} /> <span>Back</span>
-            </div>
-          ) : (
-            reelSections.map((section) => {
-              const isActive = currentTab === section.id;
-              return (
-                <div
-                  key={section.id}
-                  className="relative cursor-pointer py-1 select-none"
-                  onClick={() => handleTabChange(section.id)}
+          {reelSections.map((section) => {
+            const isActive = currentTab === section.id;
+            return (
+              <div
+                key={section.id}
+                className="relative cursor-pointer py-1 select-none"
+                onClick={() => handleTabChange(section.id)}
+              >
+                <span
+                  className={`text-[17px] transition-all duration-200 drop-shadow-md ${
+                    isActive ? 'text-white font-bold tracking-wide' : 'text-white/70 font-semibold hover:text-white'
+                  }`}
                 >
-                  <span
-                    className={`text-[17px] transition-all duration-200 drop-shadow-md ${
-                      isActive ? 'text-white font-bold tracking-wide' : 'text-white/70 font-semibold hover:text-white'
-                    }`}
-                  >
-                    {section.label}
-                  </span>
-                  {isActive && (
-                    <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-7 h-[3px] bg-white rounded-full shadow-[0_1px_4px_rgba(0,0,0,0.5)] transition-all duration-300" />
-                  )}
-                </div>
-              );
-            })
-          )}
+                  {section.label}
+                </span>
+                {isActive && (
+                  <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-7 h-[3px] bg-white rounded-full shadow-[0_1px_4px_rgba(0,0,0,0.5)] transition-all duration-300" />
+                )}
+              </div>
+            );
+          })}
         </div>
         <div 
           className="pointer-events-auto text-white cursor-pointer p-1 active:scale-95 transition-transform drop-shadow-md" 

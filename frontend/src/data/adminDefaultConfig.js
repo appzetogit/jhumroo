@@ -78,6 +78,7 @@ const DEFAULT_SETTINGS_SECTIONS = [
     items: [
       { icon: 'bell', label: 'Notifications', route: '/settings/push-notifications' },
       { icon: 'globe', label: 'Ads Manager', route: '/settings/ads-manager' },
+      { icon: 'activity', label: 'Activity Center', route: '/settings/activity-center' },
       { icon: 'moon', label: 'Dark mode', isToggle: true },
       { icon: 'helpCircle', label: 'Help Center', route: '/settings/help-center' },
       { icon: 'support', label: 'Support', route: '/settings/support' },

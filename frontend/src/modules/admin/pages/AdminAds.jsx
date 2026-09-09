@@ -116,11 +116,11 @@ const AdminAds = () => {
       </div>
 
       {/* Analytics Overview */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
-        <StatCard label="Total Ads" value={stats.totalAds} icon={<BiRocket size={24} />} accent="#8b5cf6" />
-        <StatCard label="Active Now" value={stats.activeAds} icon={<BiCheckCircle size={24} />} accent="#10b981" />
-        <StatCard label="Total Impressions" value={stats.totalViews} icon={<BiBullseye size={24} />} accent="#3b82f6" />
-        <StatCard label="Total Clicks" value={stats.totalClicks} icon={<BiTrendingUp size={24} />} accent="#FE2C55" />
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <StatCard label="Total Ads" value={stats.totalAds} icon={<BiRocket size={20} />} accent="#8b5cf6" />
+        <StatCard label="Active Now" value={stats.activeAds} icon={<BiCheckCircle size={20} />} accent="#10b981" />
+        <StatCard label="Total Impressions" value={stats.totalViews} icon={<BiBullseye size={20} />} accent="#3b82f6" />
+        <StatCard label="Total Clicks" value={stats.totalClicks} icon={<BiTrendingUp size={20} />} accent="#FE2C55" />
       </div>
 
       {/* Ads List */}
@@ -173,12 +173,14 @@ const AdminAds = () => {
 };
 
 const StatCard = ({ label, value, icon, accent }) => (
-  <div className="bg-white dark:bg-[#111] p-6 rounded-[24px] border border-[#EEE] dark:border-[#222] shadow-sm">
-    <div className="w-12 h-12 rounded-2xl flex items-center justify-center mb-4" style={{ backgroundColor: `${accent}15`, color: accent }}>
+  <div className="bg-white dark:bg-[#111] px-4 py-3 rounded-2xl border border-[#EEE] dark:border-[#222] shadow-sm flex items-center gap-3.5">
+    <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: `${accent}15`, color: accent }}>
       {icon}
     </div>
-    <p className="text-[#666] dark:text-[#888] text-[13px] font-medium mb-1">{label}</p>
-    <p className="text-[28px] font-black text-[#1A1A1A] dark:text-white">{value.toLocaleString()}</p>
+    <div className="min-w-0">
+      <p className="text-[#666] dark:text-[#888] text-[12px] font-medium leading-tight truncate">{label}</p>
+      <p className="text-[20px] font-bold text-[#1A1A1A] dark:text-white leading-tight mt-0.5">{value?.toLocaleString?.() ?? value ?? 0}</p>
+    </div>
   </div>
 );
 

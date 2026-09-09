@@ -382,6 +382,70 @@ const userService = {
       throw error;
     }
   },
+
+  /**
+   * Get real screen time analytics from backend
+   */
+  getScreenTime: async (offsetWeeks = 0) => {
+    try {
+      const response = await api.get('/users/me/screen-time', {
+        params: { offsetWeeks }
+      });
+      return response;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  /**
+   * Record screen time heartbeat
+   */
+  recordScreenTimeHeartbeat: async (seconds = 30) => {
+    try {
+      const response = await api.post('/users/me/screen-time/heartbeat', { seconds });
+      return response;
+    } catch (error) {
+      console.warn('Screen time heartbeat error:', error);
+    }
+  },
+
+  /**
+   * Get user watch history
+   */
+  getWatchHistory: async (page = 1, limit = 30) => {
+    try {
+      const response = await api.get('/users/me/watch-history', {
+        params: { page, limit }
+      });
+      return response;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  /**
+   * Remove single reel from watch history
+   */
+  removeWatchHistoryItem: async (reelId) => {
+    try {
+      const response = await api.delete(`/users/me/watch-history/${reelId}`);
+      return response;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  /**
+   * Clear all watch history
+   */
+  clearWatchHistory: async () => {
+    try {
+      const response = await api.delete('/users/me/watch-history');
+      return response;
+    } catch (error) {
+      throw error;
+    }
+  },
 };
 
 export default userService;

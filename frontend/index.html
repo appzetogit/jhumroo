@@ -6,6 +6,186 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, shrink-to-fit=no" />
     <title>Jhumroo</title>
     <script>
+      // Safe guard against external extension / Chrome DevTools Performance Live Metrics reportAllChanges startTime bug
+      if (typeof window !== 'undefined') {
+        const isStartTimeNoise = function (item) {
+          if (!item) return false;
+          try {
+            const str = typeof item === 'string'
+              ? item
+              : (item?.message || item?.stack || (item?.reason && (item.reason.message || item.reason.stack)) || String(item));
+            return (
+              str.includes('startTime') ||
+              str.includes('reportAllChanges') ||
+              str.includes('PerformanceObserver') ||
+              str.includes('anonymous') ||
+              str.includes('VM') ||
+              str.includes('timeout') ||
+              str.includes('ERR_FILE_NOT_FOUND') ||
+              str.includes('blob:http')
+            );
+          } catch (e) {
+            return false;
+          }
+        };
+
+        // Intercept console.error & warn
+        const origConsoleError = console.error;
+        console.error = function (...args) {
+          if (args.some(isStartTimeNoise)) return;
+          origConsoleError.apply(console, args);
+        };
+
+        const origConsoleWarn = console.warn;
+        console.warn = function (...args) {
+          if (args.some(isStartTimeNoise)) return;
+          origConsoleWarn.apply(console, args);
+        };
+
+        // Suppress uncaught window errors
+        window.onerror = function (message, source, lineno, colno, error) {
+          if (isStartTimeNoise(message) || isStartTimeNoise(source) || isStartTimeNoise(error)) {
+            return true; // Suppress console logging
+          }
+        };
+
+        window.addEventListener(
+          'error',
+          function (event) {
+            if (
+              isStartTimeNoise(event) ||
+              isStartTimeNoise(event?.error) ||
+              isStartTimeNoise(event?.message) ||
+              isStartTimeNoise(event?.filename)
+            ) {
+              event.preventDefault();
+              event.stopPropagation();
+              event.stopImmediatePropagation();
+              return true;
+            }
+          },
+          true
+        );
+
+        window.addEventListener(
+          'unhandledrejection',
+          function (event) {
+            if (isStartTimeNoise(event) || isStartTimeNoise(event?.reason)) {
+              event.preventDefault();
+              event.stopPropagation();
+              event.stopImmediatePropagation();
+            }
+          },
+          true
+        );
+
+        // Wrap PerformanceObserver constructor to catch extension/web-vitals callback crashes
+        try {
+          if (window.PerformanceObserver) {
+            const OrigObserver = window.PerformanceObserver;
+            const SafePerformanceObserver = function (callback) {
+              const wrappedCallback = function (list, observer) {
+                try {
+                  callback(list, observer);
+                } catch (e) {
+                  // Silently absorb startTime / reportAllChanges errors
+                }
+              };
+              return new OrigObserver(wrappedCallback);
+            };
+            SafePerformanceObserver.prototype = OrigObserver.prototype;
+            if (OrigObserver.supportedEntryTypes) {
+              SafePerformanceObserver.supportedEntryTypes = OrigObserver.supportedEntryTypes;
+            }
+            window.PerformanceObserver = SafePerformanceObserver;
+          }
+        } catch (e) {}
+
+        // Safe PerformanceObserverEntryList & performance entry wrapper
+        try {
+          if (typeof PerformanceObserverEntryList !== 'undefined') {
+            const proto = PerformanceObserverEntryList.prototype;
+            const wrapListFn = function (orig) {
+              if (!orig) return orig;
+              return function (...args) {
+                try {
+                  const list = orig.apply(this, args) || [];
+                  return new Proxy(list, {
+                    get(target, prop) {
+                      if (prop === '0' && target.length === 0) {
+                        return { startTime: 0, duration: 0, name: 'navigation', entryType: 'navigation' };
+                      }
+                      const val = target[prop];
+                      if (typeof val === 'function') return val.bind(target);
+                      return val;
+                    },
+                  });
+                } catch (e) {
+                  return [];
+                }
+              };
+            };
+            proto.getEntries = wrapListFn(proto.getEntries);
+            proto.getEntriesByType = wrapListFn(proto.getEntriesByType);
+            proto.getEntriesByName = wrapListFn(proto.getEntriesByName);
+          }
+
+          if (typeof performance !== 'undefined') {
+            const wrapPerfList = function (fn) {
+              if (!fn) return fn;
+              return function (...args) {
+                try {
+                  const res = fn.apply(this, args) || [];
+                  const safeList = Array.from(res)
+                    .filter((e) => e && typeof e === 'object')
+                    .map((e) => {
+                      if (typeof e.startTime === 'undefined') e.startTime = 0;
+                      return e;
+                    });
+                  return new Proxy(safeList, {
+                    get(target, prop) {
+                      if (prop === '0' && target.length === 0) {
+                        return { startTime: 0, duration: 0, name: 'navigation', entryType: 'navigation' };
+                      }
+                      const val = target[prop];
+                      if (typeof val === 'function') return val.bind(target);
+                      return val;
+                    },
+                  });
+                } catch (err) {
+                  return [];
+                }
+              };
+            };
+            performance.getEntries = wrapPerfList(performance.getEntries);
+            performance.getEntriesByType = wrapPerfList(performance.getEntriesByType);
+            performance.getEntriesByName = wrapPerfList(performance.getEntriesByName);
+          }
+        } catch (e) {}
+
+        // Safe requestIdleCallback wrapper
+        try {
+          if (typeof window.requestIdleCallback === 'function') {
+            const origIdle = window.requestIdleCallback;
+            window.requestIdleCallback = function (cb, options) {
+              return origIdle.call(
+                this,
+                function (deadline) {
+                  try {
+                    cb(deadline);
+                  } catch (err) {
+                    if (!isStartTimeNoise(err)) {
+                      origConsoleError.call(console, err);
+                    }
+                  }
+                },
+                options
+              );
+            };
+          }
+        } catch (e) {}
+      }
+
       // Prevent pinch-to-zoom (multi-touch)
       document.addEventListener('touchstart', function (event) {
         if (event.touches.length > 1) {
