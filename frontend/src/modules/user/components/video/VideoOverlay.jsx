@@ -102,7 +102,7 @@ const VideoSeekBar = ({ currentTime = 0, duration = 0, onSeek, onScrubStateChang
   const progressPercent = Math.min(100, Math.max(0, (displayTime / effectiveDuration) * 100));
 
   return (
-    <div className={`absolute left-0 w-full z-[100] ${compactBottom ? 'bottom-0' : 'bottom-[calc(var(--bottom-nav-height,50px)+env(safe-area-inset-bottom,0px))]'}`}>
+    <div className={`absolute left-0 w-full z-[100] ${compactBottom ? 'bottom-0' : 'bottom-[calc(var(--bottom-nav-height,45px)+env(safe-area-inset-bottom,0px))]'}`}>
       {/* Big Scrub Time Overlay (Matching Image 2: Floating text in clean empty space, no box!) */}
       {isDragging && (
         <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-[110] flex items-center justify-center pointer-events-none select-none drop-shadow-[0_4px_16px_rgba(0,0,0,0.95)]">
