@@ -102,7 +102,7 @@ const VideoSeekBar = ({ currentTime = 0, duration = 0, onSeek, onScrubStateChang
   const progressPercent = Math.min(100, Math.max(0, (displayTime / effectiveDuration) * 100));
 
   return (
-    <div className={`absolute left-0 w-full z-[100] ${compactBottom ? 'bottom-0' : 'bottom-[var(--bottom-nav-height,48px)]'}`}>
+    <div className={`absolute left-0 w-full z-[100] ${compactBottom ? 'bottom-0' : 'bottom-[var(--bottom-nav-height,54px)]'}`}>
       {/* Big Scrub Time Overlay (Matching Image 2: Floating text in clean empty space, no box!) */}
       {isDragging && (
         <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-[110] flex items-center justify-center pointer-events-none select-none drop-shadow-[0_4px_16px_rgba(0,0,0,0.95)]">
@@ -409,7 +409,7 @@ const VideoOverlay = ({ reelId, username, caption, musicName, isLiked, likes, co
   return (
     <>
       <div data-video-overlay="true" className="video-overlay absolute inset-0 pointer-events-none flex flex-col justify-end bg-gradient-to-t from-black/80 via-black/20 to-transparent z-[30]">
-        <div className={`flex justify-between items-end p-4 transition-opacity duration-200 ${isScrubbingInternal ? 'opacity-0 pointer-events-none' : 'opacity-100'} ${compactBottom ? 'pb-4' : 'pb-[calc(var(--bottom-nav-height,48px)+12px)]'}`}>
+        <div className={`flex justify-between items-end p-4 transition-opacity duration-200 ${isScrubbingInternal ? 'opacity-0 pointer-events-none' : 'opacity-100'} ${compactBottom ? 'pb-4' : 'pb-[calc(var(--bottom-nav-height,54px)+12px)]'}`}>
           {/* Left: User info */}
           <div className="flex-1 pr-10 text-left text-white pointer-events-none flex flex-col items-start select-none">
             {/* Ad Action Button - Moved above name */}

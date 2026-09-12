@@ -8,26 +8,35 @@ import messageService from '../../../../services/messageService';
 
 // TikTok SVG Icon Components
 const HomeIcon = ({ isActive }) => (
-  <svg width="22" height="22" viewBox="0 0 48 48" fill={isActive ? "currentColor" : "none"} stroke="currentColor" strokeWidth={isActive ? "0" : "3.8"} strokeLinecap="round" strokeLinejoin="round">
-    <path d="M24 4L4 20v22a2 2 0 002 2h12V30h12v14h12a2 2 0 002-2V20L24 4z" fill={isActive ? "currentColor" : "none"} />
+  <svg width="25" height="25" viewBox="0 0 48 48" fill="currentColor">
+    {isActive ? (
+      <path d="M24 5L5 20.5h4.5V43h10.5V31h8v12h10.5V20.5H43L24 5z" />
+    ) : (
+      <path d="M24 5.5L6 20.5h4v21.5h9.5V31h9v11H38V20.5h4L24 5.5z" fill="none" stroke="currentColor" strokeWidth="3.6" strokeLinecap="round" strokeLinejoin="round" />
+    )}
   </svg>
 );
 
 const FriendsIcon = ({ isActive }) => (
-  <svg width="22" height="22" viewBox="0 0 48 48" fill={isActive ? "currentColor" : "none"} stroke="currentColor" strokeWidth={isActive ? "0" : "3.8"} strokeLinecap="round" strokeLinejoin="round">
-    <path d="M16 22a8 8 0 100-16 8 8 0 000 16zm16 2a6 6 0 100-12 6 6 0 000 12zm-16 4c-7.3 0-14 3.7-14 9v3h28v-3c0-5.3-6.7-9-14-9zm16 2c-1.8 0-3.9.4-5.9 1.1 2.4 1.8 3.9 4.4 3.9 7.4v2.5H44V36c0-4.3-5.4-7-12-7z" fill={isActive ? "currentColor" : "none"} />
+  <svg width="25" height="25" viewBox="0 0 48 48" fill="none" stroke="currentColor" strokeWidth="3.6" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="16" cy="14" r="7" fill={isActive ? "currentColor" : "none"} />
+    <path d="M6 38c0-5.5 4.5-10 10-10s10 4.5 10 10" fill={isActive ? "currentColor" : "none"} />
+    <circle cx="32" cy="17" r="5.5" fill={isActive ? "currentColor" : "none"} />
+    <path d="M26 36c.5-4 3.5-7 7.5-7s7 3 7.5 7" fill={isActive ? "currentColor" : "none"} />
   </svg>
 );
 
 const InboxIcon = ({ isActive }) => (
-  <svg width="22" height="22" viewBox="0 0 48 48" fill={isActive ? "currentColor" : "none"} stroke="currentColor" strokeWidth={isActive ? "0" : "3.8"} strokeLinecap="round" strokeLinejoin="round">
-    <path d="M42 10H6a2 2 0 00-2 2v24a2 2 0 002 2h36a2 2 0 002-2V12a2 2 0 00-2-2zm-3 10H29a5 5 0 01-10 0H9V14h30v6z" fill={isActive ? "currentColor" : "none"} />
+  <svg width="25" height="25" viewBox="0 0 48 48" fill="none" stroke="currentColor" strokeWidth="3.6" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M40 8H8a4 4 0 00-4 4v20a4 4 0 004 4h4v6l8-6h20a4 4 0 004-4V12a4 4 0 00-4-4z" fill={isActive ? "currentColor" : "none"} />
+    <line x1="18" y1="22" x2="30" y2="22" stroke={isActive ? "#000" : "currentColor"} strokeWidth="3.6" />
   </svg>
 );
 
 const ProfileIcon = ({ isActive }) => (
-  <svg width="22" height="22" viewBox="0 0 48 48" fill={isActive ? "currentColor" : "none"} stroke="currentColor" strokeWidth={isActive ? "0" : "3.8"} strokeLinecap="round" strokeLinejoin="round">
-    <path d="M24 22a9 9 0 100-18 9 9 0 000 18zm0 4c-9.3 0-18 4.7-18 11v3h36v-3c0-6.3-8.7-11-18-11z" fill={isActive ? "currentColor" : "none"} />
+  <svg width="25" height="25" viewBox="0 0 48 48" fill="none" stroke="currentColor" strokeWidth="3.6" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="24" cy="14" r="7.5" fill={isActive ? "currentColor" : "none"} />
+    <path d="M8 39c0-8.5 7.2-15 16-15s16 6.5 16 15" fill={isActive ? "currentColor" : "none"} />
   </svg>
 );
 
@@ -43,12 +52,12 @@ const customIconMap = {
 const NavItem = ({ item, isActive, isDarkMode }) => {
   if (item.type === 'create') {
     return (
-      <NavLink to={item.path} className="flex-1 flex flex-col items-center justify-center transition-transform active:scale-95 duration-150 select-none">
-        <div className="relative w-[42px] h-[26px] flex items-center justify-center">
-          <div className="absolute left-0 w-[35px] h-full bg-[#25F4EE] rounded-[7px] z-[1]" />
-          <div className="absolute right-0 w-[35px] h-full bg-[#FE2C55] rounded-[7px] z-[1]" />
-          <div className="absolute w-[35px] h-full bg-white rounded-[7px] z-[2] flex items-center justify-center shadow-md">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="black" strokeWidth="3.5" strokeLinecap="round">
+      <NavLink to={item.path} className="flex-1 flex flex-col items-center justify-center -translate-y-0.5 transition-transform active:scale-95 duration-150 select-none">
+        <div className="relative w-[45px] h-[30px] flex items-center justify-center">
+          <div className="absolute left-0 w-[38px] h-full bg-[#25F4EE] rounded-[8px] z-[1]" />
+          <div className="absolute right-0 w-[38px] h-full bg-[#FE2C55] rounded-[8px] z-[1]" />
+          <div className="absolute w-[38px] h-full bg-white rounded-[8px] z-[2] flex items-center justify-center shadow-md">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="black" strokeWidth="3.5" strokeLinecap="round">
               <line x1="12" y1="5" x2="12" y2="19" />
               <line x1="5" y1="12" x2="19" y2="12" />
             </svg>
@@ -64,18 +73,18 @@ const NavItem = ({ item, isActive, isDarkMode }) => {
   return (
     <NavLink
       to={item.path}
-      className={`flex-1 flex flex-col items-center justify-center py-0.5 transition-opacity group select-none ${
+      className={`flex-1 flex flex-col items-center justify-center -translate-y-0.5 transition-opacity group select-none ${
         !isActive ? 'active:opacity-70' : ''
       }`}
     >
       <div className="relative flex items-center justify-center">
-        <div className={`transition-all duration-200 ${isActive ? 'text-white scale-105' : 'text-white/60 group-hover:text-white/90'}`}>
+        <div className={`transition-all duration-200 ${isActive ? 'text-white' : 'text-white/70 group-hover:text-white/90'}`}>
           <IconComponent isActive={isActive} />
         </div>
 
         {/* Badge or Red dot */}
         {item.badge ? (
-          <span className="absolute -top-1 -right-2.5 bg-[#FE2C55] text-white text-[9px] font-bold px-1 min-w-[14px] h-[14px] rounded-full flex items-center justify-center border border-black z-10">
+          <span className="absolute -top-1 -right-2.5 bg-[#FE2C55] text-white text-[10px] font-extrabold px-1.5 min-w-[16px] h-[16px] rounded-full flex items-center justify-center border border-black z-10 shadow-sm">
             {item.badge}
           </span>
         ) : item.path === '/search' ? (
@@ -84,8 +93,8 @@ const NavItem = ({ item, isActive, isDarkMode }) => {
       </div>
 
       <span
-        className={`text-[10px] mt-0.5 font-semibold leading-none transition-all duration-200 ${
-          isActive ? 'text-white font-bold' : 'text-white/60'
+        className={`text-[10.5px] mt-1 font-semibold leading-tight tracking-tight transition-all duration-200 ${
+          isActive ? 'text-white font-bold' : 'text-white/75'
         }`}
       >
         {displayLabel}
@@ -226,10 +235,10 @@ const BottomNavBar = ({ isDarkTheme = true }) => {
 
   return (
     <nav
-      className="fixed min-[600px]:absolute left-0 w-full z-[1000] flex justify-around items-center bg-black border-t border-white/10 text-white shadow-2xl transition-all duration-300 select-none"
+      className="fixed min-[600px]:absolute left-0 w-full z-[1000] flex justify-around items-center bg-black border-t border-white/10 text-white shadow-2xl transition-all duration-300 select-none pb-1"
       style={{
         bottom: '0px',
-        height: 'var(--bottom-nav-height, 48px)',
+        height: 'var(--bottom-nav-height, 54px)',
       }}
     >
       {/* Nav Items */}
