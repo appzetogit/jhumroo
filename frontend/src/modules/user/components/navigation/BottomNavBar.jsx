@@ -43,7 +43,7 @@ const customIconMap = {
 const NavItem = ({ item, isActive, isDarkMode }) => {
   if (item.type === 'create') {
     return (
-      <NavLink to={item.path} className="flex-1 flex flex-col items-center justify-center translate-y-[1.5px] transition-transform active:scale-95 duration-150 select-none">
+      <NavLink to={item.path} className="flex-1 flex flex-col items-center justify-center transition-transform active:scale-95 duration-150 select-none">
         <div className="relative w-[42px] h-[26px] flex items-center justify-center">
           <div className="absolute left-0 w-[35px] h-full bg-[#25F4EE] rounded-[7px] z-[1]" />
           <div className="absolute right-0 w-[35px] h-full bg-[#FE2C55] rounded-[7px] z-[1]" />
@@ -64,7 +64,7 @@ const NavItem = ({ item, isActive, isDarkMode }) => {
   return (
     <NavLink
       to={item.path}
-      className={`flex-1 flex flex-col items-center justify-center pt-0.5 pb-0 translate-y-[1.5px] transition-opacity group select-none ${
+      className={`flex-1 flex flex-col items-center justify-center py-0.5 transition-opacity group select-none ${
         !isActive ? 'active:opacity-70' : ''
       }`}
     >
@@ -84,7 +84,7 @@ const NavItem = ({ item, isActive, isDarkMode }) => {
       </div>
 
       <span
-        className={`text-[9.5px] mt-0.5 font-semibold leading-tight transition-all duration-200 ${
+        className={`text-[10px] mt-0.5 font-semibold leading-none transition-all duration-200 ${
           isActive ? 'text-white font-bold' : 'text-white/60'
         }`}
       >
@@ -226,11 +226,10 @@ const BottomNavBar = ({ isDarkTheme = true }) => {
 
   return (
     <nav
-      className="fixed min-[600px]:absolute left-0 w-full z-[1000] flex justify-around items-center bg-black border-t border-white/10 text-white shadow-2xl transition-all duration-300"
+      className="fixed min-[600px]:absolute left-0 w-full z-[1000] flex justify-around items-center bg-black border-t border-white/10 text-white shadow-2xl transition-all duration-300 select-none"
       style={{
-        bottom: '-1px',
-        height: 'calc(var(--bottom-nav-height) + env(safe-area-inset-bottom, 0px))',
-        paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) * 0.35)',
+        bottom: '0px',
+        height: 'var(--bottom-nav-height, 48px)',
       }}
     >
       {/* Nav Items */}
