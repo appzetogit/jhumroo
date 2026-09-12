@@ -609,41 +609,86 @@ const CreatePage = () => {
 
   const effectsScrollRef = useRef(null);
   const scrollDebounceTimerRef = useRef(null);
+  const isProgrammaticScrollRef = useRef(false);
+  const isDraggingEffectsRef = useRef(false);
+  const dragStartXRef = useRef(0);
+  const dragStartScrollRef = useRef(0);
+  const hasMovedDragRef = useRef(false);
+
+  const EFFECT_SLOT_SIZE = 68;
+  const EFFECT_GAP = 16;
+  const EFFECT_STEP = EFFECT_SLOT_SIZE + EFFECT_GAP; // 84px
 
   const handleEffectsScroll = useCallback(() => {
+    if (isProgrammaticScrollRef.current) return;
     if (scrollDebounceTimerRef.current) clearTimeout(scrollDebounceTimerRef.current);
+
     scrollDebounceTimerRef.current = setTimeout(() => {
       const container = effectsScrollRef.current;
-      if (!container) return;
-      const containerRect = container.getBoundingClientRect();
-      const centerX = containerRect.left + containerRect.width / 2;
+      if (!container || isProgrammaticScrollRef.current) return;
 
-      let closestId = null;
-      let minDistance = Infinity;
+      const closestIndex = Math.max(0, Math.min(cameraEffectsList.length - 1, Math.round(container.scrollLeft / EFFECT_STEP)));
+      const effect = cameraEffectsList[closestIndex];
+      const targetId = effect?.id ?? null;
 
-      const buttons = container.querySelectorAll('[data-effect-id]');
-      buttons.forEach((btn) => {
-        const btnRect = btn.getBoundingClientRect();
-        const btnCenterX = btnRect.left + btnRect.width / 2;
-        const distance = Math.abs(centerX - btnCenterX);
-        if (distance < minDistance) {
-          minDistance = distance;
-          closestId = btn.getAttribute('data-effect-id');
+      setActiveFaceEffect((prev) => {
+        if (prev !== targetId) {
+          if (targetId === null) setFaceEffectCanvasEl(null);
+          return targetId;
         }
+        return prev;
       });
+    }, 60);
+  }, [cameraEffectsList]);
 
-      if (closestId !== null) {
-        const targetId = closestId === 'normal' ? null : closestId;
-        setActiveFaceEffect((prev) => {
-          if (prev !== targetId) {
-            if (targetId === null) setFaceEffectCanvasEl(null);
-            return targetId;
-          }
-          return prev;
-        });
-      }
-    }, 80);
-  }, []);
+  const selectEffectByIndex = useCallback((idx) => {
+    const effect = cameraEffectsList[idx];
+    if (!effect) return;
+    isProgrammaticScrollRef.current = true;
+    setActiveFaceEffect(effect.id ?? null);
+    if (effect.id === null) setFaceEffectCanvasEl(null);
+
+    const container = effectsScrollRef.current;
+    if (container) {
+      container.scrollTo({ left: idx * EFFECT_STEP, behavior: 'smooth' });
+    }
+
+    setTimeout(() => {
+      isProgrammaticScrollRef.current = false;
+    }, 350);
+  }, [cameraEffectsList]);
+
+  const handleEffectsPointerDown = (e) => {
+    const container = effectsScrollRef.current;
+    if (!container) return;
+    isDraggingEffectsRef.current = true;
+    dragStartXRef.current = e.clientX;
+    dragStartScrollRef.current = container.scrollLeft;
+    hasMovedDragRef.current = false;
+  };
+
+  const handleEffectsPointerMove = (e) => {
+    if (!isDraggingEffectsRef.current) return;
+    const container = effectsScrollRef.current;
+    if (!container) return;
+    const delta = e.clientX - dragStartXRef.current;
+    if (Math.abs(delta) > 4) {
+      hasMovedDragRef.current = true;
+    }
+    container.scrollLeft = dragStartScrollRef.current - delta;
+  };
+
+  const handleEffectsPointerUp = () => {
+    if (!isDraggingEffectsRef.current) return;
+    isDraggingEffectsRef.current = false;
+    const container = effectsScrollRef.current;
+    if (!container) return;
+
+    if (hasMovedDragRef.current) {
+      const nearestIdx = Math.max(0, Math.min(cameraEffectsList.length - 1, Math.round(container.scrollLeft / EFFECT_STEP)));
+      selectEffectByIndex(nearestIdx);
+    }
+  };
   const [selectedSounds, setSelectedSounds] = useState(() => {
     try {
       const saved = localStorage.getItem('create_selectedSounds');
@@ -4606,7 +4651,6 @@ const CreatePage = () => {
     { id: 'flip', label: '' },
     { id: 'flash', label: '' },
     { id: 'timer', label: '' },
-    { id: 'beautify', label: '' },
     { id: 'filters', label: '' },
     { id: 'speed', label: '' },
   ];
@@ -5087,57 +5131,68 @@ const CreatePage = () => {
                       <div
                         ref={effectsScrollRef}
                         onScroll={handleEffectsScroll}
-                        className="w-full flex items-center gap-5 overflow-x-auto no-scrollbar snap-x snap-mandatory px-[calc(50%-33px)] py-2 z-10 pointer-events-auto"
+                        onPointerDown={handleEffectsPointerDown}
+                        onPointerMove={handleEffectsPointerMove}
+                        onPointerUp={handleEffectsPointerUp}
+                        onPointerCancel={handleEffectsPointerUp}
+                        className="w-full flex items-center gap-4 overflow-x-auto no-scrollbar snap-x snap-mandatory px-[calc(50%-34px)] py-3 z-10 pointer-events-auto cursor-grab active:cursor-grabbing select-none"
+                        style={{ touchAction: 'pan-x' }}
                       >
-                        {cameraEffectsList.map((effect) => {
+                        {cameraEffectsList.map((effect, idx) => {
                           const isActive = activeFaceEffect === effect.id;
                           const isNormal = effect.id === null;
 
                           return (
-                            <button
+                            <div
                               key={effect.id || 'normal'}
                               data-effect-id={effect.id || 'normal'}
-                              type="button"
-                              onClick={(e) => {
-                                setActiveFaceEffect(effect.id);
-                                if (effect.id === null) setFaceEffectCanvasEl(null);
-                                e.currentTarget.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+                              onClick={() => {
+                                if (hasMovedDragRef.current) return;
+                                selectEffectByIndex(idx);
                               }}
-                              onMouseDown={isNormal ? handleRecordPressStart : undefined}
-                              onMouseUp={isNormal ? handleRecordPressEnd : undefined}
-                              onMouseLeave={isNormal ? handleRecordPressLeave : undefined}
-                              onTouchStart={isNormal ? handleRecordPressStart : undefined}
-                              onTouchEnd={isNormal ? handleRecordPressEnd : undefined}
-                              className={`shrink-0 snap-center transition-all duration-200 flex flex-col items-center justify-center select-none active:scale-95 ${
-                                isActive
-                                  ? 'w-[66px] h-[66px] sm:w-[72px] sm:h-[72px] scale-105 opacity-100'
-                                  : 'w-[50px] h-[50px] sm:w-[54px] sm:h-[54px] opacity-85 hover:opacity-100'
-                              }`}
+                              className="w-[68px] h-[68px] shrink-0 snap-center flex items-center justify-center cursor-pointer select-none"
                             >
-                              {isNormal ? (
-                                <div className="w-full h-full rounded-full bg-[#fe2c55] shadow-lg flex items-center justify-center transition-all duration-200">
-                                  {isRecording && <span className="w-3 h-3 rounded-[2px] bg-white animate-pulse" />}
-                                </div>
-                              ) : (
-                                <div
-                                  className={`w-full h-full rounded-full bg-[#2c2c2e] border flex items-center justify-center text-2xl transition-all shadow-md overflow-hidden ${
-                                    isActive
-                                      ? 'border-white bg-amber-400/30 ring-2 ring-amber-300/80 shadow-amber-500/30'
-                                      : 'border-white/20 hover:border-white/40'
-                                  }`}
-                                >
-                                  {effect.image ? (
-                                    <img
-                                      src={effect.image}
-                                      alt={effect.label}
-                                      className="w-full h-full object-cover rounded-full transition-transform duration-200 contrast-[1.02]"
-                                    />
-                                  ) : (
-                                    <span>{effect.icon}</span>
-                                  )}
-                                </div>
-                              )}
-                            </button>
+                              <button
+                                type="button"
+                                onMouseDown={isNormal ? handleRecordPressStart : undefined}
+                                onMouseUp={isNormal ? handleRecordPressEnd : undefined}
+                                onMouseLeave={isNormal ? handleRecordPressLeave : undefined}
+                                onTouchStart={isNormal ? handleRecordPressStart : undefined}
+                                onTouchEnd={isNormal ? handleRecordPressEnd : undefined}
+                                className={`relative flex items-center justify-center transition-all duration-200 ease-out ${
+                                  isActive
+                                    ? 'w-[68px] h-[68px] scale-100'
+                                    : 'w-[56px] h-[56px] scale-95 opacity-75 hover:opacity-100'
+                                }`}
+                              >
+                                {isNormal ? (
+                                  <div className={`w-full h-full rounded-full bg-[#fe2c55] flex items-center justify-center shadow-lg transition-all ${
+                                    isActive ? 'ring-4 ring-white shadow-xl scale-100' : 'ring-2 ring-white/40 hover:ring-white'
+                                  }`}>
+                                    {isRecording && <span className="w-3 h-3 rounded-[2px] bg-white animate-pulse" />}
+                                  </div>
+                                ) : (
+                                  <div
+                                    className={`w-full h-full rounded-full bg-[#1c1c1e] flex items-center justify-center transition-all overflow-hidden ${
+                                      isActive
+                                        ? 'ring-4 ring-white shadow-[0_0_24px_rgba(255,255,255,0.45)]'
+                                        : 'ring-1 ring-white/30 hover:ring-white/60'
+                                    }`}
+                                  >
+                                    {effect.image ? (
+                                      <img
+                                        src={effect.image}
+                                        alt={effect.label}
+                                        className="w-full h-full object-cover rounded-full select-none pointer-events-none"
+                                        draggable={false}
+                                      />
+                                    ) : (
+                                      <span className="text-2xl select-none">{effect.icon}</span>
+                                    )}
+                                  </div>
+                                )}
+                              </button>
+                            </div>
                           );
                         })}
                       </div>

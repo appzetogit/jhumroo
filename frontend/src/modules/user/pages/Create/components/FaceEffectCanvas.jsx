@@ -38,10 +38,16 @@ export default function FaceEffectCanvas({ mediaStream, activeEffectId, mirrored
     video.srcObject = mediaStream;
     video.play().catch(() => {});
     readyCalledRef.current = false;
-    let lastTimestamp = -1;
+
+    let lastDetectTime = 0;
+    let cachedLandmarks = null;
+    let isDetecting = false;
+
+    // Throttle ML detection to 30fps (every 33ms) while rendering canvas at full 60fps
+    const DETECT_INTERVAL_MS = 33;
 
     const draw = () => {
-      if (video.readyState >= 2 && video.videoWidth) {
+      if (video.readyState >= 2 && video.videoWidth && video.videoHeight) {
         if (canvas.width !== video.videoWidth) {
           canvas.width = video.videoWidth;
           canvas.height = video.videoHeight;
@@ -53,20 +59,38 @@ export default function FaceEffectCanvas({ mediaStream, activeEffectId, mirrored
 
         const ctx = canvas.getContext('2d', { willReadFrequently: true });
         ctx.imageSmoothingEnabled = true;
-        ctx.imageSmoothingQuality = 'high';
+        ctx.imageSmoothingQuality = 'medium';
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
         const landmarker = landmarkerRef.current;
         const effectId = effectIdRef.current;
+
         if (landmarker && effectId) {
           const now = performance.now();
-          if (now !== lastTimestamp) {
-            lastTimestamp = now;
-            const result = landmarker.detectForVideo(video, now);
-            const landmarks = result?.faceLandmarks?.[0];
-            if (landmarks) {
+
+          // Run landmark detection asynchronously / throttled to ~30 FPS
+          if (!isDetecting && (now - lastDetectTime >= DETECT_INTERVAL_MS)) {
+            lastDetectTime = now;
+            isDetecting = true;
+            try {
+              const result = landmarker.detectForVideo(video, now);
+              if (result?.faceLandmarks?.[0]) {
+                cachedLandmarks = result.faceLandmarks[0];
+              }
+            } catch (err) {
+              // Gracefully continue on transient frame errors
+            } finally {
+              isDetecting = false;
+            }
+          }
+
+          // Apply face effect using latest cached landmarks
+          if (cachedLandmarks) {
+            try {
               const preset = FACE_EFFECT_PRESETS.find((p) => p.id === effectId);
-              preset?.apply(ctx, landmarks, canvas.width, canvas.height);
+              preset?.apply(ctx, cachedLandmarks, canvas.width, canvas.height);
+            } catch (err) {
+              // Prevent canvas crash
             }
           }
         }

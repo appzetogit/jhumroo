@@ -14,6 +14,7 @@
             const str = typeof item === 'string'
               ? item
               : (item?.message || item?.stack || (item?.reason && (item.reason.message || item.reason.stack)) || String(item));
+            const lower = str.toLowerCase();
             return (
               str.includes('startTime') ||
               str.includes('reportAllChanges') ||
@@ -22,24 +23,44 @@
               str.includes('VM') ||
               str.includes('timeout') ||
               str.includes('ERR_FILE_NOT_FOUND') ||
-              str.includes('blob:http')
+              str.includes('blob:http') ||
+              lower.includes('tensorflow lite') ||
+              lower.includes('xnnpack') ||
+              lower.includes('vision_wasm') ||
+              lower.includes('delegate for cpu') ||
+              lower.includes('face landmarker')
             );
           } catch (e) {
             return false;
           }
         };
 
-        // Intercept console.error & warn
+        // Intercept console.error, warn & info to suppress WASM and performance noise
         const origConsoleError = console.error;
         console.error = function (...args) {
           if (args.some(isStartTimeNoise)) return;
+          try {
+            if (isStartTimeNoise(args.map(function(a) { return String(a || ''); }).join(' '))) return;
+          } catch (_) {}
           origConsoleError.apply(console, args);
         };
 
         const origConsoleWarn = console.warn;
         console.warn = function (...args) {
           if (args.some(isStartTimeNoise)) return;
+          try {
+            if (isStartTimeNoise(args.map(function(a) { return String(a || ''); }).join(' '))) return;
+          } catch (_) {}
           origConsoleWarn.apply(console, args);
+        };
+
+        const origConsoleInfo = console.info;
+        console.info = function (...args) {
+          if (args.some(isStartTimeNoise)) return;
+          try {
+            if (isStartTimeNoise(args.map(function(a) { return String(a || ''); }).join(' '))) return;
+          } catch (_) {}
+          origConsoleInfo.apply(console, args);
         };
 
         // Suppress uncaught window errors

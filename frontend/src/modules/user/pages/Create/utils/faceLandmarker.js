@@ -4,8 +4,15 @@ import { FaceLandmarker, FilesetResolver } from '@mediapipe/tasks-vision';
 if (typeof window !== 'undefined' && !window.__mediapipe_logs_filtered) {
   window.__mediapipe_logs_filtered = true;
   const isWasmNoise = (args) => {
-    const msg = args.map((a) => String(a || '')).join(' ');
-    return msg.includes('TensorFlow Lite') || msg.includes('XNNPACK') || msg.includes('vision_wasm') || msg.includes('Face landmarker GPU');
+    const msg = args.map((a) => String(a || '')).join(' ').toLowerCase();
+    return (
+      msg.includes('tensorflow lite') ||
+      msg.includes('xnnpack') ||
+      msg.includes('vision_wasm') ||
+      msg.includes('face landmarker') ||
+      msg.includes('delegate for cpu') ||
+      msg.includes('created tensorflow lite')
+    );
   };
 
   const origInfo = console.info;
@@ -24,6 +31,12 @@ if (typeof window !== 'undefined' && !window.__mediapipe_logs_filtered) {
   console.warn = (...args) => {
     if (isWasmNoise(args)) return;
     origWarn.apply(console, args);
+  };
+
+  const origError = console.error;
+  console.error = (...args) => {
+    if (isWasmNoise(args)) return;
+    origError.apply(console, args);
   };
 }
 
