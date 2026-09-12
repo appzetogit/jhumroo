@@ -789,28 +789,48 @@
 }
 
 /* Dedicated timeline trimmer handle styles - immune to dark mode overrides */
+body.timeline-trimming-active,
+body.timeline-trimming-active * {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  transition: none !important;
+  -webkit-touch-callout: none !important;
+}
+
 .timeline-trim-handle {
   background-color: #ffffff !important;
   color: #111111 !important;
   user-select: none !important;
+  -webkit-user-select: none !important;
   touch-action: none !important;
+  -webkit-touch-callout: none !important;
+}
+
+.timeline-trim-handle svg,
+.timeline-trim-handle path,
+.timeline-trim-handle * {
+  color: #111111 !important;
+  fill: #111111 !important;
+}
+
+.timeline-trim-handle::before,
+.timeline-trim-handle::after {
+  background: transparent !important;
+  background-color: transparent !important;
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  touch-action: none !important;
+  -webkit-touch-callout: none !important;
 }
 
 .timeline-trim-handle-left {
-  border-top-left-radius: 14px !important;
-  border-bottom-left-radius: 14px !important;
+  border-top-left-radius: 18px !important;
+  border-bottom-left-radius: 18px !important;
 }
 
 .timeline-trim-handle-right {
-  border-top-right-radius: 14px !important;
-  border-bottom-right-radius: 14px !important;
-}
-
-.timeline-trim-handle-icon {
-  color: #111111 !important;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  border-top-right-radius: 18px !important;
+  border-bottom-right-radius: 18px !important;
 }
 
 .timeline-clip-selected {
