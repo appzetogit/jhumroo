@@ -2364,6 +2364,46 @@ const CreatePage = () => {
 
 
 
+  // Throttled high-performance video seeking helper for 60fps buttery smooth trimming
+  const seekVideoSmoothly = (videoEl, targetTime) => {
+    if (!videoEl || typeof targetTime !== 'number' || isNaN(targetTime)) return;
+    const clampedTime = Math.max(0, targetTime);
+    if (!videoEl.seeking) {
+      if ('fastSeek' in videoEl && typeof videoEl.fastSeek === 'function') {
+        try {
+          videoEl.fastSeek(clampedTime);
+          return;
+        } catch {
+          // fallback to currentTime
+        }
+      }
+      videoEl.currentTime = clampedTime;
+    } else {
+      videoEl._pendingSeekTime = clampedTime;
+      if (!videoEl._hasSeekListener) {
+        videoEl._hasSeekListener = true;
+        const onSeeked = () => {
+          if (videoEl._pendingSeekTime !== undefined && Math.abs(videoEl.currentTime - videoEl._pendingSeekTime) > 0.015) {
+            const nextTime = videoEl._pendingSeekTime;
+            videoEl._pendingSeekTime = undefined;
+            if ('fastSeek' in videoEl && typeof videoEl.fastSeek === 'function') {
+              try {
+                videoEl.fastSeek(nextTime);
+                return;
+              } catch { }
+            }
+            videoEl.currentTime = nextTime;
+          } else {
+            videoEl._pendingSeekTime = undefined;
+            videoEl._hasSeekListener = false;
+            videoEl.removeEventListener('seeked', onSeeked);
+          }
+        };
+        videoEl.addEventListener('seeked', onSeeked, { once: true });
+      }
+    }
+  };
+
   const formatPlaybackTime = (elapsed, total) => {
     return `<span class="text-white">${formatElapsed(Math.round(elapsed || 0))}</span><span class="text-white/40">/${formatElapsed(Math.round(total || 0))}</span>`;
   };
@@ -6773,7 +6813,7 @@ const CreatePage = () => {
                     e.stopPropagation();
                     setFocusedTrack('video');
                   }}
-                  className="relative h-[60px] flex rounded-xl overflow-hidden bg-white/5 cursor-pointer transition-all"
+                  className="relative h-[60px] flex rounded-xl bg-white/5 cursor-pointer transition-all"
                   style={{
                     width: timelineWidth,
                     marginLeft: 0
@@ -6803,71 +6843,81 @@ const CreatePage = () => {
                               setIsTextTrackSelected(false);
                             }}
                             className={`h-full flex shrink-0 relative transition-all ${focusedTrack === 'video' && currentClipIndex === idx
-                                ? 'border-[3px] border-white rounded-[18px] z-10 bg-black/20 shadow-xl'
+                                ? 'timeline-clip-selected border-[3px] border-white rounded-[16px] z-10 bg-black/20 shadow-xl'
                                 : 'border-r-2 border-black/90 opacity-80 rounded-xl overflow-hidden'
                               }`}
                             style={{ width: clipWidth }}
                           >
-                            {Array.from({ length: thumbCount }).map((_, i) => {
-                              const thumbIdx = startThumbIdx + i;
-                              return (
-                                <div key={i} className="h-full border-r border-white/5 shrink-0 overflow-hidden" style={{ width: Math.min(clipWidth - i * PIXELS_PER_SECOND * 2, PIXELS_PER_SECOND * 2) }}>
-                                  <TimelineThumbnail
-                                    src={videoThumbnails.length > thumbIdx ? videoThumbnails[thumbIdx] : (selectedMedia.image || previewUrl)}
-                                    isVideo={videoThumbnails.length === 0 && !selectedMedia.image && !!previewUrl}
-                                    i={i}
-                                    videoDuration={videoDuration}
-                                  />
-                                </div>
-                              );
-                            })}
-
-                            {/* Duration badge overlay */}
-                            <div className={`clip-duration-badge absolute top-1.5 bg-[#1c1c1e]/80 border border-white/10 px-2 py-0.5 rounded-[6px] text-[11px] font-sans font-medium text-white pointer-events-none select-none z-20 ${focusedTrack === 'video' && currentClipIndex === idx ? 'left-[26px]' : 'left-2'
-                              }`}>
-                              {clip.duration.toFixed(1)}s
+                            {/* Inner thumbnail strip with clean rounded clipping */}
+                            <div className="absolute inset-0 rounded-[13px] overflow-hidden flex pointer-events-none">
+                              {Array.from({ length: thumbCount }).map((_, i) => {
+                                const thumbIdx = startThumbIdx + i;
+                                return (
+                                  <div key={i} className="h-full border-r border-white/5 shrink-0 overflow-hidden" style={{ width: Math.min(clipWidth - i * PIXELS_PER_SECOND * 2, PIXELS_PER_SECOND * 2) }}>
+                                    <TimelineThumbnail
+                                      src={videoThumbnails.length > thumbIdx ? videoThumbnails[thumbIdx] : (selectedMedia.image || previewUrl)}
+                                      isVideo={videoThumbnails.length === 0 && !selectedMedia.image && !!previewUrl}
+                                      i={i}
+                                      videoDuration={videoDuration}
+                                    />
+                                  </div>
+                                );
+                              })}
                             </div>
 
-                            {/* Trimmer Handles */}
+                            {/* Floating duration badge: sits cleanly above clip when selected, never obscuring faces */}
+                            {focusedTrack === 'video' && currentClipIndex === idx ? (
+                              <div className="clip-duration-badge absolute -top-7 left-1/2 -translate-x-1/2 bg-black/90 backdrop-blur-md border border-white/20 px-2.5 py-0.5 rounded-full text-[11px] font-sans font-bold text-white shadow-xl pointer-events-none select-none z-30 flex items-center gap-1.5 whitespace-nowrap">
+                                <span className="w-1.5 h-1.5 rounded-full bg-[#fe2c55] animate-pulse" />
+                                <span>{clip.duration.toFixed(1)}s</span>
+                              </div>
+                            ) : (
+                              <div className="absolute top-1.5 left-2 bg-black/60 backdrop-blur-sm px-1.5 py-0.5 rounded-[4px] text-[10px] font-medium text-white/80 pointer-events-none select-none z-20">
+                                {clip.duration.toFixed(1)}s
+                              </div>
+                            )}
+
+                            {/* Left Trimmer Handle */}
                             <div
-                              className={`absolute z-50 cursor-col-resize flex items-center justify-center transition-all duration-150 ${focusedTrack === 'video' && currentClipIndex === idx
-                                  ? '-top-[3px] -bottom-[3px] -left-[3px] w-[22px] bg-white text-black rounded-l-[18px] opacity-100 pointer-events-auto shadow-md'
-                                  : 'top-0 bottom-0 left-0 w-[22px] bg-transparent opacity-0 hover:opacity-20 hover:bg-white rounded-l-[18px] pointer-events-auto'
+                              className={`timeline-trim-handle timeline-trim-handle-left absolute z-50 cursor-col-resize flex items-center justify-center transition-all duration-150 ${focusedTrack === 'video' && currentClipIndex === idx
+                                  ? '-top-[3px] -bottom-[3px] -left-[3px] w-[20px] rounded-l-[14px] opacity-100 pointer-events-auto shadow-[0_0_12px_rgba(255,255,255,0.35)] before:absolute before:-inset-x-3 before:inset-y-0 before:content-[""]'
+                                  : 'top-0 bottom-0 left-0 w-[18px] bg-transparent opacity-0 hover:opacity-20 rounded-l-[14px] pointer-events-auto'
                                 }`}
+                              style={{
+                                backgroundColor: '#ffffff',
+                                color: '#111111',
+                                touchAction: 'none'
+                              }}
                               onPointerDown={(e) => {
                                 e.stopPropagation();
                                 e.preventDefault();
                                 const targetHandle = e.currentTarget;
-                                targetHandle.setPointerCapture(e.pointerId);
+                                const pointerId = e.pointerId;
+                                try {
+                                  targetHandle.setPointerCapture(pointerId);
+                                } catch (err) {
+                                  console.warn("Could not capture pointer:", err);
+                                }
 
-                                // Snapshot clip values — do NOT call setState here,
-                                // that would trigger a re-render which destroys the
-                                // element and loses pointer capture mid-drag.
                                 const startX = e.clientX;
                                 const initialStartOffset = clip.startOffset || 0;
                                 const initialOriginalDuration = clip.originalDuration || (clip.duration * (clip.speed || 1));
                                 const limitStart = clip.limitStart !== undefined ? clip.limitStart : 0;
                                 const speed = clip.speed || 1;
 
-                                // Get DOM element references
+                                // DOM element references
                                 const clipEl = targetHandle.parentElement;
                                 const flexContainerEl = clipEl?.parentElement;
                                 const outerTrackEl = flexContainerEl?.parentElement;
                                 const badgeEl = clipEl?.querySelector('.clip-duration-badge');
                                 const timeSpan = document.getElementById('editor-playback-time');
+                                const timeline = document.getElementById('editor-timeline');
 
-                                // Instantly style clip + handle as active via DOM (no re-render)
-                                if (clipEl) {
-                                  clipEl.classList.add('border-[3px]', 'border-white', 'rounded-[18px]', 'z-10', 'shadow-xl');
-                                  clipEl.classList.remove('border-r-2', 'border-black/90', 'opacity-80');
-                                }
-                                targetHandle.style.cssText = 'top:-3px;bottom:-3px;left:-3px;width:22px;background:#ffffff;border-radius:18px 0 0 18px;opacity:1;';
-
-                                // Pause playback so the playhead-follow scroll loop doesn't fight the drag
+                                // Pause playback so playhead-follow scroll loop doesn't fight drag
                                 setIsEditorPlaying(false);
                                 if (editorVideoRef.current) {
                                   editorVideoRef.current.pause();
-                                  editorVideoRef.current.currentTime = initialStartOffset;
+                                  seekVideoSmoothly(editorVideoRef.current, initialStartOffset);
                                 }
 
                                 document.body.style.cursor = 'col-resize';
@@ -6889,17 +6939,18 @@ const CreatePage = () => {
                                     const deltaRaw = deltaTimeline * speed;
 
                                     let newStartOffset = initialStartOffset + deltaRaw;
-                                    newStartOffset = Math.max(limitStart, Math.min((initialStartOffset + initialOriginalDuration) - (0.5 * speed), newStartOffset));
+                                    const maxStartOffset = (initialStartOffset + initialOriginalDuration) - (0.5 * speed);
+                                    newStartOffset = Math.max(limitStart, Math.min(maxStartOffset, newStartOffset));
                                     const newOriginalDuration = (initialStartOffset + initialOriginalDuration) - newStartOffset;
-                                    const newDuration = newOriginalDuration / speed;
+                                    const newDuration = Math.max(0.5, newOriginalDuration / speed);
 
                                     finalStartOffset = newStartOffset;
                                     finalOriginalDuration = newOriginalDuration;
                                     finalDuration = newDuration;
 
-                                    // 1. Seek the video player smoothly
-                                    if (editorVideoRef.current && Math.abs(editorVideoRef.current.currentTime - newStartOffset) > 0.01) {
-                                      editorVideoRef.current.currentTime = newStartOffset;
+                                    // 1. Ultra-smooth 60fps throttled video scrubbing
+                                    if (editorVideoRef.current) {
+                                      seekVideoSmoothly(editorVideoRef.current, newStartOffset);
                                     }
 
                                     // 2. Update playback time display in DOM
@@ -6917,35 +6968,49 @@ const CreatePage = () => {
                                       clipEl.style.marginLeft = clampedDeltaX + 'px';
                                     }
 
-                                    // 4. Update duration badge in DOM
-                                    if (badgeEl) badgeEl.innerText = newDuration.toFixed(1) + 's';
+                                    // 4. Update floating duration badge in DOM
+                                    if (badgeEl) {
+                                      badgeEl.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-[#fe2c55] animate-pulse"></span><span>${newDuration.toFixed(1)}s</span>`;
+                                    }
 
                                     // 5. Update flex container & track width in DOM
-                                    const otherClipsDuration = clipSequence.reduce((sum, c, i) => i !== idx ? sum + c.duration : sum, 0);
-                                    const totalDur = otherClipsDuration + newDuration;
-                                    if (flexContainerEl) flexContainerEl.style.width = (totalDur * PIXELS_PER_SECOND) + 'px';
-                                    if (outerTrackEl) outerTrackEl.style.width = (totalDur * PIXELS_PER_SECOND) + 'px';
+                                    if (flexContainerEl) flexContainerEl.style.width = (totalDurLeft * PIXELS_PER_SECOND) + 'px';
+                                    if (outerTrackEl) outerTrackEl.style.width = (totalDurLeft * PIXELS_PER_SECOND) + 'px';
                                   });
                                 };
 
                                 const upHandler = (upEvent) => {
                                   document.body.style.cursor = '';
                                   document.body.style.userSelect = '';
-                                  try {
-                                    if (targetHandle.hasPointerCapture(upEvent.pointerId)) {
-                                      targetHandle.releasePointerCapture(upEvent.pointerId);
-                                    }
-                                  } catch (err) {
-                                    console.warn("Failed to release pointer capture:", err);
+                                  if (pendingRaf) {
+                                    cancelAnimationFrame(pendingRaf);
+                                    pendingRaf = null;
                                   }
-                                  if (clipEl) clipEl.style.marginLeft = '';
-                                  // Reset inline style so React class takes over after re-render
-                                  targetHandle.style.cssText = '';
+                                  try {
+                                    if (targetHandle.hasPointerCapture(pointerId)) {
+                                      targetHandle.releasePointerCapture(pointerId);
+                                    }
+                                  } catch { }
+
+                                  if (clipEl) {
+                                    clipEl.style.marginLeft = '';
+                                    clipEl.style.width = '';
+                                  }
                                   window.removeEventListener('pointermove', moveHandler);
                                   window.removeEventListener('pointerup', upHandler);
                                   window.removeEventListener('pointercancel', upHandler);
 
-                                  // NOW commit React state (safe — drag is over, element is stable)
+                                  // Synchronize timeline scroll cleanly to avoid snap or jump
+                                  if (timeline) {
+                                    ignoreScrollRef.current = true;
+                                    timeline.scrollLeft = pastDuration * PIXELS_PER_SECOND;
+                                  }
+
+                                  if (editorVideoRef.current) {
+                                    editorVideoRef.current.currentTime = finalStartOffset;
+                                  }
+
+                                  // Commit state
                                   setCurrentClipIndex(idx);
                                   setFocusedTrack('video');
                                   setClipSequence(prev => {
@@ -6958,6 +7023,7 @@ const CreatePage = () => {
                                     };
                                     const newTotalDur = next.reduce((sum, c) => sum + c.duration, 0);
                                     setVideoDuration(newTotalDur);
+                                    if (timeSpan) timeSpan.innerHTML = formatPlaybackTime(pastDuration, newTotalDur);
                                     return next;
                                   });
                                 };
@@ -6968,50 +7034,57 @@ const CreatePage = () => {
                               }}
                             >
                               {focusedTrack === 'video' && currentClipIndex === idx && (
-                                <BiChevronLeft size={20} className="text-black font-extrabold -ml-0.5" />
+                                <div className="timeline-trim-handle-icon flex items-center justify-center pointer-events-none select-none">
+                                  <div className="flex gap-0.5 items-center justify-center">
+                                    <div className="w-[2.5px] h-3.5 bg-neutral-900 rounded-full" />
+                                    <div className="w-[2.5px] h-3.5 bg-neutral-900 rounded-full" />
+                                  </div>
+                                </div>
                               )}
                             </div>
 
                             {/* Right Trimmer Handle */}
                             <div
-                              className={`absolute z-50 cursor-col-resize flex items-center justify-center transition-all duration-150 ${focusedTrack === 'video' && currentClipIndex === idx
-                                  ? '-top-[3px] -bottom-[3px] -right-[3px] w-[22px] bg-white text-black rounded-r-[18px] opacity-100 pointer-events-auto shadow-md'
-                                  : 'top-0 bottom-0 right-0 w-[22px] bg-transparent opacity-0 hover:opacity-20 hover:bg-white rounded-r-[18px] pointer-events-auto'
+                              className={`timeline-trim-handle timeline-trim-handle-right absolute z-50 cursor-col-resize flex items-center justify-center transition-all duration-150 ${focusedTrack === 'video' && currentClipIndex === idx
+                                  ? '-top-[3px] -bottom-[3px] -right-[3px] w-[20px] rounded-r-[14px] opacity-100 pointer-events-auto shadow-[0_0_12px_rgba(255,255,255,0.35)] before:absolute before:-inset-x-3 before:inset-y-0 before:content-[""]'
+                                  : 'top-0 bottom-0 right-0 w-[18px] bg-transparent opacity-0 hover:opacity-20 rounded-r-[14px] pointer-events-auto'
                                 }`}
+                              style={{
+                                backgroundColor: '#ffffff',
+                                color: '#111111',
+                                touchAction: 'none'
+                              }}
                               onPointerDown={(e) => {
                                 e.stopPropagation();
                                 e.preventDefault();
                                 const targetHandle = e.currentTarget;
-                                targetHandle.setPointerCapture(e.pointerId);
+                                const pointerId = e.pointerId;
+                                try {
+                                  targetHandle.setPointerCapture(pointerId);
+                                } catch (err) {
+                                  console.warn("Could not capture pointer:", err);
+                                }
 
-                                // Snapshot clip values — do NOT call setState here,
-                                // that would trigger a re-render which destroys the
-                                // element and loses pointer capture mid-drag.
                                 const startX = e.clientX;
                                 const initialOriginalDuration = clip.originalDuration || (clip.duration * (clip.speed || 1));
                                 const startOffset = clip.startOffset || 0;
                                 const limitEnd = clip.limitEnd !== undefined ? clip.limitEnd : (startOffset + initialOriginalDuration);
                                 const speed = clip.speed || 1;
 
-                                // Get DOM element references
+                                // DOM element references
                                 const clipEl = targetHandle.parentElement;
                                 const flexContainerEl = clipEl?.parentElement;
                                 const outerTrackEl = flexContainerEl?.parentElement;
                                 const badgeEl = clipEl?.querySelector('.clip-duration-badge');
                                 const timeSpan = document.getElementById('editor-playback-time');
+                                const timeline = document.getElementById('editor-timeline');
 
-                                // Instantly style clip + handle as active via DOM (no re-render)
-                                if (clipEl) {
-                                  clipEl.classList.add('border-[3px]', 'border-white', 'rounded-[18px]', 'z-10', 'shadow-xl');
-                                  clipEl.classList.remove('border-r-2', 'border-black/90', 'opacity-80');
-                                }
-                                targetHandle.style.cssText = 'top:-3px;bottom:-3px;right:-3px;width:22px;background:#ffffff;border-radius:0 18px 18px 0;opacity:1;';
-
-                                // Pause playback so the playhead-follow scroll loop doesn't fight the drag
+                                // Pause playback so playhead-follow scroll loop doesn't fight drag
                                 setIsEditorPlaying(false);
                                 if (editorVideoRef.current) {
                                   editorVideoRef.current.pause();
-                                  editorVideoRef.current.currentTime = startOffset + initialOriginalDuration;
+                                  const initialSeek = Math.max(startOffset, startOffset + initialOriginalDuration - 0.02 * speed);
+                                  seekVideoSmoothly(editorVideoRef.current, initialSeek);
                                 }
 
                                 document.body.style.cursor = 'col-resize';
@@ -7033,54 +7106,70 @@ const CreatePage = () => {
 
                                     let newOriginalDuration = initialOriginalDuration + deltaRaw;
                                     newOriginalDuration = Math.max(0.5 * speed, Math.min(limitEnd - startOffset, newOriginalDuration));
-                                    const newDuration = newOriginalDuration / speed;
+                                    const newDuration = Math.max(0.5, newOriginalDuration / speed);
 
                                     finalOriginalDuration = newOriginalDuration;
                                     finalDuration = newDuration;
 
-                                    // 1. Seek the video player smoothly
-                                    const targetSeekTime = startOffset + newOriginalDuration;
-                                    if (editorVideoRef.current && Math.abs(editorVideoRef.current.currentTime - targetSeekTime) > 0.01) {
-                                      editorVideoRef.current.currentTime = targetSeekTime;
+                                    // 1. Ultra-smooth 60fps throttled video scrubbing (safely clamped)
+                                    const targetSeekTime = Math.max(startOffset, startOffset + newOriginalDuration - 0.02 * speed);
+                                    if (editorVideoRef.current) {
+                                      seekVideoSmoothly(editorVideoRef.current, targetSeekTime);
                                     }
 
                                     // 2. Update playback time display in DOM
                                     const otherClipsDurationRight = clipSequence.reduce((sum, c, i) => i !== idx ? sum + c.duration : sum, 0);
                                     const totalDurRight = otherClipsDurationRight + newDuration;
-                                    const elapsed = pastDuration + (startOffset + newOriginalDuration - (clip.limitStart || 0)) / speed;
+                                    const elapsed = pastDuration + newDuration;
                                     if (timeSpan) timeSpan.innerHTML = formatPlaybackTime(elapsed, totalDurRight);
 
                                     // 3. Update clip width in DOM
-                                    if (clipEl) clipEl.style.width = (newDuration * PIXELS_PER_SECOND) + 'px';
+                                    if (clipEl) {
+                                      clipEl.style.width = (newDuration * PIXELS_PER_SECOND) + 'px';
+                                    }
 
-                                    // 4. Update duration badge in DOM
-                                    if (badgeEl) badgeEl.innerText = newDuration.toFixed(1) + 's';
+                                    // 4. Update floating duration badge in DOM
+                                    if (badgeEl) {
+                                      badgeEl.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-[#fe2c55] animate-pulse"></span><span>${newDuration.toFixed(1)}s</span>`;
+                                    }
 
                                     // 5. Update flex container & track width in DOM
-                                    const otherClipsDuration = clipSequence.reduce((sum, c, i) => i !== idx ? sum + c.duration : sum, 0);
-                                    const totalDur = otherClipsDuration + newDuration;
-                                    if (flexContainerEl) flexContainerEl.style.width = (totalDur * PIXELS_PER_SECOND) + 'px';
-                                    if (outerTrackEl) outerTrackEl.style.width = (totalDur * PIXELS_PER_SECOND) + 'px';
+                                    if (flexContainerEl) flexContainerEl.style.width = (totalDurRight * PIXELS_PER_SECOND) + 'px';
+                                    if (outerTrackEl) outerTrackEl.style.width = (totalDurRight * PIXELS_PER_SECOND) + 'px';
                                   });
                                 };
 
                                 const upHandler = (upEvent) => {
                                   document.body.style.cursor = '';
                                   document.body.style.userSelect = '';
-                                  try {
-                                    if (targetHandle.hasPointerCapture(upEvent.pointerId)) {
-                                      targetHandle.releasePointerCapture(upEvent.pointerId);
-                                    }
-                                  } catch (err) {
-                                    console.warn("Failed to release pointer capture:", err);
+                                  if (pendingRaf) {
+                                    cancelAnimationFrame(pendingRaf);
+                                    pendingRaf = null;
                                   }
-                                  // Reset inline style so React class takes over after re-render
-                                  targetHandle.style.cssText = '';
+                                  try {
+                                    if (targetHandle.hasPointerCapture(pointerId)) {
+                                      targetHandle.releasePointerCapture(pointerId);
+                                    }
+                                  } catch { }
+
+                                  if (clipEl) {
+                                    clipEl.style.width = '';
+                                  }
                                   window.removeEventListener('pointermove', moveHandler);
                                   window.removeEventListener('pointerup', upHandler);
                                   window.removeEventListener('pointercancel', upHandler);
 
-                                  // NOW commit React state (safe - drag is over)
+                                  // Align timeline scroll to end of trimmed clip
+                                  if (timeline) {
+                                    ignoreScrollRef.current = true;
+                                    timeline.scrollLeft = (pastDuration + finalDuration) * PIXELS_PER_SECOND;
+                                  }
+
+                                  if (editorVideoRef.current) {
+                                    editorVideoRef.current.currentTime = Math.max(startOffset, startOffset + finalOriginalDuration - 0.02 * speed);
+                                  }
+
+                                  // Commit state
                                   setCurrentClipIndex(idx);
                                   setFocusedTrack('video');
                                   setClipSequence(prev => {
@@ -7092,6 +7181,7 @@ const CreatePage = () => {
                                     };
                                     const newTotalDur = next.reduce((sum, c) => sum + c.duration, 0);
                                     setVideoDuration(newTotalDur);
+                                    if (timeSpan) timeSpan.innerHTML = formatPlaybackTime(pastDuration + finalDuration, newTotalDur);
                                     return next;
                                   });
                                 };
@@ -7102,7 +7192,12 @@ const CreatePage = () => {
                               }}
                             >
                               {focusedTrack === 'video' && currentClipIndex === idx && (
-                                <BiChevronRight size={20} className="text-black font-extrabold -mr-0.5" />
+                                <div className="timeline-trim-handle-icon flex items-center justify-center pointer-events-none select-none">
+                                  <div className="flex gap-0.5 items-center justify-center">
+                                    <div className="w-[2.5px] h-3.5 bg-neutral-900 rounded-full" />
+                                    <div className="w-[2.5px] h-3.5 bg-neutral-900 rounded-full" />
+                                  </div>
+                                </div>
                               )}
                             </div>
                           </div>

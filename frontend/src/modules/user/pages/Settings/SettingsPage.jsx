@@ -124,7 +124,7 @@ const SettingsPage = ({ onLogout }) => {
                 {/* Upgrade to Premium Card */}
                 <div 
                   onClick={() => navigate('/profile/premium')}
-                  className="w-full bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-600 rounded-[18px] p-4 text-white flex items-center justify-between shadow-md shadow-yellow-100/50 cursor-pointer active:scale-[0.98] transition-all border border-white/20 hover:brightness-105 mb-3"
+                  className="w-full bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-600 rounded-[18px] p-4 text-white flex items-center justify-between cursor-pointer active:scale-[0.98] transition-all border border-white/20 hover:brightness-105 mb-3"
                 >
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center shrink-0 border border-white/30 backdrop-blur-md">

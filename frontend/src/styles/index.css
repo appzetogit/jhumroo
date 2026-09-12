@@ -772,7 +772,7 @@
   color: #fe2c55 !important;
 }
 
-[data-theme='dark'] .theme-create-page .bg-white,
+[data-theme='dark'] .theme-create-page .bg-white:not(.preserve-handle-white):not(.timeline-trim-handle),
 [data-theme='dark'] .theme-create-page .bg-\[\#f5f5f5\],
 [data-theme='dark'] .theme-create-page .bg-\[\#f4f5f7\] {
   background-color: #14161b !important;
@@ -784,8 +784,39 @@
   background-color: rgba(255, 255, 255, 0.06) !important;
 }
 
-[data-theme='dark'] .theme-create-page .text-black {
+[data-theme='dark'] .theme-create-page .text-black:not(.preserve-handle-text):not(.timeline-trim-handle-icon) {
   color: var(--theme-text-primary) !important;
+}
+
+/* Dedicated timeline trimmer handle styles - immune to dark mode overrides */
+.timeline-trim-handle {
+  background-color: #ffffff !important;
+  color: #111111 !important;
+  user-select: none !important;
+  touch-action: none !important;
+}
+
+.timeline-trim-handle-left {
+  border-top-left-radius: 14px !important;
+  border-bottom-left-radius: 14px !important;
+}
+
+.timeline-trim-handle-right {
+  border-top-right-radius: 14px !important;
+  border-bottom-right-radius: 14px !important;
+}
+
+.timeline-trim-handle-icon {
+  color: #111111 !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.timeline-clip-selected {
+  border: 3px solid #ffffff !important;
+  border-radius: 16px !important;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.6) !important;
 }
 
 [data-theme='dark'] .theme-create-page .text-black\/80,
