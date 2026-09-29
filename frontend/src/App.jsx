@@ -62,6 +62,7 @@ import PremiumPage from './modules/user/pages/Profile/PremiumPage';
 import { ThemeProvider, useTheme } from './context/ThemeContext';
 import { AdminConfigProvider } from './context/AdminConfigContext';
 import { SocketProvider } from './context/SocketContext';
+import { LiveProvider } from './context/LiveContext';
 import { ToastProvider } from './context/ToastContext';
 import AdminLayout from './modules/admin/AdminLayout';
 import AdminLogin from './modules/admin/pages/AdminLogin';
@@ -444,9 +445,11 @@ function App() {
         <ThemeProvider>
           <AdminConfigProvider>
             <SocketProvider>
-              <ToastProvider>
-                <AppContent />
-              </ToastProvider>
+              <LiveProvider>
+                <ToastProvider>
+                  <AppContent />
+                </ToastProvider>
+              </LiveProvider>
             </SocketProvider>
           </AdminConfigProvider>
         </ThemeProvider>

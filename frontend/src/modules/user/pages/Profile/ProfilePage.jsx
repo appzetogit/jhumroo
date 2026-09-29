@@ -6,6 +6,7 @@ import { useTheme } from '../../../../context/ThemeContext';
 import { useAppContent } from '../../../../hooks/useAppContent';
 import { useAuth } from '../../../../context/AuthContext';
 import { useToast } from '../../../../context/ToastContext';
+import { useLive } from '../../../../context/LiveContext';
 import userService from '../../../../services/userService';
 import followService from '../../../../services/followService';
 import ProfileMoreOptionsSheet from '../../components/modals/ProfileMoreOptionsSheet';
@@ -212,6 +213,10 @@ const ProfilePage = () => {
     (profileUsername && currentUser?.username && profileUsername.toLowerCase() === currentUser.username.toLowerCase());
   const activeProfile = isOwnProfile ? (currentUser || profile) : (profile || currentUser);
   const isPrivateAndLocked = !isOwnProfile && profile?.isPrivate && !isFollowing;
+
+  const { getUserLive } = useLive();
+  const profileUserLive = getUserLive(activeProfile?._id, displayUsername);
+  const isProfileUserLive = Boolean(profileUserLive);
 
   useEffect(() => {
     setProfile(null);
@@ -823,7 +828,32 @@ const ProfilePage = () => {
         {/* Profile Info */}
         <div className="flex flex-col items-center pt-0.5 pb-5 px-4">
           <div className="relative w-[116px] h-[116px] sm:w-32 sm:h-32 mb-2.5">
-            <div className="w-full h-full rounded-full p-[2.5px] bg-white">
+            {/* LIVE Badge on Top of Profile Avatar if User is Live */}
+            {isProfileUserLive && (
+              <div 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  navigate(`/live/${profileUserLive._id}`);
+                }}
+                className="absolute -top-2.5 left-1/2 -translate-x-1/2 z-20 px-2.5 py-0.5 bg-[#FE2C55] text-white text-[10px] font-black uppercase tracking-wider rounded-full shadow-[0_0_10px_rgba(254,44,85,0.95)] border-2 border-white flex items-center gap-1 cursor-pointer animate-pulse active:scale-95 transition-transform select-none"
+                title="Watch Live Stream"
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping shrink-0" />
+                <span>LIVE</span>
+              </div>
+            )}
+
+            <div 
+              className={`w-full h-full rounded-full transition-all ${
+                isProfileUserLive 
+                  ? 'p-[3.5px] bg-gradient-to-tr from-[#FE2C55] via-red-500 to-rose-600 shadow-[0_0_18px_rgba(254,44,85,0.85)] animate-pulse cursor-pointer' 
+                  : 'p-[2.5px] bg-white'
+              }`}
+              onClick={isProfileUserLive ? (e) => {
+                e.stopPropagation();
+                navigate(`/live/${profileUserLive._id}`);
+              } : undefined}
+            >
               <div className="w-full h-full rounded-full overflow-hidden bg-[#242424]">
                 <img 
                   src={activeProfile?.profilePicture?.url || (typeof activeProfile?.profilePicture === 'string' ? activeProfile?.profilePicture : null) || `https://api.dicebear.com/7.x/avataaars/svg?seed=${displayUsername}`} 
@@ -835,7 +865,7 @@ const ProfilePage = () => {
             {isOwnProfile && (
               <div 
                 onClick={() => setShowPhotoPicker(true)}
-                className="absolute right-0.5 bottom-0.5 w-[33px] h-[33px] bg-white rounded-full p-[2.5px] flex items-center justify-center cursor-pointer shadow-md active:scale-90 transition-transform"
+                className="absolute right-0.5 bottom-0.5 w-[33px] h-[33px] bg-white rounded-full p-[2.5px] flex items-center justify-center cursor-pointer shadow-md active:scale-90 transition-transform z-10"
               >
                 <div className="w-full h-full bg-[#00D2E5] rounded-full flex items-center justify-center text-white">
                   {uploading ? (

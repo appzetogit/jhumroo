@@ -15,6 +15,7 @@ import messageService from '../../../../services/messageService';
 import adService from '../../../../services/adService';
 import followService from '../../../../services/followService';
 import { useAuth } from '../../../../context/AuthContext';
+import { useLive } from '../../../../context/LiveContext';
 
 // In-app toast helper — shows a brief floating message
 const showOverlayToast = (message) => {
@@ -151,6 +152,10 @@ const VideoOverlay = ({ reelId, username, caption, musicName, isLiked, likes, co
   const { user: currentUser } = useAuth();
   const creatorId = videoData.user?._id || videoData.user;
   const isOwnReel = currentUser && creatorId && (currentUser._id === creatorId || currentUser.username === username);
+
+  const { getUserLive } = useLive();
+  const creatorLive = getUserLive(creatorId, username);
+  const isCreatorLive = Boolean(creatorLive);
 
   const [followingState, setFollowingState] = useState(() => {
     if (isOwnReel || isAd) return 'none';
@@ -514,10 +519,33 @@ const VideoOverlay = ({ reelId, username, caption, musicName, isLiked, likes, co
              {/* Avatar + Follow Badge Button */}
              {(!isAd || (isAd && videoData.onModel === 'User')) && (
                <div className="relative mb-2">
+                  {/* LIVE Badge on/above Avatar if Creator is Live */}
+                  {isCreatorLive && (
+                    <div
+                      className="absolute -top-2 left-1/2 -translate-x-1/2 z-20 px-1.5 py-0.5 bg-[#FE2C55] text-white text-[9px] font-black uppercase tracking-wider rounded-full shadow-[0_0_8px_rgba(254,44,85,0.95)] border border-white flex items-center gap-1 cursor-pointer pointer-events-auto animate-pulse select-none hover:scale-105 active:scale-95 transition-transform"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        navigate(`/live/${creatorLive._id}`);
+                      }}
+                      title="Join Live Stream"
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping shrink-0" />
+                      <span>LIVE</span>
+                    </div>
+                  )}
+
                   <div
-                    className="w-12 h-12 rounded-full border-2 border-white bg-surface overflow-hidden cursor-pointer shadow-lg active:scale-95 transition-transform"
+                    className={`rounded-full overflow-hidden cursor-pointer shadow-lg active:scale-95 transition-all ${
+                      isCreatorLive
+                        ? 'w-12 h-12 p-[2.5px] bg-gradient-to-tr from-[#FE2C55] via-red-500 to-rose-600 shadow-[0_0_14px_rgba(254,44,85,0.9)] animate-pulse'
+                        : 'w-12 h-12 border-2 border-white bg-surface'
+                    }`}
                     onClick={(e) => {
                       e.stopPropagation();
+                      if (isCreatorLive && creatorLive?._id) {
+                        navigate(`/live/${creatorLive._id}`);
+                        return;
+                      }
                       const currentPath = window.location.pathname.toLowerCase();
                       const targetPath = `/user/${username}`.toLowerCase();
                       const isOwnProfilePath = currentPath === '/profile';
@@ -534,7 +562,7 @@ const VideoOverlay = ({ reelId, username, caption, musicName, isLiked, likes, co
                      <img 
                         src={videoData.userProfile || videoData.user?.profilePicture?.url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${username}`} 
                         alt="avatar" 
-                        className="w-full h-full object-cover" 
+                        className="w-full h-full object-cover rounded-full" 
                      />
                   </div>
                   {followingState === 'not_following' && (

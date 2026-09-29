@@ -442,6 +442,7 @@ export const initSocket = (server) => {
           });
 
           liveRooms.delete(liveId);
+          io.emit('user_left_live', { liveId, broadcasterId: stream.broadcaster });
         }
       } catch (err) {
         console.error('Error ending live stream via socket:', err);
@@ -473,6 +474,7 @@ export const initSocket = (server) => {
                 message: 'Broadcaster disconnected'
               });
               liveRooms.delete(liveId);
+              io.emit('user_left_live', { liveId, broadcasterId: room.broadcasterUserId || userId });
               try {
                 await LiveStream.findByIdAndUpdate(liveId, {
                   status: 'ended',
