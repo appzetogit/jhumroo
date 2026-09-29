@@ -20,14 +20,9 @@ export const getIceServersConfig = (userId = 'guest') => {
     .map((s) => s.trim())
     .filter(Boolean);
 
-  // Standard fallback STUN servers
-  const defaultStuns = [
-    'stun:stun.l.google.com:19302',
-    'stun:stun1.l.google.com:19302',
-    'stun:stun2.l.google.com:19302'
-  ];
-
-  const allStuns = Array.from(new Set([...stunUrls, ...defaultStuns]));
+  // Fast, optimal STUN servers (keep <= 2 to prevent discovery slowdown and warning)
+  const defaultStuns = ['stun:stun.l.google.com:19302'];
+  const allStuns = Array.from(new Set([...stunUrls, ...defaultStuns])).slice(0, 2);
 
   const iceServers = [
     {
