@@ -650,6 +650,11 @@ const CreatePage = () => {
   const [rawCameraStream, setRawCameraStream] = useState(null);
   const [faceEffectCanvasEl, setFaceEffectCanvasEl] = useState(null);
 
+  const handleFaceCanvasReady = useCallback((canvas) => {
+    faceEffectCanvasElRef.current = canvas;
+    setFaceEffectCanvasEl(canvas);
+  }, []);
+
   // Live Broadcast Pipeline is initialized when going live via startLiveBroadcastPipeline
 
   const cameraEffectsList = useMemo(() => [
@@ -903,21 +908,11 @@ const CreatePage = () => {
   const facingModeRef = useRef(facingMode);
   const getCombinedFilterRef = useRef(getCombinedFilter);
 
-  useEffect(() => {
-    activeFaceEffectRef.current = activeFaceEffect;
-  }, [activeFaceEffect]);
-
-  useEffect(() => {
-    faceEffectCanvasElRef.current = faceEffectCanvasEl;
-  }, [faceEffectCanvasEl]);
-
-  useEffect(() => {
-    facingModeRef.current = facingMode;
-  }, [facingMode]);
-
-  useEffect(() => {
-    getCombinedFilterRef.current = getCombinedFilter;
-  });
+  // Synchronously update refs on every render for 0ms filter and effect switching
+  activeFaceEffectRef.current = activeFaceEffect;
+  faceEffectCanvasElRef.current = faceEffectCanvasEl;
+  facingModeRef.current = facingMode;
+  getCombinedFilterRef.current = getCombinedFilter;
 
   const startLiveBroadcastPipeline = useCallback((sourceMediaStream) => {
     if (!liveBroadcastCanvasRef.current) {
@@ -927,7 +922,9 @@ const CreatePage = () => {
       liveBroadcastCanvasRef.current = c;
     }
     const canvas = liveBroadcastCanvasRef.current;
-    const ctx = canvas.getContext('2d', { alpha: false });
+    const ctx = canvas.getContext('2d', { alpha: false, desynchronized: true });
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
 
     if (!liveVideoSourceRef.current) {
       const v = document.createElement('video');
@@ -5912,14 +5909,15 @@ const CreatePage = () => {
                 <canvas
                   ref={canvasRef}
                   onDoubleClick={handleCanvasDoubleClick}
-                  className="h-full w-full object-cover transition-all duration-300 rounded-[24px] sm:rounded-[28px]"
+                  className="h-full w-full object-cover rounded-[24px] sm:rounded-[28px]"
+                  style={{ filter: getCombinedFilter() }}
                 />
                 {activeFaceEffect && (
                   <FaceEffectCanvas
                     mediaStream={rawCameraStream}
                     activeEffectId={activeFaceEffect}
                     mirrored={facingMode === 'user'}
-                    onCanvasReady={setFaceEffectCanvasEl}
+                    onCanvasReady={handleFaceCanvasReady}
                     filterCss={getCombinedFilter()}
                   />
                 )}

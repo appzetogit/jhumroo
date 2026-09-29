@@ -104,16 +104,45 @@ export const useWebRTCLive = ({
           }
         };
 
-        // Create and send SDP offer
+        // Create and send SDP offer with HD video parameters
         const offer = await pc.createOffer({
           offerToReceiveAudio: false,
           offerToReceiveVideo: false
         });
         await pc.setLocalDescription(offer);
 
+        // Boost video encoding parameters on sender for crisp HD quality
+        const videoSender = pc.getSenders().find((s) => s.track && s.track.kind === 'video');
+        if (videoSender) {
+          try {
+            const params = videoSender.getParameters();
+            if (!params.encodings || params.encodings.length === 0) {
+              params.encodings = [{}];
+            }
+            params.encodings[0].maxBitrate = 3000000; // 3.0 Mbps crystal-clear HD
+            params.encodings[0].minBitrate = 800000;  // 800 kbps minimum floor
+            params.encodings[0].maxFramerate = 30;
+            params.encodings[0].priority = 'high';
+            params.encodings[0].networkPriority = 'high';
+            params.degradationPreference = 'maintain-resolution'; // Never sacrifice HD sharpness
+            await videoSender.setParameters(params);
+          } catch (e) {
+            console.warn('[WebRTC] setParameters warning:', e);
+          }
+        }
+
+        // Munge SDP bandwidth line for wide browser compatibility
+        const sdpStr = pc.localDescription?.sdp || '';
+        const highQualitySdp = {
+          type: pc.localDescription.type,
+          sdp: sdpStr.includes('m=video')
+            ? sdpStr.replace(/(m=video[^\r\n]*\r\n)/, '$1b=AS:3000\r\nb=TIAS:3000000\r\n')
+            : sdpStr
+        };
+
         socket.emit('live_offer', {
           toViewerSocketId: viewerSocketId,
-          sdp: pc.localDescription,
+          sdp: highQualitySdp,
           liveId
         });
 
@@ -202,9 +231,17 @@ export const useWebRTCLive = ({
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
 
+        const answerSdpStr = pc.localDescription?.sdp || '';
+        const highQualityAnswer = {
+          type: pc.localDescription.type,
+          sdp: answerSdpStr.includes('m=video')
+            ? answerSdpStr.replace(/(m=video[^\r\n]*\r\n)/, '$1b=AS:3000\r\nb=TIAS:3000000\r\n')
+            : answerSdpStr
+        };
+
         socket.emit('live_answer', {
           toBroadcasterSocketId: fromBroadcasterSocketId,
-          sdp: pc.localDescription,
+          sdp: highQualityAnswer,
           liveId
         });
       } catch (err) {
