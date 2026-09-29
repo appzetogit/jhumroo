@@ -69,25 +69,42 @@ export default function LiveViewerPage() {
 
   // Connect remote stream to video element
   useEffect(() => {
-    if (videoRef.current && remoteStream) {
-      videoRef.current.srcObject = remoteStream;
-      videoRef.current
-        .play()
-        .then(() => {
-          setAudioBlocked(false);
-        })
-        .catch((err) => {
-          console.warn('[LiveViewer] Autoplay issue:', err);
-          setAudioBlocked(true);
-        });
+    const video = videoRef.current;
+    if (!video || !remoteStream) return;
+
+    if (video.srcObject !== remoteStream) {
+      video.srcObject = remoteStream;
     }
+
+    const startPlayback = async () => {
+      try {
+        video.muted = isMuted;
+        await video.play();
+        setAudioBlocked(false);
+      } catch (err) {
+        console.warn('[LiveViewer] Autoplay blocked, falling back to muted playback:', err);
+        setAudioBlocked(true);
+        setIsMuted(true);
+        video.muted = true;
+        try {
+          await video.play();
+          console.log('[LiveViewer] Muted live video playing successfully');
+        } catch (playErr) {
+          console.error('[LiveViewer] Even muted playback failed:', playErr);
+        }
+      }
+    };
+
+    startPlayback();
   }, [remoteStream]);
 
   // Handle unmute click
   const handleUnmute = () => {
     if (videoRef.current) {
       videoRef.current.muted = false;
-      videoRef.current.play().catch(() => {});
+      videoRef.current.play().catch((err) => {
+        console.warn('[LiveViewer] Unmute play warning:', err);
+      });
       setIsMuted(false);
       setAudioBlocked(false);
     }
@@ -158,7 +175,14 @@ export default function LiveViewerPage() {
   return (
     <div className="fixed inset-0 z-50 bg-black flex flex-col select-none overflow-hidden">
       {/* Video Container */}
-      <div className="relative w-full h-full flex items-center justify-center bg-black">
+      <div
+        onClick={() => {
+          if (audioBlocked) {
+            handleUnmute();
+          }
+        }}
+        className="relative w-full h-full flex items-center justify-center bg-black"
+      >
         {remoteStream ? (
           <video
             ref={videoRef}

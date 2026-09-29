@@ -966,14 +966,14 @@ const CreatePage = () => {
           ctx.restore();
         } else {
           // Priority order for video source:
-          // 1. Instacam internal playing video element (instacamRef.current?.i)
-          // 2. Offscreen video source element (v) if ready
-          // 3. Canvas element from instacam viewport (canvasRef.current)
+          // 1. Instacam active onscreen canvas (canvasRef.current) - guaranteed active bitmap!
+          // 2. Instacam internal playing video element (instacamRef.current?.i)
+          // 3. Offscreen video source element (v) if ready
           const videoSource =
+            (canvasRef.current && canvasRef.current.width > 0 ? canvasRef.current : null) ||
             (instacamRef.current?.i && instacamRef.current.i.readyState >= 2 ? instacamRef.current.i : null) ||
             (v && v.readyState >= 2 ? v : null) ||
-            instacamRef.current?.i ||
-            (canvasRef.current && canvasRef.current.width > 0 ? canvasRef.current : null);
+            instacamRef.current?.i;
 
           if (videoSource) {
             ctx.save();
@@ -1001,9 +1001,15 @@ const CreatePage = () => {
       liveBroadcastRafRef.current = requestAnimationFrame(renderBroadcastLoop);
     };
 
-    liveBroadcastRafRef.current = requestAnimationFrame(renderBroadcastLoop);
+    // Render first frame immediately so canvas bitmap is populated
+    renderBroadcastLoop();
 
-    return canvas.captureStream(30).getVideoTracks()[0];
+    const stream = canvas.captureStream(30);
+    const track = stream.getVideoTracks()[0];
+    if (track) {
+      track.enabled = true;
+    }
+    return track;
   }, [rawCameraStream]);
 
   // Keep liveVideoSource playing latest rawCameraStream if camera flips during live

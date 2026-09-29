@@ -231,6 +231,7 @@ export const initSocket = (server) => {
       // Add to room viewers (if not broadcaster)
       const isBroadcaster = room.broadcasterUserId === userId || room.broadcasterSocketId === socket.id;
       if (!isBroadcaster) {
+        const isNewViewer = !room.viewers.has(socket.id);
         room.viewers.set(socket.id, {
           userId,
           user: socket.user
@@ -243,32 +244,34 @@ export const initSocket = (server) => {
 
         const currentCount = room.viewers.size;
 
-        // Update database with current & peak viewers + unique viewer
-        try {
-          await LiveStream.findByIdAndUpdate(liveId, {
-            currentViewersCount: currentCount,
-            $max: { peakViewers: currentCount },
-            $addToSet: { totalUniqueViewers: userId }
-          });
-        } catch (dbErr) {
-          console.error('Error updating live viewers in DB:', dbErr);
-        }
-
-        // Broadcast updated viewer count to room
-        io.to(`live_${liveId}`).emit('live_viewers_count', {
-          liveId,
-          count: currentCount
-        });
-
-        // Notify room that user joined
-        socket.to(`live_${liveId}`).emit('user_joined_live', {
-          user: {
-            _id: socket.user._id,
-            username: socket.user.username,
-            fullName: socket.user.fullName,
-            profilePicture: socket.user.profilePicture
+        if (isNewViewer) {
+          // Update database with current & peak viewers + unique viewer
+          try {
+            await LiveStream.findByIdAndUpdate(liveId, {
+              currentViewersCount: currentCount,
+              $max: { peakViewers: currentCount },
+              $addToSet: { totalUniqueViewers: userId }
+            });
+          } catch (dbErr) {
+            console.error('Error updating live viewers in DB:', dbErr);
           }
-        });
+
+          // Broadcast updated viewer count to room
+          io.to(`live_${liveId}`).emit('live_viewers_count', {
+            liveId,
+            count: currentCount
+          });
+
+          // Notify room that user joined
+          socket.to(`live_${liveId}`).emit('user_joined_live', {
+            user: {
+              _id: socket.user._id,
+              username: socket.user.username,
+              fullName: socket.user.fullName,
+              profilePicture: socket.user.profilePicture
+            }
+          });
+        }
 
         // Notify broadcaster that a new viewer joined so broadcaster initiates WebRTC offer
         if (room.broadcasterSocketId) {

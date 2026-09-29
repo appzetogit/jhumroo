@@ -27,10 +27,15 @@ export const useWebRTCLive = ({
   const viewerPcRef = useRef(null); // RTCPeerConnection (Viewer)
   const iceCandidateQueue = useRef([]);
   const localStreamRef = useRef(localStream);
+  const iceServersRef = useRef(iceServers);
 
   useEffect(() => {
     localStreamRef.current = localStream;
   }, [localStream]);
+
+  useEffect(() => {
+    iceServersRef.current = iceServers;
+  }, [iceServers]);
 
   // Fetch STUN/TURN ICE servers on mount
   useEffect(() => {
@@ -68,7 +73,7 @@ export const useWebRTCLive = ({
         }
 
         const pc = new RTCPeerConnection({
-          iceServers,
+          iceServers: iceServersRef.current,
           bundlePolicy: 'max-bundle',
           rtcpMuxPolicy: 'require'
         });
@@ -117,7 +122,7 @@ export const useWebRTCLive = ({
         console.error(`[WebRTC Broadcaster] Error offering to viewer ${viewerSocketId}:`, err);
       }
     },
-    [socket, iceServers, liveId]
+    [socket, liveId]
   );
 
   /**
@@ -156,16 +161,17 @@ export const useWebRTCLive = ({
         }
 
         const pc = new RTCPeerConnection({
-          iceServers,
+          iceServers: iceServersRef.current,
           bundlePolicy: 'max-bundle',
           rtcpMuxPolicy: 'require'
         });
+        viewerPcRef.current = pc;
 
         // Remote track received!
         pc.ontrack = (event) => {
           console.log('[WebRTC Viewer] Remote track received:', event.track.kind);
           if (event.streams && event.streams[0]) {
-            setRemoteStream(event.streams[0]);
+            setRemoteStream(new MediaStream(event.streams[0].getTracks()));
             setConnectionStatus('connected');
           }
         };
@@ -201,14 +207,12 @@ export const useWebRTCLive = ({
           sdp: pc.localDescription,
           liveId
         });
-
-        viewerPcRef.current = pc;
       } catch (err) {
         console.error('[WebRTC Viewer] Error handling offer:', err);
         setConnectionStatus('failed');
       }
     },
-    [socket, iceServers, liveId]
+    [socket, liveId]
   );
 
   /**
