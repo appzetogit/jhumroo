@@ -650,17 +650,7 @@ const CreatePage = () => {
   const [rawCameraStream, setRawCameraStream] = useState(null);
   const [faceEffectCanvasEl, setFaceEffectCanvasEl] = useState(null);
 
-  // Live track replacement when face effect, canvas or camera stream changes
-  useEffect(() => {
-    if (isLiveActive && replaceLiveTrack) {
-      const videoTrack = (activeFaceEffect && faceEffectCanvasEl)
-        ? faceEffectCanvasEl.captureStream(30).getVideoTracks()[0]
-        : (canvasRef.current?.captureStream?.(30)?.getVideoTracks()[0] || rawCameraStream?.getVideoTracks()[0]);
-      if (videoTrack) {
-        replaceLiveTrack(videoTrack);
-      }
-    }
-  }, [activeFaceEffect, faceEffectCanvasEl, rawCameraStream, isLiveActive, replaceLiveTrack]);
+  // Live Broadcast Pipeline is initialized when going live via startLiveBroadcastPipeline
 
   const cameraEffectsList = useMemo(() => [
     { id: null, label: 'Normal', icon: '📹' },
@@ -903,6 +893,139 @@ const CreatePage = () => {
     const adj = computeAdjustmentFilterCss(imageAdjustments);
     return `${base} ${effectFilter} ${adj}`.trim() || 'none';
   };
+
+  // Live Broadcast Pipeline: Real-time Canvas Rendering with active Filter + Face Effect
+  const liveBroadcastCanvasRef = useRef(null);
+  const liveBroadcastRafRef = useRef(null);
+  const liveVideoSourceRef = useRef(null);
+  const activeFaceEffectRef = useRef(activeFaceEffect);
+  const faceEffectCanvasElRef = useRef(faceEffectCanvasEl);
+  const facingModeRef = useRef(facingMode);
+  const getCombinedFilterRef = useRef(getCombinedFilter);
+
+  useEffect(() => {
+    activeFaceEffectRef.current = activeFaceEffect;
+  }, [activeFaceEffect]);
+
+  useEffect(() => {
+    faceEffectCanvasElRef.current = faceEffectCanvasEl;
+  }, [faceEffectCanvasEl]);
+
+  useEffect(() => {
+    facingModeRef.current = facingMode;
+  }, [facingMode]);
+
+  useEffect(() => {
+    getCombinedFilterRef.current = getCombinedFilter;
+  });
+
+  const startLiveBroadcastPipeline = useCallback((sourceMediaStream) => {
+    if (!liveBroadcastCanvasRef.current) {
+      const c = document.createElement('canvas');
+      c.width = 720;
+      c.height = 1280;
+      liveBroadcastCanvasRef.current = c;
+    }
+    const canvas = liveBroadcastCanvasRef.current;
+    const ctx = canvas.getContext('2d', { alpha: false });
+
+    if (!liveVideoSourceRef.current) {
+      const v = document.createElement('video');
+      v.muted = true;
+      v.playsInline = true;
+      v.autoplay = true;
+      liveVideoSourceRef.current = v;
+    }
+    const v = liveVideoSourceRef.current;
+    const streamToUse = sourceMediaStream || rawCameraStream || instacamRef.current?.v;
+    if (streamToUse && v.srcObject !== streamToUse) {
+      v.srcObject = streamToUse;
+      v.play().catch(() => {});
+    }
+
+    if (liveBroadcastRafRef.current) {
+      cancelAnimationFrame(liveBroadcastRafRef.current);
+      liveBroadcastRafRef.current = null;
+    }
+
+    const renderBroadcastLoop = () => {
+      try {
+        const faceCanvas = faceEffectCanvasElRef.current;
+        const hasFaceEffect = activeFaceEffectRef.current && faceCanvas;
+        const currentFilter = getCombinedFilterRef.current?.() || 'none';
+
+        if (hasFaceEffect) {
+          // FaceEffectCanvas already renders camera + filterCss + face landmarks/effects
+          ctx.save();
+          if (facingModeRef.current === 'user') {
+            ctx.translate(canvas.width, 0);
+            ctx.scale(-1, 1);
+          }
+          ctx.filter = 'none';
+          ctx.drawImage(faceCanvas, 0, 0, canvas.width, canvas.height);
+          ctx.restore();
+        } else {
+          // Priority order for video source:
+          // 1. Instacam internal playing video element (instacamRef.current?.i)
+          // 2. Offscreen video source element (v) if ready
+          // 3. Canvas element from instacam viewport (canvasRef.current)
+          const videoSource =
+            (instacamRef.current?.i && instacamRef.current.i.readyState >= 2 ? instacamRef.current.i : null) ||
+            (v && v.readyState >= 2 ? v : null) ||
+            instacamRef.current?.i ||
+            (canvasRef.current && canvasRef.current.width > 0 ? canvasRef.current : null);
+
+          if (videoSource) {
+            ctx.save();
+            if (facingModeRef.current === 'user') {
+              ctx.translate(canvas.width, 0);
+              ctx.scale(-1, 1);
+            }
+            if (currentFilter && currentFilter !== 'none') {
+              try {
+                ctx.filter = currentFilter;
+              } catch (e) {
+                ctx.filter = 'none';
+              }
+            } else {
+              ctx.filter = 'none';
+            }
+            ctx.drawImage(videoSource, 0, 0, canvas.width, canvas.height);
+            ctx.restore();
+            ctx.filter = 'none';
+          }
+        }
+      } catch (err) {
+        // Continue render loop safely without interruption
+      }
+      liveBroadcastRafRef.current = requestAnimationFrame(renderBroadcastLoop);
+    };
+
+    liveBroadcastRafRef.current = requestAnimationFrame(renderBroadcastLoop);
+
+    return canvas.captureStream(30).getVideoTracks()[0];
+  }, [rawCameraStream]);
+
+  // Keep liveVideoSource playing latest rawCameraStream if camera flips during live
+  useEffect(() => {
+    if (isLiveActive && rawCameraStream && liveVideoSourceRef.current) {
+      liveVideoSourceRef.current.srcObject = rawCameraStream;
+      liveVideoSourceRef.current.play().catch(() => {});
+    }
+  }, [rawCameraStream, isLiveActive]);
+
+  // Cleanup live broadcast render loop on unmount
+  useEffect(() => {
+    return () => {
+      if (liveBroadcastRafRef.current) {
+        cancelAnimationFrame(liveBroadcastRafRef.current);
+        liveBroadcastRafRef.current = null;
+      }
+      if (liveVideoSourceRef.current) {
+        liveVideoSourceRef.current.srcObject = null;
+      }
+    };
+  }, []);
 
   // Ensure background audio is cleaned up on unmount
   useEffect(() => {
@@ -2773,29 +2896,32 @@ const CreatePage = () => {
       showToast('Starting live broadcast...');
 
       // Ensure microphone track is ready
-      let currentStream = streamRef.current;
-      if (!currentStream || currentStream.getAudioTracks().length === 0) {
-        try {
-          const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-          const videoTrack = (activeFaceEffect && faceEffectCanvasEl)
-            ? faceEffectCanvasEl.captureStream(30).getVideoTracks()[0]
-            : (canvasRef.current?.captureStream?.(30)?.getVideoTracks()[0] || rawCameraStream?.getVideoTracks()[0]);
-
-          if (videoTrack) {
-            currentStream = new MediaStream([videoTrack, ...audioStream.getAudioTracks()]);
-            streamRef.current = currentStream;
-          }
-        } catch (mErr) {
-          console.warn('Microphone permission issue:', mErr);
+      let micAudioTracks = [];
+      try {
+        const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        micAudioTracks = audioStream.getAudioTracks();
+      } catch (mErr) {
+        console.warn('Microphone permission issue:', mErr);
+        if (streamRef.current && streamRef.current.getAudioTracks().length > 0) {
+          micAudioTracks = streamRef.current.getAudioTracks();
         }
       }
+
+      // Initialize the live broadcast canvas pipeline (bakes active color filter + face effects)
+      const camStream = rawCameraStream || instacamRef.current?.v || streamRef.current;
+      const liveVideoTrack = startLiveBroadcastPipeline(camStream);
+
+      const broadcastMediaStream = new MediaStream([
+        liveVideoTrack,
+        ...micAudioTracks
+      ]);
 
       const res = await liveService.startLive({
         title: liveTitle || 'Going Live on Jhumroo'
       });
 
       if (res?.liveStream) {
-        setLiveMediaStream(currentStream);
+        setLiveMediaStream(broadcastMediaStream);
         setActiveLiveId(res.liveStream._id);
         setIsLiveActive(true);
         showToast('🔴 You are LIVE! Followers have been notified.', 'success');
@@ -2814,6 +2940,13 @@ const CreatePage = () => {
   };
 
   const handleEndLive = async () => {
+    if (liveBroadcastRafRef.current) {
+      cancelAnimationFrame(liveBroadcastRafRef.current);
+      liveBroadcastRafRef.current = null;
+    }
+    if (liveVideoSourceRef.current) {
+      liveVideoSourceRef.current.srcObject = null;
+    }
     if (!activeLiveId) {
       setIsLiveActive(false);
       setShowEndLiveConfirm(false);
@@ -5218,55 +5351,99 @@ const CreatePage = () => {
   };
 
   const renderFaceEffectsTray = () => {
-    const chipClass = (isActive) =>
-      `mx-auto flex h-10 w-10 items-center justify-center rounded-full border text-lg bg-[#2c2c2e] transition-all ${
-        isActive
-          ? 'border-white ring-2 ring-amber-300/60 scale-105 shadow-md shadow-amber-500/20 bg-amber-400/20 text-xl'
-          : 'border-white/20 hover:border-white/40'
-      }`;
-    const labelClass = (isActive) =>
-      `mt-1 block text-[9px] tracking-tight drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)] ${
-        isActive ? 'text-amber-300 font-bold' : 'text-white/75'
-      }`;
-
     return (
-      <div className="mb-2 max-w-md w-[calc(100%-1.5rem)] bg-black/75 backdrop-blur-xl border border-white/15 rounded-3xl p-2 shadow-2xl animate-in fade-in slide-in-from-bottom-2 duration-200">
-        <div className="flex items-center justify-between px-2 mb-1.5 border-b border-white/10 pb-1">
-          <span className="text-[11px] font-extrabold text-white tracking-wide flex items-center gap-1.5">
-            <span className="text-amber-300 text-xs">✨</span> Face Effects
+      <div className="mb-2 max-w-md w-[calc(100%-1.5rem)] bg-black/85 backdrop-blur-2xl border border-white/20 rounded-[28px] p-3 shadow-2xl animate-in fade-in slide-in-from-bottom-2 duration-200">
+        <div className="flex items-center justify-between px-2 mb-2 border-b border-white/10 pb-1.5">
+          <span className="text-xs font-black text-white tracking-wide flex items-center gap-1.5">
+            <span className="text-amber-400 text-sm">✨</span> Face Effects
           </span>
           <button
             type="button"
             onClick={() => setActiveCameraTool(null)}
-            className="w-5 h-5 rounded-full bg-white/10 hover:bg-white/20 text-white/80 flex items-center justify-center text-[10px] font-bold active:scale-90 transition-transform"
+            className="w-6 h-6 rounded-full bg-white/10 hover:bg-white/20 text-white/80 flex items-center justify-center text-xs font-bold active:scale-90 transition-transform"
             title="Close effects"
           >
             ✕
           </button>
         </div>
-        <div className="flex gap-3 overflow-x-auto no-scrollbar py-0.5 px-1">
+        <div className="flex gap-3.5 overflow-x-auto no-scrollbar py-1 px-1 items-center">
+          {/* None / Reset Button */}
           <button
             type="button"
             onClick={() => {
               setActiveFaceEffect(null);
               setFaceEffectCanvasEl(null);
             }}
-            className="w-14 shrink-0 text-center text-white active:scale-95 transition-transform"
+            className="w-14 shrink-0 text-center text-white active:scale-95 transition-transform flex flex-col items-center select-none"
           >
-            <span className={chipClass(!activeFaceEffect)}>🚫</span>
-            <span className={labelClass(!activeFaceEffect)}>None</span>
-          </button>
-          {FACE_EFFECT_PRESETS.map((effect) => (
-            <button
-              key={effect.id}
-              type="button"
-              onClick={() => setActiveFaceEffect(effect.id)}
-              className="w-14 shrink-0 text-center text-white active:scale-95 transition-transform"
+            <div
+              className={`w-[52px] h-[52px] rounded-full flex items-center justify-center transition-all duration-200 bg-[#1c1c1e] ${
+                !activeFaceEffect
+                  ? 'ring-[3px] ring-white ring-offset-2 ring-offset-black scale-105 shadow-[0_0_16px_rgba(255,255,255,0.6)]'
+                  : 'ring-1 ring-white/30 hover:ring-white/60 opacity-80 hover:opacity-100'
+              }`}
             >
-              <span className={chipClass(activeFaceEffect === effect.id)}>{effect.icon}</span>
-              <span className={labelClass(activeFaceEffect === effect.id)}>{effect.label}</span>
-            </button>
-          ))}
+              <div className="w-7 h-7 rounded-full border-2 border-red-500 relative flex items-center justify-center shadow-sm">
+                <div className="w-full h-0.5 bg-red-500 rotate-45" />
+              </div>
+            </div>
+            <span
+              className={`mt-1.5 block text-[10px] tracking-tight drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)] truncate max-w-[58px] ${
+                !activeFaceEffect ? 'text-white font-extrabold' : 'text-white/65'
+              }`}
+            >
+              None
+            </span>
+          </button>
+
+          {/* Preset Effects */}
+          {FACE_EFFECT_PRESETS.map((effect) => {
+            const isActive = activeFaceEffect === effect.id;
+            return (
+              <button
+                key={effect.id}
+                type="button"
+                onClick={() => setActiveFaceEffect(effect.id)}
+                className="w-14 shrink-0 text-center text-white active:scale-95 transition-transform flex flex-col items-center select-none"
+              >
+                <div
+                  className={`w-[52px] h-[52px] rounded-full overflow-hidden transition-all duration-200 bg-[#1c1c1e] flex items-center justify-center ${
+                    isActive
+                      ? 'ring-[3px] ring-white ring-offset-2 ring-offset-black scale-105 shadow-[0_0_18px_rgba(255,255,255,0.65)]'
+                      : 'ring-1 ring-white/30 hover:ring-white/60 opacity-80 hover:opacity-100'
+                  }`}
+                >
+                  {effect.image ? (
+                    <img
+                      src={effect.image}
+                      alt={effect.label}
+                      className="w-full h-full object-cover rounded-full select-none pointer-events-none"
+                      draggable={false}
+                      onError={(e) => {
+                        e.currentTarget.style.display = 'none';
+                        if (e.currentTarget.nextElementSibling) {
+                          e.currentTarget.nextElementSibling.style.display = 'flex';
+                        }
+                      }}
+                    />
+                  ) : null}
+                  <span
+                    style={{ display: effect.image ? 'none' : 'flex' }}
+                    className="text-2xl w-full h-full items-center justify-center bg-[#252528]"
+                  >
+                    {effect.icon}
+                  </span>
+                </div>
+                <span
+                  className={`mt-1.5 block text-[10px] tracking-tight drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)] truncate max-w-[58px] ${
+                    isActive ? 'text-white font-extrabold' : 'text-white/65'
+                  }`}
+                >
+                  {effect.label}
+                </span>
+              </button>
+            );
+          })}
         </div>
       </div>
     );
@@ -5363,6 +5540,8 @@ const CreatePage = () => {
     <div className="absolute inset-x-0 bottom-0 sm:bottom-2 z-30 flex flex-col items-center pointer-events-none">
       {activeCameraTool === 'filters' ? (
         renderFiltersTray()
+      ) : activeCameraTool === 'effects' ? (
+        renderFaceEffectsTray()
       ) : (
         <div className="pointer-events-auto flex flex-col items-center w-full mb-6 sm:mb-8">
 
@@ -5735,6 +5914,7 @@ const CreatePage = () => {
                     activeEffectId={activeFaceEffect}
                     mirrored={facingMode === 'user'}
                     onCanvasReady={setFaceEffectCanvasEl}
+                    filterCss={getCombinedFilter()}
                   />
                 )}
                 {recordStatus === 'recorded' && previewUrl && (

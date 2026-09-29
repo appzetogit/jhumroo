@@ -6,17 +6,22 @@ import { FACE_EFFECT_PRESETS } from '../utils/faceEffectPresets';
 // raw camera MediaStream (same one Instacam already opened), runs MediaPipe Face Landmarker per
 // frame, warps the active preset onto the canvas, and reports the canvas element back to the
 // parent so it can be used as the recording source (canvas.captureStream(30)).
-export default function FaceEffectCanvas({ mediaStream, activeEffectId, mirrored, onCanvasReady }) {
+export default function FaceEffectCanvas({ mediaStream, activeEffectId, mirrored, onCanvasReady, filterCss = 'none' }) {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const rafRef = useRef(null);
   const landmarkerRef = useRef(null);
   const effectIdRef = useRef(activeEffectId);
+  const filterCssRef = useRef(filterCss);
   const readyCalledRef = useRef(false);
 
   useEffect(() => {
     effectIdRef.current = activeEffectId;
   }, [activeEffectId]);
+
+  useEffect(() => {
+    filterCssRef.current = filterCss;
+  }, [filterCss]);
 
   useEffect(() => {
     let cancelled = false;
@@ -60,7 +65,18 @@ export default function FaceEffectCanvas({ mediaStream, activeEffectId, mirrored
         const ctx = canvas.getContext('2d', { willReadFrequently: true });
         ctx.imageSmoothingEnabled = true;
         ctx.imageSmoothingQuality = 'medium';
+
+        if (filterCssRef.current && filterCssRef.current !== 'none') {
+          try {
+            ctx.filter = filterCssRef.current;
+          } catch (e) {
+            ctx.filter = 'none';
+          }
+        } else {
+          ctx.filter = 'none';
+        }
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        ctx.filter = 'none';
 
         const landmarker = landmarkerRef.current;
         const effectId = effectIdRef.current;

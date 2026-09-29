@@ -125,6 +125,10 @@ export const useWebRTCLive = ({
    */
   const replaceLiveTrack = useCallback((newVideoTrack) => {
     if (!newVideoTrack) return;
+    if (localStreamRef.current) {
+      const audioTracks = localStreamRef.current.getAudioTracks();
+      localStreamRef.current = new MediaStream([newVideoTrack, ...audioTracks]);
+    }
     peerConnectionsRef.current.forEach((pc) => {
       const senders = pc.getSenders();
       const videoSender = senders.find((s) => s.track && s.track.kind === 'video');

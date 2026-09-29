@@ -100,22 +100,47 @@ export default function LiveViewerPage() {
     setCommentText('');
   };
 
+  const [followLoading, setFollowLoading] = useState(false);
+  const broadcaster = liveData?.broadcaster;
+  const broadcasterId = broadcaster?._id || liveData?.broadcasterId || (typeof liveData?.broadcaster === 'string' ? liveData.broadcaster : null);
+
+  // Check if current user is already following the broadcaster
+  useEffect(() => {
+    const checkFollow = async () => {
+      if (!currentUser || !broadcasterId || String(currentUser._id) === String(broadcasterId)) return;
+      try {
+        const followRes = await followService.isFollowing(broadcasterId);
+        if (followRes && typeof followRes.isFollowing === 'boolean') {
+          setIsFollowing(Boolean(followRes.isFollowing && (!followRes.status || followRes.status === 'accepted')));
+        }
+      } catch (err) {
+        // silent
+      }
+    };
+    checkFollow();
+  }, [currentUser, broadcasterId]);
+
   const handleToggleFollow = async () => {
-    if (!liveData?.broadcaster?._id) return;
+    if (!currentUser) {
+      navigate('/login');
+      return;
+    }
+    if (!broadcasterId || followLoading) return;
     try {
+      setFollowLoading(true);
       if (isFollowing) {
-        await followService.unfollowUser(liveData.broadcaster._id);
+        await followService.unfollowUser(broadcasterId);
         setIsFollowing(false);
       } else {
-        await followService.followUser(liveData.broadcaster._id);
+        await followService.followUser(broadcasterId);
         setIsFollowing(true);
       }
     } catch (err) {
       console.error('Follow toggle error:', err);
+    } finally {
+      setFollowLoading(false);
     }
   };
-
-  const broadcaster = liveData?.broadcaster;
   const broadcasterName = broadcaster?.username || 'User';
   const broadcasterAvatar =
     broadcaster?.profilePicture?.url ||
@@ -209,17 +234,18 @@ export default function LiveViewerPage() {
             </div>
 
             {/* Follow Button (if not broadcaster themselves) */}
-            {currentUser?._id !== broadcaster?._id && (
+            {(!currentUser || !broadcasterId || String(currentUser._id) !== String(broadcasterId)) && (
               <button
                 type="button"
                 onClick={handleToggleFollow}
-                className={`ml-1 text-[11px] font-bold px-2.5 py-1 rounded-full transition-all ${
+                disabled={followLoading}
+                className={`ml-1 text-[11px] font-bold px-3 py-1 rounded-full transition-all active:scale-95 flex items-center justify-center shrink-0 ${
                   isFollowing
-                    ? 'bg-white/20 text-white'
-                    : 'bg-gradient-to-r from-pink-500 to-red-500 text-white shadow-md'
+                    ? 'bg-white/20 text-white/90 border border-white/20 hover:bg-white/30'
+                    : 'bg-[#FE2C55] text-white shadow-md shadow-red-500/40 hover:bg-[#E0264A]'
                 }`}
               >
-                {isFollowing ? 'Following' : 'Follow'}
+                {followLoading ? '...' : (isFollowing ? 'Following' : 'Follow')}
               </button>
             )}
           </div>
