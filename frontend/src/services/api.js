@@ -21,8 +21,8 @@ const api = axios.create({
 // Request interceptor - Add auth token to requests
 api.interceptors.request.use(
   (config) => {
-    const userToken = localStorage.getItem('jhumroo_token');
-    const adminToken = localStorage.getItem('jhumroo_admin_token');
+    const userToken = localStorage.getItem('jhumroo_token') || localStorage.getItem('token');
+    const adminToken = localStorage.getItem('jhumroo_admin_token') || localStorage.getItem('adminToken');
     
     // Distinguish between admin and user requests based on the API endpoint URL or browser path (excluding user auth)
     const isAdminRequest = config.url.includes('/admin/') || 

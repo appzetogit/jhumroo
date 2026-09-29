@@ -7,6 +7,13 @@ const ActivityItem = ({ item }) => {
   const navigate = useNavigate();
 
   const handleClick = () => {
+    if (item.type === 'live') {
+      const liveTargetId = item.liveStream?._id || item.liveStream || item.liveStreamId;
+      if (liveTargetId) {
+        navigate(`/live/${liveTargetId}`);
+        return;
+      }
+    }
     if (item.reel) {
       navigate(`/reel/${item.reel._id}`);
     } else if (item.sender) {
@@ -18,6 +25,7 @@ const ActivityItem = ({ item }) => {
 
   const getActionText = () => {
     switch (item.type) {
+      case 'live': return 'is LIVE now! 🔴 Tap to watch';
       case 'like': return 'liked your video';
       case 'comment': return 'commented on your video';
       case 'mention': return 'mentioned you in a comment';

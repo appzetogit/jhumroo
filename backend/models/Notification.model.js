@@ -15,8 +15,12 @@ const notificationSchema = new mongoose.Schema(
     },
     type: {
       type: String,
-      enum: ['like', 'comment', 'follow', 'follow_request', 'follow_accept', 'follow_back', 'mention', 'remix', 'sequence', 'message', 'report_status'],
+      enum: ['like', 'comment', 'follow', 'follow_request', 'follow_accept', 'follow_back', 'mention', 'remix', 'sequence', 'message', 'report_status', 'live'],
       required: true
+    },
+    liveStream: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'LiveStream'
     },
     reel: {
       type: mongoose.Schema.Types.ObjectId,

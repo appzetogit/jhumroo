@@ -8,6 +8,7 @@ import SearchHashtagPage from './modules/user/pages/Search/SearchHashtagPage';
 import CreatePage from './modules/user/pages/Create/CreatePage';
 import InboxPage from './modules/user/pages/Inbox/InboxPage';
 import ProfilePage from './modules/user/pages/Profile/ProfilePage';
+import LiveViewerPage from './modules/user/pages/Live/LiveViewerPage';
 import SettingsPage from './modules/user/pages/Settings/SettingsPage';
 import EditProfilePage from './modules/user/pages/Settings/EditProfilePage';
 import PrivacyPage from './modules/user/pages/Settings/PrivacyPage';
@@ -122,6 +123,7 @@ const MainLayout = ({ onLogout }) => {
     const isSubPage = 
       pathname.includes('/sound/') || 
       pathname === '/create' ||
+      pathname.startsWith('/live/') ||
       pathname.startsWith('/user/') || 
       pathname === '/profile/premium' ||
       isSettingsPage ||
@@ -141,6 +143,7 @@ const MainLayout = ({ onLogout }) => {
         <Route path="/search" element={<SearchPage />} />
         <Route path="/search/hashtag/:tagSlug" element={<SearchHashtagPage />} />
         <Route path="/create" element={<CreatePage />} />
+        <Route path="/live/:liveId" element={<LiveViewerPage />} />
         <Route path="/inbox" element={<InboxPage />} />
         <Route path="/inbox/search" element={<InboxSearchPage />} />
         <Route path="/inbox/new-followers" element={<NewFollowersPage />} />

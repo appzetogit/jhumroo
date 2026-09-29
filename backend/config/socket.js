@@ -1,12 +1,19 @@
 import { Server } from 'socket.io';
 import jwt from 'jsonwebtoken';
 import User from '../models/User.model.js';
+import LiveStream from '../models/LiveStream.model.js';
+import LiveComment from '../models/LiveComment.model.js';
 
 let io;
 
 // Store online users with their socket IDs
 const onlineUsers = new Map(); // userId -> socketId
 const userSockets = new Map(); // socketId -> userId
+
+// Live Rooms Map: liveId -> { broadcasterSocketId, broadcasterUserId, viewers: Map(socketId -> userInfo) }
+const liveRooms = new Map();
+// Socket to Live Stream mapping for clean disconnect handling
+const socketToLives = new Map(); // socketId -> Set of liveIds
 
 /**
  * Initialize Socket.io
@@ -171,6 +178,278 @@ export const initSocket = (server) => {
     });
 
     /**
+     * ==========================================
+     * LIVE STREAMING & WebRTC SIGNALING HANDLERS
+     * ==========================================
+     */
+
+    /**
+     * Broadcaster registers its socket for the live stream
+     */
+    socket.on('broadcaster_register', async ({ liveId }) => {
+      if (!liveId) return;
+      socket.join(`live_${liveId}`);
+
+      let room = liveRooms.get(liveId);
+      if (!room) {
+        room = {
+          broadcasterSocketId: socket.id,
+          broadcasterUserId: userId,
+          viewers: new Map()
+        };
+        liveRooms.set(liveId, room);
+      } else {
+        room.broadcasterSocketId = socket.id;
+        room.broadcasterUserId = userId;
+      }
+
+      if (!socketToLives.has(socket.id)) {
+        socketToLives.set(socket.id, new Set());
+      }
+      socketToLives.get(socket.id).add(liveId);
+
+      console.log(`🎙️ Broadcaster registered for live ${liveId} (Socket: ${socket.id})`);
+    });
+
+    /**
+     * Viewer joins a live stream room
+     */
+    socket.on('join_live_room', async ({ liveId }) => {
+      if (!liveId) return;
+      socket.join(`live_${liveId}`);
+
+      let room = liveRooms.get(liveId);
+      if (!room) {
+        room = {
+          broadcasterSocketId: null,
+          broadcasterUserId: null,
+          viewers: new Map()
+        };
+        liveRooms.set(liveId, room);
+      }
+
+      // Add to room viewers (if not broadcaster)
+      const isBroadcaster = room.broadcasterUserId === userId || room.broadcasterSocketId === socket.id;
+      if (!isBroadcaster) {
+        room.viewers.set(socket.id, {
+          userId,
+          user: socket.user
+        });
+
+        if (!socketToLives.has(socket.id)) {
+          socketToLives.set(socket.id, new Set());
+        }
+        socketToLives.get(socket.id).add(liveId);
+
+        const currentCount = room.viewers.size;
+
+        // Update database with current & peak viewers + unique viewer
+        try {
+          await LiveStream.findByIdAndUpdate(liveId, {
+            currentViewersCount: currentCount,
+            $max: { peakViewers: currentCount },
+            $addToSet: { totalUniqueViewers: userId }
+          });
+        } catch (dbErr) {
+          console.error('Error updating live viewers in DB:', dbErr);
+        }
+
+        // Broadcast updated viewer count to room
+        io.to(`live_${liveId}`).emit('live_viewers_count', {
+          liveId,
+          count: currentCount
+        });
+
+        // Notify room that user joined
+        socket.to(`live_${liveId}`).emit('user_joined_live', {
+          user: {
+            _id: socket.user._id,
+            username: socket.user.username,
+            fullName: socket.user.fullName,
+            profilePicture: socket.user.profilePicture
+          }
+        });
+
+        // Notify broadcaster that a new viewer joined so broadcaster initiates WebRTC offer
+        if (room.broadcasterSocketId) {
+          io.to(room.broadcasterSocketId).emit('viewer_joined_stream', {
+            viewerSocketId: socket.id,
+            user: {
+              _id: socket.user._id,
+              username: socket.user.username,
+              fullName: socket.user.fullName,
+              profilePicture: socket.user.profilePicture
+            }
+          });
+        }
+      }
+    });
+
+    /**
+     * Viewer leaves a live stream room
+     */
+    socket.on('leave_live_room', async ({ liveId }) => {
+      if (!liveId) return;
+      socket.leave(`live_${liveId}`);
+
+      const room = liveRooms.get(liveId);
+      if (room) {
+        if (room.viewers.has(socket.id)) {
+          room.viewers.delete(socket.id);
+          const currentCount = room.viewers.size;
+
+          // Update DB
+          LiveStream.findByIdAndUpdate(liveId, {
+            currentViewersCount: currentCount
+          }).catch(() => {});
+
+          // Broadcast updated viewer count
+          io.to(`live_${liveId}`).emit('live_viewers_count', {
+            liveId,
+            count: currentCount
+          });
+
+          // Notify broadcaster that viewer left to clean up WebRTC peer connection
+          if (room.broadcasterSocketId) {
+            io.to(room.broadcasterSocketId).emit('viewer_left_stream', {
+              viewerSocketId: socket.id
+            });
+          }
+        }
+      }
+
+      if (socketToLives.has(socket.id)) {
+        socketToLives.get(socket.id).delete(liveId);
+      }
+    });
+
+    /**
+     * WebRTC Signaling: Live Offer (Broadcaster -> Viewer)
+     */
+    socket.on('live_offer', ({ toViewerSocketId, sdp, liveId }) => {
+      if (toViewerSocketId && sdp) {
+        io.to(toViewerSocketId).emit('live_offer', {
+          fromBroadcasterSocketId: socket.id,
+          sdp,
+          liveId
+        });
+      }
+    });
+
+    /**
+     * WebRTC Signaling: Live Answer (Viewer -> Broadcaster)
+     */
+    socket.on('live_answer', ({ toBroadcasterSocketId, sdp, liveId }) => {
+      if (toBroadcasterSocketId && sdp) {
+        io.to(toBroadcasterSocketId).emit('live_answer', {
+          fromViewerSocketId: socket.id,
+          sdp,
+          liveId
+        });
+      }
+    });
+
+    /**
+     * WebRTC Signaling: ICE Candidate (Bidirectional)
+     */
+    socket.on('live_ice_candidate', ({ targetSocketId, candidate, liveId }) => {
+      if (targetSocketId && candidate) {
+        io.to(targetSocketId).emit('live_ice_candidate', {
+          fromSocketId: socket.id,
+          candidate,
+          liveId
+        });
+      }
+    });
+
+    /**
+     * Real-time Live Comments
+     */
+    socket.on('send_live_comment', async ({ liveId, text }) => {
+      if (!liveId || !text || !text.trim()) return;
+
+      try {
+        const comment = await LiveComment.create({
+          liveStream: liveId,
+          user: userId,
+          text: text.trim()
+        });
+
+        await comment.populate('user', 'username fullName profilePicture isVerified');
+
+        // Increment count in LiveStream
+        await LiveStream.findByIdAndUpdate(liveId, {
+          $inc: { commentsCount: 1 }
+        });
+
+        // Broadcast comment to entire live room
+        io.to(`live_${liveId}`).emit('new_live_comment', comment);
+      } catch (err) {
+        console.error('Error saving live comment:', err);
+      }
+    });
+
+    /**
+     * Real-time Live Reactions (Hearts / Emojis)
+     */
+    socket.on('send_live_reaction', async ({ liveId, emoji }) => {
+      if (!liveId) return;
+
+      const reactionPayload = {
+        id: Math.random().toString(36).substring(2, 9),
+        emoji: emoji || '❤️',
+        user: {
+          _id: socket.user._id,
+          username: socket.user.username,
+          profilePicture: socket.user.profilePicture
+        },
+        timestamp: Date.now()
+      };
+
+      // Broadcast reaction to room
+      io.to(`live_${liveId}`).emit('new_live_reaction', reactionPayload);
+
+      // Increment likesCount in background
+      LiveStream.findByIdAndUpdate(liveId, {
+        $inc: { likesCount: 1 }
+      }).catch(() => {});
+    });
+
+    /**
+     * Broadcaster ends live stream
+     */
+    socket.on('end_live_stream', async ({ liveId }) => {
+      if (!liveId) return;
+
+      try {
+        const stream = await LiveStream.findById(liveId);
+        if (stream && stream.broadcaster.toString() === userId) {
+          stream.status = 'ended';
+          stream.endedAt = new Date();
+          stream.currentViewersCount = 0;
+          await stream.save();
+
+          io.to(`live_${liveId}`).emit('live_stream_ended', {
+            liveId,
+            endedAt: stream.endedAt,
+            stats: {
+              peakViewers: stream.peakViewers,
+              totalUniqueViewers: stream.totalUniqueViewers.length,
+              likesCount: stream.likesCount,
+              commentsCount: stream.commentsCount,
+              durationSeconds: Math.floor((stream.endedAt - stream.startedAt) / 1000)
+            }
+          });
+
+          liveRooms.delete(liveId);
+        }
+      } catch (err) {
+        console.error('Error ending live stream via socket:', err);
+      }
+    });
+
+
+    /**
      * Handle user going offline
      */
     socket.on('disconnect', () => {
@@ -179,6 +458,51 @@ export const initSocket = (server) => {
       // Remove from online users
       onlineUsers.delete(userId);
       userSockets.delete(socket.id);
+
+      // Clean up any live rooms this socket was in
+      if (socketToLives.has(socket.id)) {
+        const liveIds = socketToLives.get(socket.id);
+        liveIds.forEach(async (liveId) => {
+          const room = liveRooms.get(liveId);
+          if (room) {
+            if (room.broadcasterSocketId === socket.id) {
+              // Broadcaster disconnected
+              console.log(`[Socket] Broadcaster disconnected from live ${liveId}`);
+              io.to(`live_${liveId}`).emit('live_stream_ended', {
+                liveId,
+                message: 'Broadcaster disconnected'
+              });
+              liveRooms.delete(liveId);
+              try {
+                await LiveStream.findByIdAndUpdate(liveId, {
+                  status: 'ended',
+                  endedAt: new Date(),
+                  currentViewersCount: 0
+                });
+              } catch (err) {}
+            } else if (room.viewers.has(socket.id)) {
+              // Viewer disconnected
+              room.viewers.delete(socket.id);
+              const count = room.viewers.size;
+              io.to(`live_${liveId}`).emit('live_viewers_count', {
+                liveId,
+                count
+              });
+              if (room.broadcasterSocketId) {
+                io.to(room.broadcasterSocketId).emit('viewer_left_stream', {
+                  viewerSocketId: socket.id
+                });
+              }
+              try {
+                await LiveStream.findByIdAndUpdate(liveId, {
+                  currentViewersCount: count
+                });
+              } catch (err) {}
+            }
+          }
+        });
+        socketToLives.delete(socket.id);
+      }
 
       // Broadcast user is offline
       socket.broadcast.emit('user_offline', {

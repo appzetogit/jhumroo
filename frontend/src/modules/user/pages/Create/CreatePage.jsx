@@ -39,6 +39,8 @@ import {
   BiExitFullscreen,
   BiCaptions,
   BiSmile,
+  BiHeart,
+  BiSend,
 } from 'react-icons/bi';
 import {
   IoCameraReverseOutline,
@@ -57,6 +59,11 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useTheme } from '../../../../context/ThemeContext';
 import { useAppContent } from '../../../../hooks/useAppContent';
 import { useAuth } from '../../../../context/AuthContext';
+import { useSocket } from '../../../../context/SocketContext';
+import liveService from '../../../../services/liveService';
+import { useWebRTCLive } from '../../../../hooks/useWebRTCLive';
+import LiveCommentsOverlay from '../../components/live/LiveCommentsOverlay';
+import LiveFloatingReactions from '../../components/live/LiveFloatingReactions';
 import reelService from '../../../../services/reelService';
 import userService from '../../../../services/userService';
 import followService from '../../../../services/followService';
@@ -534,6 +541,47 @@ const CreatePage = () => {
   const [countdownLength, setCountdownLength] = useState(8.9);
   const [isTimerRecording, setIsTimerRecording] = useState(false);
   const [captureMode, setCaptureMode] = useState('camera');
+
+  // Socket Context & Live Streaming State
+  const socket = useSocket();
+  const [isLiveActive, setIsLiveActive] = useState(false);
+  const [activeLiveId, setActiveLiveId] = useState(null);
+  const [liveTitle, setLiveTitle] = useState('Going Live on Jhumroo');
+  const [liveElapsedTime, setLiveElapsedTime] = useState(0);
+  const [isEndingLive, setIsEndingLive] = useState(false);
+  const [showEndLiveConfirm, setShowEndLiveConfirm] = useState(false);
+  const [liveEndSummary, setLiveEndSummary] = useState(null);
+  const [isMicMuted, setIsMicMuted] = useState(false);
+  const [liveCommentInput, setLiveCommentInput] = useState('');
+  const [liveMediaStream, setLiveMediaStream] = useState(null);
+
+  // WebRTC Broadcaster Hook
+  const {
+    viewersCount,
+    comments: liveComments,
+    reactions: liveReactions,
+    sendComment: sendLiveComment,
+    sendReaction: sendLiveReaction,
+    replaceLiveTrack
+  } = useWebRTCLive({
+    isBroadcaster: true,
+    liveId: activeLiveId,
+    localStream: liveMediaStream || streamRef.current,
+    socket
+  });
+
+  // Live timer interval
+  useEffect(() => {
+    let timer;
+    if (isLiveActive) {
+      timer = setInterval(() => {
+        setLiveElapsedTime((prev) => prev + 1);
+      }, 1000);
+    } else {
+      setLiveElapsedTime(0);
+    }
+    return () => clearInterval(timer);
+  }, [isLiveActive]);
   const [facingMode, setFacingMode] = useState('user');
   const [flashMode, setFlashMode] = useState('off');
   const [isBeautifyOn, setIsBeautifyOn] = useState(false);
@@ -601,6 +649,18 @@ const CreatePage = () => {
   const [activeFaceEffect, setActiveFaceEffect] = useState(null);
   const [rawCameraStream, setRawCameraStream] = useState(null);
   const [faceEffectCanvasEl, setFaceEffectCanvasEl] = useState(null);
+
+  // Live track replacement when face effect, canvas or camera stream changes
+  useEffect(() => {
+    if (isLiveActive && replaceLiveTrack) {
+      const videoTrack = (activeFaceEffect && faceEffectCanvasEl)
+        ? faceEffectCanvasEl.captureStream(30).getVideoTracks()[0]
+        : (canvasRef.current?.captureStream?.(30)?.getVideoTracks()[0] || rawCameraStream?.getVideoTracks()[0]);
+      if (videoTrack) {
+        replaceLiveTrack(videoTrack);
+      }
+    }
+  }, [activeFaceEffect, faceEffectCanvasEl, rawCameraStream, isLiveActive, replaceLiveTrack]);
 
   const cameraEffectsList = useMemo(() => [
     { id: null, label: 'Normal', icon: '📹' },
@@ -1349,7 +1409,9 @@ const CreatePage = () => {
       if (previewUrl && videoDuration > 0 && stage === 'editor' && videoThumbnails.length === 0) {
         console.log("Generating thumbnails for current video:", previewUrl);
         try {
-          const count = Math.ceil(videoDuration / 2) || 5;
+          // Cap frames: one-per-2s meant 300 seeks for a 10m video
+          const count = Math.min(12, Math.ceil(videoDuration / 2)) || 5;
+          const step = videoDuration / count;
           const result = [];
           const canvas = document.createElement('canvas');
           const video = document.createElement('video');
@@ -1381,7 +1443,7 @@ const CreatePage = () => {
 
           for (let i = 0; i < count; i++) {
             if (!isMounted) break;
-            const targetTime = i * 2;
+            const targetTime = i * step;
             if (targetTime > videoDuration) break;
             video.currentTime = targetTime;
 
@@ -1412,6 +1474,11 @@ const CreatePage = () => {
     generate();
     return () => { isMounted = false; };
   }, [previewUrl, videoDuration, stage, videoThumbnails.length]);
+
+  // Timeline draws one slot per 2s; map a slot to the nearest of the (capped) generated frames.
+  const thumbForSlot = (slot) => videoThumbnails.length
+    ? videoThumbnails[Math.min(videoThumbnails.length - 1, Math.floor((slot * 2 * videoThumbnails.length) / (videoDuration || 1)))]
+    : null;
 
   // Safety: Reset to camera if data is lost but stage is advanced
   useEffect(() => {
@@ -1507,6 +1574,8 @@ const CreatePage = () => {
 
   // Persistence logic for UI states
   useEffect(() => {
+    // Skip while recording: recordedSeconds ticks every 100ms; saved again once status flips to 'recorded'.
+    if (recordStatus === 'recording') return;
     const cleanStack = stageStack.filter(s => s !== 'sound-editor');
     localStorage.setItem('create_stageStack', JSON.stringify(cleanStack));
     localStorage.setItem('create_recordStatus', recordStatus);
@@ -1706,10 +1775,13 @@ const CreatePage = () => {
       }
 
       setRecordedSeconds(elapsedSeconds);
-    }, 50); // More frequent updates for smoother timer
+    }, 100);
 
     return () => window.clearInterval(intervalId);
-  }, [recordStatus, recordedSeconds, selectedDuration, isTimerRecording, countdownLength]);
+    // recordedSeconds is read once at start (resume case) - keeping it in deps rebuilt the
+    // interval every tick, recomputing startAt and losing time, so limits ran long.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recordStatus, selectedDuration, isTimerRecording, countdownLength]);
 
   useEffect(() => {
     if (activeCountdown === null) return;
@@ -1995,8 +2067,8 @@ const CreatePage = () => {
         ...constraints,
         video: constraints.video ? {
           facingMode: isUser ? 'user' : 'environment',
-          width: { ideal: isMobile ? 1080 : 1920 },
-          height: { ideal: isMobile ? 1920 : 1080 },
+          width: { ideal: isMobile ? 720 : 1280 },
+          height: { ideal: isMobile ? 1280 : 720 },
           aspectRatio: { ideal: isMobile ? 9 / 16 : 16 / 9 }
         } : false
       };
@@ -2689,6 +2761,90 @@ const CreatePage = () => {
     }
   };
 
+  const handleStartLiveStream = async () => {
+    try {
+      const authToken = localStorage.getItem('jhumroo_token') || localStorage.getItem('token');
+      if (!user && !authToken) {
+        showToast('Please log in to start a live broadcast', 'error');
+        navigate('/login');
+        return;
+      }
+
+      showToast('Starting live broadcast...');
+
+      // Ensure microphone track is ready
+      let currentStream = streamRef.current;
+      if (!currentStream || currentStream.getAudioTracks().length === 0) {
+        try {
+          const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          const videoTrack = (activeFaceEffect && faceEffectCanvasEl)
+            ? faceEffectCanvasEl.captureStream(30).getVideoTracks()[0]
+            : (canvasRef.current?.captureStream?.(30)?.getVideoTracks()[0] || rawCameraStream?.getVideoTracks()[0]);
+
+          if (videoTrack) {
+            currentStream = new MediaStream([videoTrack, ...audioStream.getAudioTracks()]);
+            streamRef.current = currentStream;
+          }
+        } catch (mErr) {
+          console.warn('Microphone permission issue:', mErr);
+        }
+      }
+
+      const res = await liveService.startLive({
+        title: liveTitle || 'Going Live on Jhumroo'
+      });
+
+      if (res?.liveStream) {
+        setLiveMediaStream(currentStream);
+        setActiveLiveId(res.liveStream._id);
+        setIsLiveActive(true);
+        showToast('🔴 You are LIVE! Followers have been notified.', 'success');
+      }
+    } catch (err) {
+      console.error('Failed to start live stream:', err);
+      const isAuthError = err?.response?.status === 401 || err?.status === 401;
+      if (isAuthError) {
+        showToast('Authentication required. Please log in to start a live broadcast.', 'error');
+        navigate('/login');
+      } else {
+        const errorMsg = err?.response?.data?.message || err?.message || 'Could not start live broadcast. Please try again.';
+        showToast(errorMsg, 'error');
+      }
+    }
+  };
+
+  const handleEndLive = async () => {
+    if (!activeLiveId) {
+      setIsLiveActive(false);
+      setShowEndLiveConfirm(false);
+      setLiveMediaStream(null);
+      return;
+    }
+    try {
+      setIsEndingLive(true);
+      const res = await liveService.endLive(activeLiveId);
+      if (socket) {
+        socket.emit('end_live_stream', { liveId: activeLiveId });
+      }
+      setIsLiveActive(false);
+      setShowEndLiveConfirm(false);
+      setLiveMediaStream(null);
+      setLiveEndSummary(res.summary || {
+        durationSeconds: liveElapsedTime,
+        peakViewers: viewersCount,
+        likesCount: liveReactions.length,
+        commentsCount: liveComments.length
+      });
+      showToast('Live stream ended', 'info');
+    } catch (err) {
+      console.error('Failed to end live stream:', err);
+      setIsLiveActive(false);
+      setShowEndLiveConfirm(false);
+    } finally {
+      setIsEndingLive(false);
+    }
+  };
+
   const handleRecordPressStart = (e) => {
     if (e && e.type === 'touchstart') {
       lastTouchTimeRef.current = Date.now();
@@ -2696,6 +2852,15 @@ const CreatePage = () => {
 
     // Ignore emulated mouse events on touch devices
     if (e && e.type === 'mousedown' && Date.now() - lastTouchTimeRef.current < 500) {
+      return;
+    }
+
+    if (captureMode === 'live') {
+      if (isLiveActive) {
+        setShowEndLiveConfirm(true);
+      } else {
+        handleStartLiveStream();
+      }
       return;
     }
 
@@ -2785,9 +2950,10 @@ const CreatePage = () => {
     }
 
     // Find supported mime type
+    // VP8 first: VP9 is software-encoded on most phones and drops frames while recording.
     const types = [
-      'video/webm;codecs=vp9,opus',
       'video/webm;codecs=vp8,opus',
+      'video/webm;codecs=vp9,opus',
       'video/webm',
       'video/mp4',
       'video/quicktime'
@@ -2797,7 +2963,7 @@ const CreatePage = () => {
     // Cap bitrate so unedited clips (which skip the compression re-encode and upload this
     // recording directly - see handleNextClick) aren't stuck at the browser's uncapped
     // default, which is what made those uploads slow.
-    const recorderOptions = { videoBitsPerSecond: 4000000 };
+    const recorderOptions = { videoBitsPerSecond: 2500000 };
     if (selectedType) recorderOptions.mimeType = selectedType;
     const recorder = new MediaRecorder(streamRef.current, recorderOptions);
     mediaRecorderRef.current = recorder;
@@ -2997,7 +3163,7 @@ const CreatePage = () => {
       selectedFilter !== 'Normal' ||
       (selectedVideoEffect && selectedVideoEffect !== '') ||
       isAdjusted ||
-      selectedSounds.length > 0 ||
+      // Sound alone isn't an edit: backend ffmpeg merges music (processReelWithAudio), so skip the real-time re-render.
       editorSettings.rotation !== 0 ||
       clipSequence.length > 1 ||
       clipSequence.some(clip => {
@@ -3280,7 +3446,7 @@ const CreatePage = () => {
         // 4Mbps is still high quality at 720x1280 and roughly halves the exported file size vs
         // the previous 8Mbps, which is most of what made upload/export feel slow (smaller file
         // to upload to S3, less data for the backend to download and re-encode to mp4).
-        videoBitsPerSecond: 4000000
+        videoBitsPerSecond: 2500000
       });
 
       const recordedChunks = [];
@@ -3728,6 +3894,9 @@ const CreatePage = () => {
         title: selectedSound.title,
         author: selectedSound.author,
         url: selectedSound.url,
+        // Backend ffmpeg merge trims the song with these (completeUpload reads clipStart/clipDuration)
+        clipStart: selectedSound.clipStart || 0,
+        clipDuration: selectedSound.clipDuration || 15,
         duration: typeof selectedSound.duration === 'string' ? parseDurationSeconds(selectedSound.duration) : (Number(selectedSound.duration) || 0)
       } : null;
 
@@ -4649,10 +4818,64 @@ const CreatePage = () => {
     { id: 'speed', label: '' },
   ];
 
-  const cameraDurationModes = ['10m', '60s', '15s', 'Photo'];
+  const cameraDurationModes = ['10m', '60s', '15s', 'Photo', 'Live'];
 
   const renderCameraHeader = () => {
     if (recordStatus === 'recording') return null;
+
+    if (isLiveActive) {
+      return (
+        <div className="absolute inset-x-0 top-3 z-30 px-3.5 flex items-center justify-between pointer-events-none">
+          {/* Left: LIVE pill & Viewers */}
+          <div className="pointer-events-auto flex items-center gap-2 bg-black/45 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/15 shadow-lg">
+            <span className="flex items-center gap-1.5 px-2 py-0.5 bg-red-600 rounded-md text-[10px] font-black uppercase tracking-wider text-white shadow-md">
+              <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
+              LIVE
+            </span>
+            <span className="text-xs font-bold text-white drop-shadow">
+              {formatElapsed(liveElapsedTime)}
+            </span>
+            <span className="text-xs font-bold text-white/80 drop-shadow ml-1 flex items-center gap-1">
+              👁️ {viewersCount}
+            </span>
+          </div>
+
+          {/* Right: End Live Button */}
+          <div className="pointer-events-auto">
+            <button
+              type="button"
+              onClick={() => setShowEndLiveConfirm(true)}
+              className="px-4 py-1.5 rounded-full bg-red-600/90 hover:bg-red-600 active:scale-95 transition-transform text-white font-black text-xs uppercase tracking-wider shadow-lg border border-red-400/40"
+            >
+              End
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    if (captureMode === 'live') {
+      return (
+        <div className="absolute inset-x-0 top-3 z-30 px-3.5 flex items-center justify-between pointer-events-none">
+          <div className="pointer-events-auto">
+            <button
+              type="button"
+              onClick={handleCloseOrBack}
+              className="w-9 h-9 rounded-full flex items-center justify-center text-white active:scale-90 transition-transform drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)] hover:bg-white/10 shrink-0"
+              title="Close"
+            >
+              <BiX size={26} />
+            </button>
+          </div>
+          <div className="pointer-events-auto flex items-center gap-2 bg-black/50 backdrop-blur-md px-3.5 py-1.5 rounded-full border border-white/20 shadow-md">
+            <span className="w-2 h-2 rounded-full bg-red-500 animate-ping" />
+            <span className="text-white text-xs font-extrabold uppercase tracking-wider">Live Broadcast</span>
+          </div>
+          <div className="w-9 h-9 shrink-0" />
+        </div>
+      );
+    }
+
     return (
       <div className="absolute inset-x-0 top-3 z-30 px-3.5 flex items-center justify-between pointer-events-none">
       {/* Left: Close Button */}
@@ -4712,6 +4935,78 @@ const CreatePage = () => {
 
   const renderCameraSideTools = () => {
     if (recordStatus === 'recording') return null;
+
+    if (isLiveActive) {
+      return (
+        <div className="absolute right-3.5 top-16 z-30 flex flex-col items-center gap-4 transition-all duration-300">
+          {/* Flip camera */}
+          <button
+            type="button"
+            onClick={() => handleCameraToolClick('flip')}
+            className="w-10 h-10 rounded-full bg-black/45 backdrop-blur-md border border-white/15 flex items-center justify-center text-white active:scale-90 transition-transform hover:bg-white/10 shadow-lg"
+            title="Flip camera"
+          >
+            <IoCameraReverseOutline size={22} />
+          </button>
+
+          {/* Flash / Light */}
+          <button
+            type="button"
+            onClick={() => handleCameraToolClick('flash')}
+            className={`w-10 h-10 rounded-full bg-black/45 backdrop-blur-md border border-white/15 flex items-center justify-center text-white active:scale-90 transition-transform hover:bg-white/10 shadow-lg ${
+              flashMode !== 'off' ? 'text-amber-300 ring-2 ring-amber-300/50' : ''
+            }`}
+            title="Flash"
+          >
+            {getToolIcon('flash', 22, false, selectedSpeed, selectedZoom, flashMode, isBeautifyOn)}
+          </button>
+
+          {/* Mute / Unmute Microphone */}
+          <button
+            type="button"
+            onClick={() => {
+              if (streamRef.current) {
+                const audioTracks = streamRef.current.getAudioTracks();
+                audioTracks.forEach((t) => (t.enabled = !t.enabled));
+                setIsMicMuted((prev) => !prev);
+                showToast(isMicMuted ? 'Microphone unmuted' : 'Microphone muted', 'info');
+              }
+            }}
+            className={`w-10 h-10 rounded-full bg-black/45 backdrop-blur-md border border-white/15 flex items-center justify-center text-white active:scale-90 transition-transform hover:bg-white/10 shadow-lg ${
+              isMicMuted ? 'text-red-400 ring-2 ring-red-400/50' : ''
+            }`}
+            title="Mute mic"
+          >
+            {isMicMuted ? <BiVolumeMute size={22} /> : <BiMicrophone size={22} />}
+          </button>
+
+          {/* Color & Beauty Filters Tray */}
+          <button
+            type="button"
+            onClick={() => setActiveCameraTool((prev) => (prev === 'filters' ? null : 'filters'))}
+            className={`w-10 h-10 rounded-full bg-black/45 backdrop-blur-md border border-white/15 flex items-center justify-center text-white active:scale-90 transition-transform hover:bg-white/10 shadow-lg ${
+              activeCameraTool === 'filters' || selectedFilter !== 'Normal' ? 'text-amber-300 ring-2 ring-amber-300/50' : ''
+            }`}
+            title="Filters"
+          >
+            <IoColorWandOutline size={22} />
+          </button>
+
+          {/* AR Face Effects Tray */}
+          <button
+            type="button"
+            onClick={() => setActiveCameraTool((prev) => (prev === 'effects' ? null : 'effects'))}
+            className={`w-10 h-10 rounded-full bg-black/45 backdrop-blur-md border border-white/15 flex items-center justify-center text-white active:scale-90 transition-transform hover:bg-white/10 shadow-lg ${
+              activeCameraTool === 'effects' || activeFaceEffect ? 'text-amber-300 ring-2 ring-amber-300/50' : ''
+            }`}
+            title="Face Effects"
+          >
+            <IoSparklesOutline size={22} />
+          </button>
+        </div>
+      );
+    }
+
     return (
       <div className="absolute right-3.5 top-5 z-30 flex flex-col items-center gap-5 transition-all duration-300">
       {cameraSideTools.map((tool) => {
@@ -4977,7 +5272,94 @@ const CreatePage = () => {
     );
   };
 
-  const renderCameraBottom = () => (
+  const renderCameraBottom = () => {
+    if (isLiveActive) {
+      return (
+        <div className="absolute inset-x-0 bottom-0 z-30 flex flex-col justify-end pointer-events-none pb-4 px-3 bg-gradient-to-t from-black/90 via-black/45 to-transparent pt-14">
+          {activeCameraTool === 'filters' ? (
+            <div className="pointer-events-auto w-full flex justify-center mb-2">
+              {renderFiltersTray()}
+            </div>
+          ) : activeCameraTool === 'effects' ? (
+            <div className="pointer-events-auto w-full flex justify-center mb-2">
+              {renderFaceEffectsTray()}
+            </div>
+          ) : (
+            <>
+              {/* Floating Reactions Particles */}
+              <LiveFloatingReactions reactions={liveReactions} />
+
+              {/* Scrolling Live Comments */}
+              <div className="mb-3 max-w-sm pointer-events-auto">
+                <LiveCommentsOverlay comments={liveComments} />
+              </div>
+
+              {/* Broadcaster Comment & Reaction bar */}
+              <div className="flex items-center gap-2 pointer-events-auto w-full max-w-md mx-auto">
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    if (!liveCommentInput.trim()) return;
+                    sendLiveComment(liveCommentInput);
+                    setLiveCommentInput('');
+                  }}
+                  className="flex-1 flex items-center bg-black/55 backdrop-blur-xl border border-white/20 rounded-full px-3 py-1.5 shadow-lg focus-within:border-white/50 transition-colors"
+                >
+                  <input
+                    type="text"
+                    value={liveCommentInput}
+                    onChange={(e) => setLiveCommentInput(e.target.value)}
+                    placeholder="Comment as host..."
+                    maxLength={300}
+                    className="flex-1 bg-transparent text-white text-xs outline-none placeholder-white/50"
+                  />
+                  {liveCommentInput.trim() && (
+                    <button
+                      type="submit"
+                      className="w-7 h-7 rounded-full bg-gradient-to-tr from-pink-500 to-red-500 text-white flex items-center justify-center shrink-0 active:scale-90 transition-transform ml-1 shadow-md"
+                    >
+                      <BiSend size={14} />
+                    </button>
+                  )}
+                </form>
+
+                {/* Quick Filters shortcut */}
+                <button
+                  type="button"
+                  onClick={() => setActiveCameraTool((prev) => (prev === 'filters' ? null : 'filters'))}
+                  className="w-10 h-10 rounded-full bg-black/50 backdrop-blur-md border border-white/20 flex items-center justify-center text-white active:scale-95 transition-transform shrink-0"
+                  title="Apply filters"
+                >
+                  <IoColorWandOutline size={20} />
+                </button>
+
+                {/* Quick Effects shortcut */}
+                <button
+                  type="button"
+                  onClick={() => setActiveCameraTool((prev) => (prev === 'effects' ? null : 'effects'))}
+                  className="w-10 h-10 rounded-full bg-black/50 backdrop-blur-md border border-white/20 flex items-center justify-center text-white active:scale-95 transition-transform shrink-0"
+                  title="Face effects"
+                >
+                  <IoSparklesOutline size={20} />
+                </button>
+
+                {/* Heart reaction button */}
+                <button
+                  type="button"
+                  onClick={() => sendLiveReaction('❤️')}
+                  className="w-10 h-10 rounded-full bg-gradient-to-tr from-red-500 to-pink-500 flex items-center justify-center text-white shadow-lg shadow-pink-500/30 active:scale-125 transition-transform shrink-0"
+                  title="Send Reaction"
+                >
+                  <BiHeart size={22} className="animate-pulse" />
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      );
+    }
+
+    return (
     <div className="absolute inset-x-0 bottom-0 sm:bottom-2 z-30 flex flex-col items-center pointer-events-none">
       {activeCameraTool === 'filters' ? (
         renderFiltersTray()
@@ -5029,13 +5411,16 @@ const CreatePage = () => {
                       const isSelected =
                         (modeOpt === selectedDuration && captureMode === 'camera') ||
                         (modeOpt.toUpperCase() === 'PHOTO' && captureMode === 'photo') ||
+                        (modeOpt.toUpperCase() === 'LIVE' && captureMode === 'live') ||
                         (modeOpt.toUpperCase() === 'TEXT' && captureMode === 'text');
                       return (
                         <button
                           key={modeOpt}
                           type="button"
                           onClick={() => {
-                            if (modeOpt.toUpperCase() === 'PHOTO') {
+                            if (modeOpt.toUpperCase() === 'LIVE') {
+                              setCaptureMode('live');
+                            } else if (modeOpt.toUpperCase() === 'PHOTO') {
                               setCaptureMode('photo');
                             } else if (modeOpt.toUpperCase() === 'TEXT') {
                               setCaptureMode('text');
@@ -5083,7 +5468,7 @@ const CreatePage = () => {
                       onTouchEnd={handleRecordPressEnd}
                       className="absolute left-1/2 -translate-x-1/2 z-20 w-[78px] h-[78px] sm:w-[84px] sm:h-[84px] rounded-full flex items-center justify-center pointer-events-auto active:scale-95 transition-all"
                       style={{
-                        border: captureMode === 'photo' ? '4px solid #8e8e93' : '4px solid #ffffff',
+                        border: captureMode === 'live' ? '4px solid #fe2c55' : (captureMode === 'photo' ? '4px solid #8e8e93' : '4px solid #ffffff'),
                         boxShadow: '0 0 0 1px rgba(0,0,0,0.3), 0 4px 20px rgba(0,0,0,0.8)',
                       }}
                     >
@@ -5112,6 +5497,10 @@ const CreatePage = () => {
                       {isRecording ? (
                         <div className="w-8 h-8 rounded-md bg-[#fe2c55] shadow-lg flex items-center justify-center transition-all duration-200">
                           <span className="w-3 h-3 rounded-[2px] bg-white animate-pulse" />
+                        </div>
+                      ) : captureMode === 'live' ? (
+                        <div className="w-full h-full rounded-full bg-gradient-to-tr from-[#fe2c55] to-[#ff0055] shadow-lg shadow-red-500/50 flex flex-col items-center justify-center text-white p-1">
+                          <span className="text-[11px] font-black tracking-widest uppercase">LIVE</span>
                         </div>
                       ) : activeFaceEffect === null ? (
                         <div className={`w-full h-full rounded-full ${captureMode === 'photo' ? 'bg-white' : 'bg-[#fe2c55]'} shadow-lg flex items-center justify-center transition-all duration-200`} />
@@ -5229,6 +5618,7 @@ const CreatePage = () => {
       )}
     </div>
   );
+};
 
   const renderCameraStage = () => {
     // Parse selectedDuration for progress bar calculation
@@ -5412,10 +5802,85 @@ const CreatePage = () => {
           {renderCameraHeader()}
           {renderCameraSideTools()}
           {renderCameraBottom()}
+
+          {/* End Live Confirmation Modal */}
+          {showEndLiveConfirm && (
+            <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+              <div className="bg-[#1c1c1e] border border-white/15 rounded-3xl p-6 max-w-xs w-full text-center shadow-2xl animate-in zoom-in-95 duration-150">
+                <div className="w-14 h-14 rounded-full bg-red-500/20 text-red-500 flex items-center justify-center mx-auto mb-3 text-2xl font-black">
+                  🔴
+                </div>
+                <h3 className="text-white font-extrabold text-base mb-1">End live video?</h3>
+                <p className="text-white/60 text-xs mb-5">
+                  Are you sure you want to end your live video? All viewers will be disconnected.
+                </p>
+                <div className="flex flex-col gap-2">
+                  <button
+                    type="button"
+                    disabled={isEndingLive}
+                    onClick={handleEndLive}
+                    className="w-full py-2.5 rounded-full bg-red-600 hover:bg-red-700 active:scale-95 transition-transform text-white font-extrabold text-xs tracking-wide shadow-lg shadow-red-600/30"
+                  >
+                    {isEndingLive ? 'Ending Live...' : 'End Now'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowEndLiveConfirm(false)}
+                    className="w-full py-2.5 rounded-full bg-white/10 hover:bg-white/20 active:scale-95 transition-transform text-white font-bold text-xs"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Live Ended Summary Modal */}
+          {liveEndSummary && (
+            <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-xl flex items-center justify-center p-4">
+              <div className="bg-[#1c1c1e] border border-white/15 rounded-3xl p-6 max-w-sm w-full text-center shadow-2xl animate-in zoom-in-95 duration-200">
+                <div className="w-16 h-16 rounded-full bg-gradient-to-tr from-pink-500 to-amber-500 flex items-center justify-center mx-auto mb-3 text-3xl shadow-lg">
+                  ✨
+                </div>
+                <h3 className="text-white font-black text-lg mb-1">Live Video Ended</h3>
+                <p className="text-white/60 text-xs mb-5">Here is your live broadcast summary:</p>
+
+                <div className="grid grid-cols-2 gap-3 mb-6 bg-white/5 border border-white/10 p-3 rounded-2xl">
+                  <div className="flex flex-col items-center p-2 rounded-xl bg-black/30">
+                    <span className="text-lg font-black text-white">{formatElapsed(liveEndSummary.durationSeconds || 0)}</span>
+                    <span className="text-[10px] text-white/50 uppercase tracking-wider font-semibold">Duration</span>
+                  </div>
+                  <div className="flex flex-col items-center p-2 rounded-xl bg-black/30">
+                    <span className="text-lg font-black text-white">{liveEndSummary.peakViewers || 0}</span>
+                    <span className="text-[10px] text-white/50 uppercase tracking-wider font-semibold">Peak Viewers</span>
+                  </div>
+                  <div className="flex flex-col items-center p-2 rounded-xl bg-black/30">
+                    <span className="text-lg font-black text-white">{liveEndSummary.likesCount || 0}</span>
+                    <span className="text-[10px] text-white/50 uppercase tracking-wider font-semibold">Reactions</span>
+                  </div>
+                  <div className="flex flex-col items-center p-2 rounded-xl bg-black/30">
+                    <span className="text-lg font-black text-white">{liveEndSummary.commentsCount || 0}</span>
+                    <span className="text-[10px] text-white/50 uppercase tracking-wider font-semibold">Comments</span>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLiveEndSummary(null);
+                    setCaptureMode('camera');
+                  }}
+                  className="w-full py-3 rounded-full bg-white text-black font-extrabold text-xs uppercase tracking-wider shadow-lg active:scale-95 transition-transform"
+                >
+                  Done
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Bottom Black Navigation Footer Bar (Outside Camera Card) */}
-        {recordStatus !== 'recorded' && recordStatus !== 'recording' && activeCameraTool !== 'filters' && (
+        {recordStatus !== 'recorded' && recordStatus !== 'recording' && activeCameraTool !== 'filters' && !isLiveActive && (
           <div className="bg-black text-white h-20 pt-2 pb-4 w-full flex items-center justify-between px-6 z-40 shrink-0 border-t border-white/10 select-none">
             {/* Left: Gallery Thumbnail Stack Button */}
             <div className="w-12 flex items-center justify-start">
@@ -6904,7 +7369,7 @@ const CreatePage = () => {
                                 return (
                                   <div key={i} className="h-full border-r border-white/5 shrink-0 overflow-hidden" style={{ width: Math.min(clipWidth - i * PIXELS_PER_SECOND * 2, PIXELS_PER_SECOND * 2) }}>
                                     <TimelineThumbnail
-                                      src={videoThumbnails.length > thumbIdx ? videoThumbnails[thumbIdx] : (selectedMedia.image || previewUrl)}
+                                      src={thumbForSlot(thumbIdx) || selectedMedia.image || previewUrl}
                                       isVideo={videoThumbnails.length === 0 && !selectedMedia.image && !!previewUrl}
                                       i={i}
                                       videoDuration={videoDuration}
@@ -7323,7 +7788,7 @@ const CreatePage = () => {
                       Array.from({ length: Math.ceil(videoDuration / 2) || 3 }).map((_, i) => (
                         <div key={i} className="h-full border-r border-white/5 shrink-0" style={{ width: PIXELS_PER_SECOND * 2 }}>
                           <TimelineThumbnail
-                            src={videoThumbnails.length > i ? videoThumbnails[i] : (selectedMedia.image || previewUrl)}
+                            src={thumbForSlot(i) || selectedMedia.image || previewUrl}
                             isVideo={videoThumbnails.length === 0 && !selectedMedia.image && !!previewUrl}
                             i={i}
                             videoDuration={videoDuration}

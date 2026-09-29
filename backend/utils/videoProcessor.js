@@ -115,6 +115,8 @@ export const processReelWithAudio = async (videoId, rawKey, music) => {
 
 
       command
+        // Cap at 720p wide: smaller files load faster in the feed (never upscales)
+        .videoFilters("scale='min(720,iw)':-2")
         .output(outputLocalPath)
         .on('start', (cmd) => console.log(`[Processor:${videoId}] FFmpeg Command:`, cmd))
         .on('progress', (progress) => {

@@ -52,12 +52,16 @@ const customIconMap = {
 const NavItem = ({ item, isActive, isDarkMode }) => {
   if (item.type === 'create') {
     return (
-      <NavLink to={item.path} className="flex-1 flex flex-col items-center justify-center -translate-y-0.5 transition-transform active:scale-95 duration-150 select-none">
-        <div className="relative w-[45px] h-[30px] flex items-center justify-center">
-          <div className="absolute left-0 w-[38px] h-full bg-[#25F4EE] rounded-[8px] z-[1]" />
-          <div className="absolute right-0 w-[38px] h-full bg-[#FE2C55] rounded-[8px] z-[1]" />
-          <div className="absolute w-[38px] h-full bg-white rounded-[8px] z-[2] flex items-center justify-center shadow-md">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="black" strokeWidth="3.5" strokeLinecap="round">
+      <NavLink
+        to={item.path}
+        className="flex-1 flex flex-col items-center justify-center -translate-y-0.5 transition-transform active:scale-95 duration-150 select-none"
+        aria-label="Create"
+      >
+        <div className="relative w-[52px] h-[34px] flex items-center justify-center">
+          <div className="absolute left-0 w-[44px] h-full bg-[#25F4EE] rounded-[9px] z-[1] shadow-[0_0_8px_rgba(37,244,238,0.3)]" />
+          <div className="absolute right-0 w-[44px] h-full bg-[#FE2C55] rounded-[9px] z-[1] shadow-[0_0_8px_rgba(254,44,85,0.3)]" />
+          <div className="absolute w-[44px] h-full bg-gradient-to-r from-[#25F4EE] via-[#9333EA] to-[#FE2C55] rounded-[9px] z-[2] flex items-center justify-center shadow-lg shadow-purple-900/30">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3.2" strokeLinecap="round">
               <line x1="12" y1="5" x2="12" y2="19" />
               <line x1="5" y1="12" x2="19" y2="12" />
             </svg>

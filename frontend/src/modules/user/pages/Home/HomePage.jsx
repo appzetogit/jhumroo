@@ -5,6 +5,9 @@ import VideoCard from '../../components/video/VideoCard';
 import { useAppContent } from '../../../../hooks/useAppContent';
 import { useReelsAPI } from '../../../../hooks/useReelsAPI';
 import { useLenis } from '../../../../hooks/useLenis';
+import { useSocket } from '../../../../context/SocketContext';
+import liveService from '../../../../services/liveService';
+import LiveDiscoverModal from '../../components/live/LiveDiscoverModal';
 
 const HomePage = () => {
   const lenis = useLenis();
@@ -18,6 +21,53 @@ const HomePage = () => {
   const [currentTab, setCurrentTab] = useState(defaultTab);
   const containerRef = useRef(null);
   const [onboardingStep, setOnboardingStep] = useState(0);
+
+  // Live broadcast discovery state
+  const socket = useSocket();
+  const [showLiveDiscover, setShowLiveDiscover] = useState(false);
+  const [activeLiveCount, setActiveLiveCount] = useState(0);
+
+  // Fetch active lives count
+  useEffect(() => {
+    let isMounted = true;
+    const fetchActiveCount = async () => {
+      try {
+        const res = await liveService.getActiveLives();
+        if (isMounted && res.liveStreams) {
+          setActiveLiveCount(res.liveStreams.length);
+        }
+      } catch (err) {}
+    };
+
+    fetchActiveCount();
+    const interval = setInterval(fetchActiveCount, 20000);
+
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, []);
+
+  // Listen for real-time live events from socket
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleUserWentLive = () => {
+      setActiveLiveCount((prev) => prev + 1);
+    };
+
+    const handleUserLeftLive = () => {
+      setActiveLiveCount((prev) => Math.max(0, prev - 1));
+    };
+
+    socket.on('user_went_live', handleUserWentLive);
+    socket.on('user_left_live', handleUserLeftLive);
+
+    return () => {
+      socket.off('user_went_live', handleUserWentLive);
+      socket.off('user_left_live', handleUserLeftLive);
+    };
+  }, [socket]);
 
   const isSearchFeed = Array.isArray(location.state?.searchVideos) && location.state.searchVideos.length > 0;
   const activeSearchVideoId = location.state?.activeVideoId;
@@ -342,6 +392,12 @@ const HomePage = () => {
           </div>
         </div>
       )}
+
+      {/* Live Discover Modal */}
+      <LiveDiscoverModal
+        isOpen={showLiveDiscover}
+        onClose={() => setShowLiveDiscover(false)}
+      />
     </div>
   );
 };

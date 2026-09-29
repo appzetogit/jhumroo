@@ -12,10 +12,11 @@ import { sendToUser } from '../config/socket.js';
  * @param {string} options.type - Notification type
  * @param {string} [options.reel] - Reel ID (optional)
  * @param {string} [options.comment] - Comment ID (optional)
+ * @param {string} [options.liveStream] - Live stream ID (optional)
  * @param {string} [options.text] - Custom text (optional)
  * @param {boolean} [options.skipPush=false] - If true, skip FCM push (in-app only)
  */
-export const createNotification = async ({ recipient, sender, type, reel, comment, text, skipPush = false }) => {
+export const createNotification = async ({ recipient, sender, type, liveStream, reel, comment, text, skipPush = false }) => {
   try {
     // Avoid self-notifications
     if (sender && recipient.toString() === sender.toString()) {
@@ -63,6 +64,7 @@ export const createNotification = async ({ recipient, sender, type, reel, commen
       recipient,
       sender,
       type,
+      liveStream,
       reel,
       comment,
       text
@@ -110,6 +112,10 @@ export const createNotification = async ({ recipient, sender, type, reel, commen
 
             // Customize notification content based on type
             switch (type) {
+              case 'live':
+                title = `${senderName} is LIVE! 🔴`;
+                body = text || `${senderName} started a live video. Watch it now!`;
+                break;
               case 'report_status':
                 title = 'Report Update';
                 body = text || 'Your reported problem status has been updated';
@@ -159,6 +165,7 @@ export const createNotification = async ({ recipient, sender, type, reel, commen
                 title,
                 body: body.length > 100 ? body.substring(0, 97) + '...' : body,
                 senderId: sender ? sender.toString() : '',
+                liveId: liveStream ? liveStream.toString() : '',
                 reelId: reel ? reel.toString() : '',
                 commentId: comment ? comment.toString() : '',
                 click_action: 'FLUTTER_NOTIFICATION_CLICK',
@@ -246,5 +253,51 @@ export const createNotification = async ({ recipient, sender, type, reel, commen
   } catch (error) {
     console.error('Error creating notification:', error);
     return null;
+  }
+};
+
+/**
+ * Notify all followers when a user starts a live stream
+ * Sends in-app notifications, FCM push notifications, and real-time socket events
+ */
+export const notifyFollowersLive = async ({ broadcasterId, liveStreamId, title }) => {
+  try {
+    const broadcaster = await User.findById(broadcasterId).select('username fullName profilePicture');
+    if (!broadcaster) return;
+
+    const broadcasterName = broadcaster.fullName || broadcaster.username || 'Someone';
+
+    // Find all followers with accepted status
+    const follows = await Follow.find({
+      following: broadcasterId,
+      status: 'accepted'
+    }).select('follower');
+
+    if (!follows || follows.length === 0) {
+      console.log(`[LiveNotification] Broadcaster ${broadcasterId} has no followers to notify.`);
+      return;
+    }
+
+    const followerIds = follows.map(f => f.follower.toString());
+    console.log(`[LiveNotification] Notifying ${followerIds.length} followers of live stream ${liveStreamId}`);
+
+    // Create in-app notifications and trigger FCM for followers in batches
+    const batchPromises = followerIds.map(async (followerId) => {
+      try {
+        await createNotification({
+          recipient: followerId,
+          sender: broadcasterId,
+          type: 'live',
+          liveStream: liveStreamId,
+          text: `${broadcasterName} started a live video: "${title || 'Watch live now!'}"`
+        });
+      } catch (err) {
+        console.error(`[LiveNotification] Error notifying follower ${followerId}:`, err);
+      }
+    });
+
+    await Promise.allSettled(batchPromises);
+  } catch (error) {
+    console.error('[LiveNotification] Error in notifyFollowersLive:', error);
   }
 };
