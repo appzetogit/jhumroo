@@ -39,21 +39,21 @@ const BackgroundWrapper = ({ children, blur = false }) => {
   const loadedBg = useProgressiveImage(loginBg);
 
   return (
-    <div className="relative h-full min-h-0 w-full overflow-hidden bg-[#18110f]">
+    <div className="relative h-full min-h-0 w-full overflow-hidden bg-[#18110f] select-none">
       {/* Warm gradient placeholder that renders instantly */}
-      <div className="absolute inset-0 bg-gradient-to-br from-[#2c1a17] to-[#140d0c]" />
+      <div className="absolute inset-0 bg-gradient-to-br from-[#2c1a17] to-[#140d0c] pointer-events-none" />
 
       {/* The high-res background image, fading in smoothly when loaded */}
       <div
-        className={`absolute inset-0 bg-cover bg-center transition-all duration-[800ms] ease-out ${blur ? 'blur-[8px] scale-110' : 'blur-0 scale-100'
+        className={`absolute inset-0 bg-cover bg-center transition-all duration-[800ms] ease-out pointer-events-none ${blur ? 'blur-[8px] scale-110' : 'blur-0 scale-100'
           } ${loadedBg ? 'opacity-100' : 'opacity-0'}`}
         style={{
           backgroundImage: loadedBg ? `url(${loadedBg})` : 'none',
           willChange: 'opacity, transform'
         }}
       />
-      <div className="absolute inset-0 bg-black/75" />
-      <div className="relative z-10 h-full w-full flex flex-col">
+      <div className="absolute inset-0 bg-black/75 pointer-events-none" />
+      <div className="relative z-10 h-full w-full flex flex-col overflow-x-hidden">
         {children}
       </div>
     </div>
@@ -712,8 +712,8 @@ const AuthPage = ({ onComplete, initialMode = 'signup' }) => {
             </button>
           </div>
 
-          <div className="flex-1 flex flex-col justify-center items-center px-4 pb-8 pt-2 overflow-y-auto">
-            <div className="w-full max-w-md animate-scale-in">
+          <div className="flex-1 flex flex-col justify-center items-center px-4 pb-8 pt-2 overflow-y-auto overflow-x-hidden w-full">
+            <div className="w-full max-w-md mx-auto">
               <AuthCard>
                 {step === 4 ? (
                   <PhoneInput

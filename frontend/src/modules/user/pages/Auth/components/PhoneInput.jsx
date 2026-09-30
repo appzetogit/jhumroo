@@ -79,7 +79,7 @@ const PhoneInput = ({ onNext, onBack, onSwitchMode, mode = 'signup', isThemed = 
                 setPhoneNumber(val);
                 sessionStorage.setItem('temp_phone_number', val);
               }}
-              className={`flex-1 pl-4 text-[17px] font-bold outline-none bg-transparent ${isThemed ? 'text-white placeholder:text-white/45' : 'text-black placeholder:text-gray-600'}`}
+              className={`flex-1 min-w-0 pl-4 text-[17px] font-bold outline-none bg-transparent ${isThemed ? 'text-white placeholder:text-white/45' : 'text-black placeholder:text-gray-600'}`}
              />
          </div>
          {error && (
