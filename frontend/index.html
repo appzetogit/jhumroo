@@ -389,6 +389,13 @@
           event.preventDefault();
         }
       });
+
+      // Strictly lock horizontal scroll/pan so viewport stays centered and stationary
+      window.addEventListener('scroll', function () {
+        if (window.scrollX !== 0 || window.scrollLeft !== 0) {
+          window.scrollTo(0, window.scrollY || window.scrollTop || 0);
+        }
+      }, { passive: true });
     </script>
   </head>
   <body>
