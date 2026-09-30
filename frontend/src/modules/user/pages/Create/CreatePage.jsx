@@ -2216,13 +2216,13 @@ const CreatePage = () => {
 
     const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerHeight > window.innerWidth;
 
-    // High performance portrait 9:16 constraints with 30fps lock to eliminate front-camera stutter
+    // Portrait 9:16 constraints optimized for camera stability without strict overconstraints
     const videoConstraints = {
       facingMode: isUser ? 'user' : 'environment',
       width: { ideal: isMobile ? 720 : 1280 },
       height: { ideal: isMobile ? 1280 : 720 },
       aspectRatio: { ideal: isMobile ? 9 / 16 : 16 / 9 },
-      frameRate: { ideal: 30, min: 24, max: 30 }
+      frameRate: { ideal: 30, max: 30 }
     };
 
     try {
@@ -2239,10 +2239,18 @@ const CreatePage = () => {
         });
       } catch (audioErr) {
         console.warn('getUserMedia with audio failed, falling back to video-only:', audioErr);
-        combinedStream = await navigator.mediaDevices.getUserMedia({
-          video: videoConstraints,
-          audio: false
-        });
+        try {
+          combinedStream = await navigator.mediaDevices.getUserMedia({
+            video: videoConstraints,
+            audio: false
+          });
+        } catch (strictErr) {
+          console.warn('getUserMedia with strict constraints failed, using flexible fallback:', strictErr);
+          combinedStream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: isUser ? 'user' : 'environment' },
+            audio: false
+          });
+        }
       }
 
       streamRef.current = combinedStream;
@@ -2260,6 +2268,17 @@ const CreatePage = () => {
       showToast('Camera access denied');
     }
   };
+
+  // Reactive effect ensuring camera preview video is always attached when stream is ready
+  useEffect(() => {
+    if (cameraVideoRef.current && (rawCameraStream || streamRef.current)) {
+      const activeStream = rawCameraStream || streamRef.current;
+      if (cameraVideoRef.current.srcObject !== activeStream) {
+        cameraVideoRef.current.srcObject = activeStream;
+        cameraVideoRef.current.play().catch(e => console.warn('Preview video play warning:', e));
+      }
+    }
+  }, [rawCameraStream, stage]);
 
   const stopCamera = () => {
     if (zoomRafRef.current) {
@@ -2293,6 +2312,7 @@ const CreatePage = () => {
       }
       instacamRef.current = null;
     }
+
 
     // Clean up DOM elements if any legacy wrappers exist
     if (canvasRef.current) {

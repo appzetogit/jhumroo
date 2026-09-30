@@ -66,12 +66,21 @@ const saveStoredAccounts = (accounts) => {
   }
 };
 
+const getInitialUser = () => {
+  const storedUser = authService.getUser();
+  if (storedUser && (storedUser.isPremium || (storedUser.fullName && !storedUser.username?.startsWith('user_')))) {
+    storedUser.isOnboarded = true;
+    storedUser.isProfileCompleted = true;
+  }
+  return storedUser;
+};
+
 export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null);
+  const [user, setUser] = useState(() => getInitialUser());
   const [token, setToken] = useState(() => authService.getToken());
   const [accounts, setAccounts] = useState(() => getStoredAccounts());
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isAuthenticated, setIsAuthenticated] = useState(() => Boolean(authService.getToken() && authService.getUser()));
+  const [isLoading, setIsLoading] = useState(() => !authService.getToken());
 
   // Sync accounts into storage whenever state changes
   const addAccountSession = useCallback((newToken, newRefreshToken, newUser) => {

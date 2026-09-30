@@ -209,8 +209,12 @@ const authService = {
    * @returns {Object|null} User data
    */
   getUser: () => {
-    const user = localStorage.getItem('jhumroo_user');
-    return user ? JSON.parse(user) : null;
+    try {
+      const user = localStorage.getItem('jhumroo_user');
+      return user ? JSON.parse(user) : null;
+    } catch {
+      return null;
+    }
   },
 
   /**

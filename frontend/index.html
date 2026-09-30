@@ -181,6 +181,9 @@
           }
         };
 
+        const isStartTimeNoise = isNoise;
+
+
         // Intercept all console levels to suppress third-party & WASM noise
         const origConsoleError = console.error;
         console.error = function (...args) {

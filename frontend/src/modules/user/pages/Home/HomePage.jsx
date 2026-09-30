@@ -109,22 +109,27 @@ const HomePage = () => {
 
   // Intersection Observer for Active Video
   useEffect(() => {
+    const container = containerRef.current;
     const observer = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {
           if (entry.isIntersecting) {
-            const index = Number(entry.target.getAttribute('data-index'));
-            setActiveVideoIndex(index);
+            const indexAttr = entry.target.getAttribute('data-index');
+            const index = Number(indexAttr);
+            if (!isNaN(index)) {
+              setActiveVideoIndex(index);
+            }
           }
         });
       },
-      { threshold: 0.5 }
+      { root: container || null, threshold: 0.5 }
     );
 
-    const elements = document.querySelectorAll('.video-card-wrapper');
+    const elements = container ? container.querySelectorAll('.video-card-wrapper') : document.querySelectorAll('.video-card-wrapper');
     elements.forEach((el) => observer.observe(el));
     return () => elements.forEach((el) => observer.unobserve(el));
   }, [displayedVideos, currentTab]);
+
 
   // Feed variables are declared above the hooks
 
@@ -136,74 +141,7 @@ const HomePage = () => {
     activeVideoIndexRef.current = activeVideoIndex;
   }, [activeVideoIndex]);
 
-  // Desktop Mouse Wheel & Trackpad scroll helper to prevent rigid snap-back behavior
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
 
-    const handleWheel = (e) => {
-      // If it's a horizontal scroll or there are no videos, let it be
-      if (Math.abs(e.deltaX) > Math.abs(e.deltaY) || displayedVideos.length <= 1) {
-        return;
-      }
-
-      // Prevent default rigid desktop scroll and instant snap-backs
-      e.preventDefault();
-
-      if (isScrollingRef.current) return;
-
-      const direction = e.deltaY > 0 ? 1 : -1;
-      const nextIndex = activeVideoIndexRef.current + direction;
-
-      if (nextIndex >= 0 && nextIndex < displayedVideos.length) {
-        isScrollingRef.current = true;
-        
-        const nextCard = container.querySelector(`[data-index="${nextIndex}"]`);
-        if (nextCard) {
-          if (lenis) {
-            lenis.scrollTo(nextCard, { duration: 1.0 });
-          } else {
-            nextCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
-          }
-        }
-
-        // Lock wheel scrolling for 600ms to allow smooth scroll animation to finish
-        setTimeout(() => {
-          isScrollingRef.current = false;
-        }, 600);
-      }
-    };
-
-    container.addEventListener('wheel', handleWheel, { passive: false });
-    return () => {
-      container.removeEventListener('wheel', handleWheel);
-    };
-  }, [displayedVideos.length, lenis]);
-
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-
-    const updateOverscroll = () => {
-      container.style.overscrollBehaviorY = 'none';
-      if (container.scrollTop <= 0) {
-        container.classList.remove('snap-enabled');
-      } else {
-        container.classList.add('snap-enabled');
-      }
-    };
-
-    updateOverscroll();
-
-    container.addEventListener('scroll', updateOverscroll, { passive: true });
-    return () => {
-      container.removeEventListener('scroll', updateOverscroll);
-      if (container) {
-        container.style.overscrollBehaviorY = 'none';
-        container.classList.remove('snap-enabled');
-      }
-    };
-  }, []);
 
   // Desktop Keyboard navigation helper (ArrowUp, ArrowDown)
   useEffect(() => {
@@ -307,8 +245,8 @@ const HomePage = () => {
       {/* Vertical Feed */}
       <div
         ref={containerRef}
-        className={`h-full w-full overflow-y-auto reels-feed-container no-scrollbar ${!lenis ? 'snap-enabled' : ''}`}
-        style={{ WebkitOverflowScrolling: 'touch', scrollBehavior: 'auto', touchAction: 'pan-y' }}
+        className="h-full w-full overflow-y-auto reels-feed-container no-scrollbar"
+        style={{ WebkitOverflowScrolling: 'touch', scrollBehavior: 'smooth', touchAction: 'pan-y' }}
       >
         {displayedVideos.length === 0 && !loading ? (
           <div className="h-full w-full flex flex-col items-center justify-center bg-black px-6 text-center select-none">
@@ -345,11 +283,11 @@ const HomePage = () => {
           </div>
         ) : (
           displayedVideos.map((video, index) => {
-            const isVisible = Math.abs(index - activeVideoIndex) <= 2;
+            const isVisible = Math.abs(index - activeVideoIndex) <= 3;
             
             return (
               <div
-                key={video.id}
+                key={video.id || video._id || index}
                 data-index={index}
                 className="video-card-wrapper h-full w-full snap-start snap-always relative"
                 style={{ scrollSnapStop: 'always' }}
@@ -358,7 +296,8 @@ const HomePage = () => {
                   <VideoCard
                     videoData={video}
                     isActive={index === activeVideoIndex && onboardingStep !== 2}
-                    preload={index === activeVideoIndex ? "auto" : (index === activeVideoIndex + 1 ? "auto" : "none")}
+                    preload={index === activeVideoIndex ? "auto" : (index === activeVideoIndex + 1 ? "metadata" : "none")}
+                    shouldLoadMedia={Math.abs(index - activeVideoIndex) <= 1}
                   />
                 ) : (
                   <div className="h-full w-full bg-black flex items-center justify-center">

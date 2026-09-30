@@ -810,4 +810,4 @@ const VideoOverlay = ({ reelId, username, caption, musicName, isLiked, likes, co
   );
 };
 
-export default VideoOverlay;
+export default React.memo(VideoOverlay);

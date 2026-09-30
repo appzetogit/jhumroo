@@ -213,8 +213,9 @@ const AppContent = () => {
     const navigate = useNavigate();
     const { pathname } = useLocation();
     const { user, isAuthenticated, isLoading, logout } = useAuth();
-    const [appState, setAppState] = useState('launch'); // launch, auth, onboarding, main
-    const hasLaunchedBeforeRef = useRef(sessionStorage.getItem('app_launched') === 'true');
+    const hasLaunchedBefore = typeof window !== 'undefined' && sessionStorage.getItem('app_launched') === 'true';
+    const hasLaunchedBeforeRef = useRef(hasLaunchedBefore);
+    const [appState, setAppState] = useState(() => (hasLaunchedBefore ? 'main' : 'launch')); // launch, auth, onboarding, main
 
     useEffect(() => {
         const isAdminRoute = pathname.startsWith('/admin');
@@ -399,8 +400,10 @@ const AppContent = () => {
 
     return (
         <div className={`theme-app-shell relative w-full max-w-full h-full min-h-full mx-auto flex flex-col overflow-hidden shadow-2xl ${theme === 'light' ? 'theme-is-light' : 'theme-is-dark'}`}>
-            {appState === 'launch' && !hasLaunchedBeforeRef.current && <Splash />}
-            {appState !== 'launch' && (
+            {appState === 'launch' ? (
+              <Splash />
+            ) : (
+
                 <>
                   {isSuspended ? (
                     <SuspendedScreen reason={user?.banReason} />

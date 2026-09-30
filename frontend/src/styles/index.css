@@ -1912,23 +1912,20 @@ body.timeline-trimming-active * {
   animation: scale-in 0.15s ease-out;
 }
 
-/* Perfect Vertical Reel Snapping & Scroll Stop Rules */
+/* Perfect Vertical Reel Snapping & GPU Performance Rules */
 .reels-feed-container {
-  /* overscroll-behavior-y and scroll-snap-type are managed dynamically in HomePage.jsx:
-     - 'auto' & no snapping when scrollTop=0 (first reel) → allows Flutter pull-to-refresh
-     - 'none' & snapping enabled when scrolled down → prevents accidental refresh between reels */
-  -webkit-overflow-scrolling: touch !important;
-}
-
-.reels-feed-container.snap-enabled {
   scroll-snap-type: y mandatory !important;
+  -webkit-overflow-scrolling: touch !important;
+  overscroll-behavior-y: contain !important;
 }
 
 .video-card-wrapper,
 .overlay-video-card-wrapper {
   scroll-snap-align: start !important;
   scroll-snap-stop: always !important;
+  height: 100% !important;
 }
+
 
 .dark-scrollbar::-webkit-scrollbar {
   width: 6px;

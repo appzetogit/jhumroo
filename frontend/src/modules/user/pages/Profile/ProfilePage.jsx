@@ -74,8 +74,109 @@ const formatTikTokCount = (num) => {
   return num.toString();
 };
 
-const VideoGrid = ({ videos, onVideoClick }) => {
+// In-memory + sessionStorage cache for instant profile & reels loading
+const profileMemoryCache = new Map();
+const reelsMemoryCache = new Map();
+
+const getCachedProfile = (username) => {
+  if (!username) return null;
+  const key = `jhumroo_prof_${username.toLowerCase()}`;
+  if (profileMemoryCache.has(key)) return profileMemoryCache.get(key);
+  try {
+    const raw = sessionStorage.getItem(key);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      profileMemoryCache.set(key, parsed);
+      return parsed;
+    }
+  } catch (_) {}
+  return null;
+};
+
+const setCachedProfile = (username, data) => {
+  if (!username || !data) return;
+  const key = `jhumroo_prof_${username.toLowerCase()}`;
+  profileMemoryCache.set(key, data);
+  try {
+    sessionStorage.setItem(key, JSON.stringify(data));
+  } catch (_) {}
+};
+
+const getCachedReels = (username) => {
+  if (!username) return null;
+  const key = `jhumroo_reels_${username.toLowerCase()}`;
+  if (reelsMemoryCache.has(key)) return reelsMemoryCache.get(key);
+  try {
+    const raw = sessionStorage.getItem(key);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        reelsMemoryCache.set(key, parsed);
+        return parsed;
+      }
+    }
+  } catch (_) {}
+  return null;
+};
+
+const setCachedReels = (username, reels) => {
+  if (!username || !Array.isArray(reels)) return;
+  const key = `jhumroo_reels_${username.toLowerCase()}`;
+  reelsMemoryCache.set(key, reels);
+  try {
+    sessionStorage.setItem(key, JSON.stringify(reels));
+  } catch (_) {}
+};
+
+const getCachedEngagement = (type) => {
+  try {
+    const raw = sessionStorage.getItem(`jhumroo_eng_${type}`);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch (_) {}
+  return null;
+};
+
+const setCachedEngagement = (type, list) => {
+  if (!Array.isArray(list)) return;
+  try {
+    sessionStorage.setItem(`jhumroo_eng_${type}`, JSON.stringify(list));
+  } catch (_) {}
+};
+
+const VideoGrid = ({ videos, onVideoClick, loading = false, emptyType = 'videos' }) => {
+  if (loading && (!videos || !videos.length)) {
+    return (
+      <>
+        {[...Array(6)].map((_, idx) => (
+          <div 
+            key={idx} 
+            className="aspect-[3/4] bg-white/5 animate-pulse border-[0.5px] border-white/5 relative"
+          />
+        ))}
+      </>
+    );
+  }
+
   if (!videos || !videos.length) {
+    if (emptyType === 'saves') {
+      return (
+        <div className="col-span-3 flex flex-col items-center justify-center py-20 gap-3 text-white/30">
+          <BiBookmark size={48} className="text-white/30" />
+          <p className="text-sm">No saved videos yet</p>
+        </div>
+      );
+    }
+    if (emptyType === 'likes') {
+      return (
+        <div className="col-span-3 flex flex-col items-center justify-center py-20 gap-3 text-white/30">
+          <BiHeart size={48} className="text-white/30" />
+          <p className="text-sm">No liked videos yet</p>
+        </div>
+      );
+    }
     return (
       <div className="col-span-3 flex flex-col items-center justify-center py-20 gap-3 text-center px-8">
         <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="opacity-20"><path d="M14.752 11.168l-3.197-2.132A1 1 0 0 0 10 10v4a1 1 0 0 0 1.555.832l3.197-2.132a1 1 0 0 0 0-1.664z"/><path d="M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z"/></svg>
@@ -174,9 +275,13 @@ const ProfilePage = () => {
   const { username: profileUsername } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
-  const { user: currentUser, updateUser } = useAuth();
+  const { user: currentUser, updateUser, isLoading: isAuthLoading } = useAuth();
   const { showToast } = useToast();
   const { config } = useAppContent();
+
+  const displayUsername = profileUsername || currentUser?.username || '';
+  const isOwnProfile = !profileUsername || 
+    (profileUsername && currentUser?.username && profileUsername.toLowerCase() === currentUser.username.toLowerCase());
 
   const [activeTab, setActiveTab] = useState(() => {
     const params = new URLSearchParams(location.search);
@@ -188,11 +293,16 @@ const ProfilePage = () => {
   const [followStatus, setFollowStatus] = useState(null);
   const [isFollower, setIsFollower] = useState(false);
   const [pendingRequestsCount, setPendingRequestsCount] = useState(0);
-  const [profile, setProfile] = useState(null);
-  const [userVideos, setUserVideos] = useState([]);
-  const [savedVideos, setSavedVideos] = useState([]);
-  const [likedVideos, setLikedVideos] = useState([]);
-  const [loading, setLoading] = useState(true);
+
+  // Instantly initialize from memory or sessionStorage cache
+  const [profile, setProfile] = useState(() => getCachedProfile(displayUsername));
+  const [userVideos, setUserVideos] = useState(() => getCachedReels(displayUsername) || []);
+  const [savedVideos, setSavedVideos] = useState(() => getCachedEngagement('saves') || []);
+  const [likedVideos, setLikedVideos] = useState(() => getCachedEngagement('likes') || []);
+  const [loading, setLoading] = useState(() => !getCachedReels(displayUsername)?.length);
+  const [engagementLoading, setEngagementLoading] = useState(false);
+  const [userNotFound, setUserNotFound] = useState(false);
+
   const [showSuggested, setShowSuggested] = useState(false);
   const [randomSuggestions, setRandomSuggestions] = useState([]);
   const [incomingFollowStatus, setIncomingFollowStatus] = useState(null);
@@ -208,10 +318,7 @@ const ProfilePage = () => {
   const [justOpenedOverlay, setJustOpenedOverlay] = useState(false);
   const overlayContainerRef = useRef(null);
 
-  const displayUsername = profileUsername || currentUser?.username || 'user';
-  const isOwnProfile = !profileUsername || 
-    (profileUsername && currentUser?.username && profileUsername.toLowerCase() === currentUser.username.toLowerCase());
-  const activeProfile = isOwnProfile ? (currentUser || profile) : (profile || currentUser);
+  const activeProfile = isOwnProfile ? (profile || currentUser) : profile;
   const isPrivateAndLocked = !isOwnProfile && profile?.isPrivate && !isFollowing;
 
   const { getUserLive } = useLive();
@@ -225,15 +332,43 @@ const ProfilePage = () => {
   );
 
   useEffect(() => {
-    setProfile(null);
-    if (!isOwnProfile) {
+    if (!profileUsername && !isAuthLoading && !currentUser) {
+      navigate('/login', { replace: true });
+    }
+  }, [profileUsername, isAuthLoading, currentUser, navigate]);
+
+  useEffect(() => {
+    if (!displayUsername) return;
+
+    setUserNotFound(false);
+
+    // Instant load from cache on user switch
+    const cachedP = getCachedProfile(displayUsername);
+    const cachedR = getCachedReels(displayUsername);
+
+    if (cachedP) {
+      setProfile(cachedP);
+      setIsFollowing(cachedP.isFollowing);
+      setFollowStatus(cachedP.followStatus);
+      setIsFollower(cachedP.isFollower);
+      setIncomingFollowStatus(cachedP.incomingFollowStatus);
+    } else if (!isOwnProfile) {
+      setProfile(null);
+    }
+
+    if (cachedR && cachedR.length > 0) {
+      setUserVideos(cachedR);
+      setLoading(false);
+    } else if (!isOwnProfile) {
       setUserVideos([]);
       setIsFollowing(false);
       setFollowStatus(null);
       setIsFollower(false);
       setIsBlocked(false);
       setIsBlockedByThem(false);
+      setLoading(true);
     }
+
     fetchProfileData();
   }, [displayUsername, isOwnProfile]);
 
@@ -380,7 +515,7 @@ const ProfilePage = () => {
   }, [activeOverlayIndex, overlayVideos.length]);
 
   const fetchProfileData = async () => {
-    setLoading(true);
+    if (!displayUsername) return;
     try {
       // Fetch profile data and reels in parallel for optimal load speed
       const [profileRes, reelsRes] = await Promise.all([
@@ -390,6 +525,10 @@ const ProfilePage = () => {
 
       if (profileRes.success) {
         setProfile(profileRes.user);
+        setCachedProfile(displayUsername, profileRes.user);
+        if (isOwnProfile && updateUser) {
+          updateUser(profileRes.user);
+        }
         setIsFollowing(profileRes.user.isFollowing);
         setFollowStatus(profileRes.user.followStatus);
         setIsFollower(profileRes.user.isFollower);
@@ -398,31 +537,31 @@ const ProfilePage = () => {
         setIsBlockedByThem(profileRes.user.isBlockedByThem || false);
 
         if (!profileRes.user.isBlockedByThem && reelsRes.success) {
-          setUserVideos(reelsRes.reels);
+          const reels = reelsRes.reels || [];
+          setUserVideos(reels);
+          setCachedReels(displayUsername, reels);
         } else {
           setUserVideos([]);
         }
       }
 
-      if (isOwnProfile) {
-        // Fetch engagement data and requests count in parallel as well
-        const [pendingRes, likedRes, savedRes] = await Promise.all([
-          followService.getFollowRequestsCount(),
-          userService.getLikedReels(),
-          userService.getSavedReels()
-        ]);
+      setLoading(false);
 
-        if (pendingRes.success) {
-          setPendingRequestsCount(pendingRes.count);
-        }
-        if (likedRes.success) {
-          setLikedVideos(likedRes.reels);
-        }
-        if (savedRes.success) {
-          setSavedVideos(savedRes.reels);
-        }
+      if (isOwnProfile) {
+        // Fetch follow requests in background without slowing down the video grid
+        followService.getFollowRequestsCount().then(pendingRes => {
+          if (pendingRes?.success) setPendingRequestsCount(pendingRes.count);
+        }).catch(() => {});
       }
     } catch (error) {
+      if (
+        error?.response?.status === 404 ||
+        error?.status === 404 ||
+        error?.message === 'User not found' ||
+        error?.message?.includes('not found')
+      ) {
+        setUserNotFound(true);
+      }
       if (!error?.isPrivate) {
         console.error('Failed to fetch profile data:', error);
       }
@@ -444,29 +583,27 @@ const ProfilePage = () => {
 
   const fetchEngagementData = async () => {
     if (!isOwnProfile) return;
+    setEngagementLoading(true);
     try {
       if (activeTab === 'likes') {
-        if (likedVideos.length > 0) return; // Skip if already loaded
         const likedRes = await userService.getLikedReels();
-        if (likedRes.success) setLikedVideos(likedRes.reels);
+        if (likedRes.success) {
+          const reels = likedRes.reels || [];
+          setLikedVideos(reels);
+          setCachedEngagement('likes', reels);
+        }
       } else if (activeTab === 'saves') {
-        if (savedVideos.length > 0) return; // Skip if already loaded
         const savedRes = await userService.getSavedReels();
-        if (savedRes.success) setSavedVideos(savedRes.reels);
-      } else {
-        const promises = [];
-        if (likedVideos.length === 0) promises.push(userService.getLikedReels());
-        else promises.push(Promise.resolve(null));
-
-        if (savedVideos.length === 0) promises.push(userService.getSavedReels());
-        else promises.push(Promise.resolve(null));
-
-        const [likedRes, savedRes] = await Promise.all(promises);
-        if (likedRes && likedRes.success) setLikedVideos(likedRes.reels);
-        if (savedRes && savedRes.success) setSavedVideos(savedRes.reels);
+        if (savedRes.success) {
+          const reels = savedRes.reels || [];
+          setSavedVideos(reels);
+          setCachedEngagement('saves', reels);
+        }
       }
     } catch (error) {
       console.error('Failed to fetch engagement data:', error);
+    } finally {
+      setEngagementLoading(false);
     }
   };
 
@@ -697,14 +834,53 @@ const ProfilePage = () => {
     setShowReport(true);
   };
 
-  if (loading && !profile && !isOwnProfile) {
+  if (userNotFound && !isOwnProfile) {
+    return (
+      <div className="page-container theme-surface-page flex flex-col">
+        {/* Header */}
+        <div className="flex items-center justify-between px-4 py-3 shrink-0 sticky top-0 z-[60] bg-[color:var(--theme-page-bg)]/90 backdrop-blur-md">
+          <button onClick={() => navigate(-1)} className="theme-text-primary active:opacity-60">
+            <BiArrowBack size={26} />
+          </button>
+          <h2 className="text-base font-bold theme-text-primary">Profile</h2>
+          <div className="w-6" />
+        </div>
+        <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
+          <div className="w-20 h-20 rounded-full bg-white/5 flex items-center justify-center mb-4 text-white/40">
+            <svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+              <circle cx="12" cy="7" r="4" />
+              <line x1="18" y1="8" x2="22" y2="12" />
+              <line x1="22" y1="8" x2="18" y2="12" />
+            </svg>
+          </div>
+          <h3 className="text-lg font-bold theme-text-primary mb-1">User not found</h3>
+          <p className="text-sm theme-text-muted max-w-xs mb-6">
+            This account doesn't exist or may have been removed.
+          </p>
+          <button
+            onClick={() => navigate('/')}
+            className="px-6 py-2.5 bg-[#FE2C55] text-white text-sm font-semibold rounded-full active:scale-95 transition-all shadow-md"
+          >
+            Back to Home
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (loading && !profile && (!isOwnProfile || !currentUser)) {
     return (
       <div className="page-container theme-surface-page flex flex-col">
         {/* Header Skeleton */}
         <div className="flex items-center justify-between px-4 py-3 shrink-0 sticky top-0 z-[60] bg-[color:var(--theme-page-bg)]/90 backdrop-blur-md">
-          <button onClick={() => navigate(-1)} className="text-white active:opacity-60">
-            <BiArrowBack size={26} />
-          </button>
+          {isOwnProfile ? (
+            <div className="w-7 h-7 bg-white/10 rounded-full animate-pulse" />
+          ) : (
+            <button onClick={() => navigate(-1)} className="text-white active:opacity-60">
+              <BiArrowBack size={26} />
+            </button>
+          )}
           <div className="flex-1" />
           <div className="w-6" />
         </div>
@@ -882,7 +1058,7 @@ const ProfilePage = () => {
             >
               <div className="w-full h-full rounded-full overflow-hidden bg-[#242424]">
                 <img 
-                  src={activeProfile?.profilePicture?.url || (typeof activeProfile?.profilePicture === 'string' ? activeProfile?.profilePicture : null) || `https://api.dicebear.com/7.x/avataaars/svg?seed=${displayUsername}`} 
+                  src={activeProfile?.profilePicture?.url || (typeof activeProfile?.profilePicture === 'string' ? activeProfile?.profilePicture : null) || `https://api.dicebear.com/7.x/avataaars/svg?seed=${displayUsername || 'jhumroo'}`} 
                   alt="avatar" 
                   className="w-full h-full rounded-full object-cover" 
                 />
@@ -979,12 +1155,12 @@ const ProfilePage = () => {
 
           {/* Stats Section with Dividers (Matching TikTok screenshot) */}
           <div className="flex items-center justify-center w-full mb-3">
-            <div className="flex flex-col items-center px-4 cursor-pointer active:opacity-70" onClick={() => navigate(`/user/${displayUsername}/followers`, { state: { activeTab: 'following' } })}>
+            <div className="flex flex-col items-center px-4 cursor-pointer active:opacity-70" onClick={() => displayUsername && navigate(`/user/${displayUsername}/followers`, { state: { activeTab: 'following' } })}>
               <span className="text-[17px] font-bold text-white">{activeProfile?.stats?.followingCount ?? activeProfile?.followingCount ?? 0}</span>
               <span className="text-[12px] text-white/40 font-normal mt-0.5">Following</span>
             </div>
             <div className="w-[1px] h-3.5 bg-white/15" />
-            <div className="flex flex-col items-center px-4 cursor-pointer active:opacity-70" onClick={() => navigate(`/user/${displayUsername}/followers`, { state: { activeTab: 'followers' } })}>
+            <div className="flex flex-col items-center px-4 cursor-pointer active:opacity-70" onClick={() => displayUsername && navigate(`/user/${displayUsername}/followers`, { state: { activeTab: 'followers' } })}>
               <span className="text-[17px] font-bold text-white">{activeProfile?.stats?.followersCount ?? activeProfile?.followersCount ?? 0}</span>
               <span className="text-[12px] text-white/40 font-normal mt-0.5">Followers</span>
             </div>
@@ -1079,7 +1255,7 @@ const ProfilePage = () => {
           <div className="px-4 pb-4 animate-fade-in-down">
             <div className="flex items-center justify-between mb-3">
               <span className="text-[13px] font-bold text-white/40">Suggested accounts</span>
-              <span className="text-[13px] font-bold text-[#FE2C55] active:opacity-60 cursor-pointer" onClick={() => navigate(`/user/${displayUsername}/followers`, { state: { activeTab: 'suggested' } })}>View all</span>
+              <span className="text-[13px] font-bold text-[#FE2C55] active:opacity-60 cursor-pointer" onClick={() => displayUsername && navigate(`/user/${displayUsername}/followers`, { state: { activeTab: 'suggested' } })}>View all</span>
             </div>
 
             <div className="flex gap-2.5 overflow-x-auto no-scrollbar snap-x pb-2">
@@ -1162,26 +1338,29 @@ const ProfilePage = () => {
             </div>
           ) : (
             <>
-              {activeTab === 'videos' && <VideoGrid videos={userVideos} onVideoClick={handleVideoClick} />}
+              {activeTab === 'videos' && (
+                <VideoGrid 
+                  videos={userVideos} 
+                  onVideoClick={handleVideoClick} 
+                  loading={loading} 
+                  emptyType="videos" 
+                />
+              )}
               {activeTab === 'saves' && isOwnProfile && (
-                savedVideos.length > 0 ? (
-                  <VideoGrid videos={savedVideos} onVideoClick={handleVideoClick} />
-                ) : (
-                  <div className="col-span-3 flex flex-col items-center justify-center py-20 gap-3 text-white/30">
-                    <BiBookmark size={48} className="text-white/30" />
-                    <p className="text-sm">No saved videos yet</p>
-                  </div>
-                )
+                <VideoGrid 
+                  videos={savedVideos} 
+                  onVideoClick={handleVideoClick} 
+                  loading={engagementLoading} 
+                  emptyType="saves" 
+                />
               )}
               {activeTab === 'likes' && isOwnProfile && (
-                likedVideos.length > 0 ? (
-                  <VideoGrid videos={likedVideos} onVideoClick={handleVideoClick} />
-                ) : (
-                  <div className="col-span-3 flex flex-col items-center justify-center py-20 gap-3 text-white/30">
-                    <BiHeart size={48} className="text-white/30" />
-                    <p className="text-sm">No liked videos yet</p>
-                  </div>
-                )
+                <VideoGrid 
+                  videos={likedVideos} 
+                  onVideoClick={handleVideoClick} 
+                  loading={engagementLoading} 
+                  emptyType="likes" 
+                />
               )}
               {(!isOwnProfile && (activeTab === 'likes' || activeTab === 'saves')) && (
                 <div className="col-span-3 flex flex-col items-center justify-center py-20 gap-2 text-white/30">
@@ -1286,7 +1465,8 @@ const ProfilePage = () => {
                     <VideoCard
                       videoData={video}
                       isActive={index === activeOverlayIndex}
-                      preload={index === activeOverlayIndex ? "auto" : (index === activeOverlayIndex + 1 ? "auto" : "none")}
+                      preload={index === activeOverlayIndex ? "auto" : (index === activeOverlayIndex + 1 ? "metadata" : "none")}
+                      shouldLoadMedia={Math.abs(index - activeOverlayIndex) <= 1}
                       compactBottom={true}
                     />
                   ) : (

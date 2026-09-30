@@ -5,13 +5,15 @@ import reelService from '../../../../services/reelService';
 import adService from '../../../../services/adService';
 import { useSocket } from '../../../../context/SocketContext';
 
-const VideoCard = ({ videoData, isActive, preload = 'none', compactBottom = false }) => {
+const VideoCard = ({ videoData, isActive, preload = 'none', compactBottom = false, shouldLoadMedia = true }) => {
   const videoRef = useRef(null);
   const hlsRef = useRef(null);
   const watchStartTimeRef = useRef(null);
   const replayCountRef = useRef(0);
   const viewTrackedRef = useRef(false);
   const audioTrackRef = useRef(null); // Added for dynamic audio track sync
+  const isPlayingPromiseRef = useRef(false);
+  const lastTimeUpdateRef = useRef(0);
   
   const [playing, setPlaying] = useState(false);
   const [showHeart, setShowHeart] = useState(false);
@@ -29,6 +31,9 @@ const VideoCard = ({ videoData, isActive, preload = 'none', compactBottom = fals
   const isImageAd = localVideoData.isAd && (localVideoData.video?.type === 'image' || localVideoData.media?.type === 'image');
   const videoUrl = localVideoData.video?.url || localVideoData.url || localVideoData.rawVideoUrl;
   const isImagePost = isImageAd || Boolean(videoUrl && (videoUrl.match(/\.(jpeg|jpg|png|webp)($|\?)/i) || localVideoData.video?.type === 'image' || localVideoData.mediaType === 'photo' || localVideoData.isImage));
+  const rawVideoSrc = localVideoData.hlsUrl || localVideoData.video?.url || localVideoData.url;
+  const isHls = Boolean(rawVideoSrc && rawVideoSrc.includes('.m3u8'));
+  const directVideoSrc = isHls ? undefined : rawVideoSrc;
 
   // Sync data — always adopt a fresh videoData prop (e.g. refetch bringing
   // updated follow/stats info); only reset view-tracking when it's actually
@@ -135,7 +140,7 @@ const VideoCard = ({ videoData, isActive, preload = 'none', compactBottom = fals
     return () => clearTimeout(timer);
   }, [isActive, reelId, localVideoData.isAd]);
 
-  // HLS and Playback Logic (video only — skipped for image ads)
+  // HLS and Media Source Attachment
   useEffect(() => {
     if (isImageAd) return;
 
@@ -148,52 +153,93 @@ const VideoCard = ({ videoData, isActive, preload = 'none', compactBottom = fals
     if (videoSrc.includes('.m3u8')) {
       if (Hls.isSupported()) {
         if (!hlsRef.current) {
-          const hls = new Hls({ capLevelToPlayerSize: true, autoStartLoad: true });
+          const hls = new Hls({
+            capLevelToPlayerSize: true,
+            autoStartLoad: true,
+            maxBufferLength: 10,
+            maxMaxBufferLength: 20
+          });
           hls.loadSource(videoSrc);
           hls.attachMedia(video);
           hlsRef.current = hls;
         }
       } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-        video.src = videoSrc;
+        if (video.src !== videoSrc) {
+          video.src = videoSrc;
+        }
       }
     } else {
-      video.src = videoSrc;
+      if (!video.src || video.src !== videoSrc) {
+        video.src = videoSrc;
+      }
     }
 
     const handleEnded = () => { replayCountRef.current += 1; };
     video.addEventListener('ended', handleEnded);
 
-    if (isActive) {
-      if (video) video.muted = isMuted;
-      const playPromise = video.play();
-      if (playPromise !== undefined) {
-        playPromise.then(() => {
-          setPlaying(true);
-          watchStartTimeRef.current = Date.now();
-        }).catch((err) => {
-          // If browser blocked unmuted autoplay, retry muted so video plays smoothly
-          if (video && !video.muted) {
-            video.muted = true;
-            setIsMuted(true);
-            video.play().then(() => setPlaying(true)).catch(() => setPlaying(false));
-          } else {
-            setPlaying(false);
-          }
-        });
-      }
-    } else {
-      handlePauseAndRecord();
-    }
-
     return () => {
-      handlePauseAndRecord();
-      if (video) video.removeEventListener('ended', handleEnded);
+      video.removeEventListener('ended', handleEnded);
       if (hlsRef.current) {
         hlsRef.current.destroy();
         hlsRef.current = null;
       }
     };
-  }, [isActive, isImageAd, localVideoData.hlsUrl, localVideoData.video?.url, localVideoData.url]);
+  }, [isImageAd, localVideoData.hlsUrl, localVideoData.video?.url, localVideoData.url]);
+
+
+  // Safe Playback & Pause Management: does NOT destroy HLS or drop buffer on swipe
+  useEffect(() => {
+    if (isImageAd) return;
+
+    const video = videoRef.current;
+    if (!video) return;
+
+    if (isActive && shouldLoadMedia) {
+      video.muted = isMuted;
+
+      // Resume HLS loading if it was paused
+      if (hlsRef.current) {
+        try { hlsRef.current.startLoad(); } catch (e) { }
+      }
+
+      isPlayingPromiseRef.current = true;
+      const playPromise = video.play();
+      if (playPromise !== undefined) {
+        playPromise
+          .then(() => {
+            isPlayingPromiseRef.current = false;
+            setPlaying(true);
+            watchStartTimeRef.current = Date.now();
+          })
+          .catch((err) => {
+            isPlayingPromiseRef.current = false;
+            // Ignore expected abort on rapid swipes
+            if (err.name === 'AbortError') return;
+
+            // Retry muted if browser blocked unmuted autoplay
+            if (video && !video.muted) {
+              video.muted = true;
+              setIsMuted(true);
+              video.play().then(() => setPlaying(true)).catch(() => setPlaying(false));
+            } else {
+              setPlaying(false);
+            }
+          });
+      }
+    } else {
+      // Pause HLS segment downloading to save mobile bandwidth without destroying buffer
+      if (hlsRef.current) {
+        try { hlsRef.current.stopLoad(); } catch (e) { }
+      }
+      handlePauseAndRecord();
+    }
+
+    return () => {
+      if (isActive) {
+        handlePauseAndRecord();
+      }
+    };
+  }, [isActive, shouldLoadMedia, isMuted, isImageAd]);
 
   // Audio track synchronization for raw videos with external music library sounds
   useEffect(() => {
@@ -324,7 +370,9 @@ const VideoCard = ({ videoData, isActive, preload = 'none', compactBottom = fals
   const handlePauseAndRecord = () => {
     const video = videoRef.current;
     if (video) {
-      video.pause();
+      try {
+        video.pause();
+      } catch (e) { }
       setPlaying(false);
       if (watchStartTimeRef.current) {
         const watchDuration = (Date.now() - watchStartTimeRef.current) / 1000;
@@ -337,7 +385,7 @@ const VideoCard = ({ videoData, isActive, preload = 'none', compactBottom = fals
             replayCount: replayCountRef.current, isFullWatch,
             swipeTiming: watchDuration,
             deviceInfo: { platform: 'web', appVersion: '1.0.0' }
-          });
+          }).catch(() => {});
         }
         watchStartTimeRef.current = null;
         replayCountRef.current = 0;
@@ -512,11 +560,12 @@ const VideoCard = ({ videoData, isActive, preload = 'none', compactBottom = fals
               ref={duetVideoRef}
               className="w-full h-full object-cover"
               style={{ objectFit: 'cover' }}
-              src={localVideoData.originalReel.video?.url}
+              src={localVideoData.originalReel?.video?.url}
               loop
               playsInline
               preload={preload}
               muted={isMuted}
+              poster={localVideoData.originalReel?.video?.thumbnail}
               onClick={(e) => {
                 if (e.detail === 2) handleDoubleClick();
                 else handleScreenTap();
@@ -525,7 +574,7 @@ const VideoCard = ({ videoData, isActive, preload = 'none', compactBottom = fals
             {/* Original Creator Name tag overlay */}
             <div className="absolute bottom-4 left-4 bg-black/60 backdrop-blur-md px-3 py-1 rounded-full text-xs font-bold text-white border border-white/10 flex items-center gap-1 z-10 pointer-events-none">
               <span className="w-1.5 h-1.5 bg-[#fe2c55] rounded-full"></span>
-              @{localVideoData.originalReel.user?.username || 'creator'}
+              @{localVideoData.originalReel?.user?.username || 'creator'}
             </div>
           </div>
           
@@ -533,6 +582,7 @@ const VideoCard = ({ videoData, isActive, preload = 'none', compactBottom = fals
           <div className="w-1/2 h-full relative flex items-center justify-center bg-black">
             <video
               ref={videoRef}
+              src={directVideoSrc}
               className="w-full h-full object-cover bg-black"
               style={{ willChange: 'transform', objectFit: 'cover' }}
               loop
@@ -560,6 +610,7 @@ const VideoCard = ({ videoData, isActive, preload = 'none', compactBottom = fals
       ) : (
         <video
           ref={videoRef}
+          src={directVideoSrc}
           className="absolute inset-0 w-full h-full object-cover bg-black"
           style={{ willChange: 'transform', objectFit: 'cover' }}
           loop
@@ -576,7 +627,13 @@ const VideoCard = ({ videoData, isActive, preload = 'none', compactBottom = fals
             else handleScreenTap();
           }}
           onTimeUpdate={(e) => {
-            if (!isScrubbing) setCurrentTime(e.target.currentTime);
+            if (!isScrubbing) {
+              const now = performance.now();
+              if (now - lastTimeUpdateRef.current >= 300) {
+                lastTimeUpdateRef.current = now;
+                setCurrentTime(e.target.currentTime);
+              }
+            }
           }}
           onLoadedMetadata={(e) => {
             if (e.target.duration && !isNaN(e.target.duration)) setDuration(e.target.duration);
@@ -641,4 +698,4 @@ const VideoCard = ({ videoData, isActive, preload = 'none', compactBottom = fals
   );
 };
 
-export default VideoCard;
+export default React.memo(VideoCard);

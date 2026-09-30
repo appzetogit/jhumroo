@@ -306,21 +306,6 @@ export const uploadProfilePicture = asyncHandler(async (req, res) => {
  * @access  Public
  */
 export const getUserReels = asyncHandler(async (req, res) => {
-  // Global geo-targeting check
-  const isAllowed = await isUserAllowedToViewReels(req);
-  if (!isAllowed) {
-    return res.status(200).json({
-      success: true,
-      reels: [],
-      pagination: {
-        total: 0,
-        pages: 0,
-        page: 1,
-        limit
-      }
-    });
-  }
-
   const { username } = req.params;
   const page = parseInt(req.query.page) || 1;
   const limit = parseInt(req.query.limit) || 20;
@@ -335,12 +320,24 @@ export const getUserReels = asyncHandler(async (req, res) => {
     });
   }
 
-  // Load follow status once if logged in and looking at someone else's profile
-  let isFollowing = false;
-  let isFollower = false;
-  if (req.user && req.user._id.toString() !== user._id.toString()) {
-    const isTargetBlockedByMe = req.user.blockedUsers && req.user.blockedUsers.some(id => id.toString() === user._id.toString());
-    const isMeBlockedByTarget = user.blockedUsers && user.blockedUsers.some(id => id.toString() === req.user._id.toString());
+  const isOwn = req.user && req.user._id.toString() === user._id.toString();
+
+  if (!isOwn) {
+    // Global geo-targeting check only for other users
+    const isAllowed = await isUserAllowedToViewReels(req);
+    if (!isAllowed) {
+      return res.status(200).json({
+        success: true,
+        reels: [],
+        pagination: { total: 0, pages: 0, page: 1, limit }
+      });
+    }
+
+    // Load follow status once if logged in and looking at someone else's profile
+    let isFollowing = false;
+    let isFollower = false;
+    const isTargetBlockedByMe = req.user?.blockedUsers && req.user.blockedUsers.some(id => id.toString() === user._id.toString());
+    const isMeBlockedByTarget = user.blockedUsers && user.blockedUsers.some(id => id.toString() === req.user?._id.toString());
     if (isTargetBlockedByMe || isMeBlockedByTarget) {
       return res.status(200).json({
         success: true,
@@ -349,17 +346,17 @@ export const getUserReels = asyncHandler(async (req, res) => {
       });
     }
 
-    const [follow, incoming] = await Promise.all([
-      Follow.findOne({ follower: req.user._id, following: user._id, status: 'accepted' }),
-      Follow.findOne({ follower: user._id, following: req.user._id, status: 'accepted' })
-    ]);
-    isFollowing = !!follow;
-    isFollower = !!incoming;
-  }
+    if (req.user) {
+      const [follow, incoming] = await Promise.all([
+        Follow.findOne({ follower: req.user._id, following: user._id, status: 'accepted' }),
+        Follow.findOne({ follower: user._id, following: req.user._id, status: 'accepted' })
+      ]);
+      isFollowing = !!follow;
+      isFollower = !!incoming;
+    }
 
-  // Check privacy
-  if (user.isPrivate && (!req.user || req.user._id.toString() !== user._id.toString())) {
-    if (!isFollowing) {
+    // Check privacy
+    if (user.isPrivate && !isFollowing) {
       return res.status(403).json({
         success: false,
         message: 'This account is private',
@@ -370,39 +367,48 @@ export const getUserReels = asyncHandler(async (req, res) => {
 
   let query = { user: user._id, isActive: true, status: 'completed' };
 
-  // Filter based on audience settings for other users
-  if (!req.user || req.user._id.toString() !== user._id.toString()) {
+  if (!isOwn) {
     const allowedAudiences = ['everyone'];
+    let isFollowing = false;
+    let isFollower = false;
+    if (req.user) {
+      const [follow, incoming] = await Promise.all([
+        Follow.findOne({ follower: req.user._id, following: user._id, status: 'accepted' }),
+        Follow.findOne({ follower: user._id, following: req.user._id, status: 'accepted' })
+      ]);
+      isFollowing = !!follow;
+      isFollower = !!incoming;
+    }
     if (isFollowing) {
       allowedAudiences.push('followers');
     }
     if (isFollower) {
       allowedAudiences.push('following');
     }
-
     query.audience = { $in: allowedAudiences };
-  }
 
-  if (req.user) {
-    const reportedReels = await Report.find({
-      reportedBy: req.user._id,
-      reportType: 'Reel'
-    }).select('reportedItem');
-    const reportedReelIds = reportedReels.map(r => r.reportedItem);
-    if (reportedReelIds.length > 0) {
-      query._id = { $nin: reportedReelIds };
+    if (req.user) {
+      const reportedReels = await Report.find({
+        reportedBy: req.user._id,
+        reportType: 'Reel'
+      }).select('reportedItem');
+      const reportedReelIds = reportedReels.map(r => r.reportedItem);
+      if (reportedReelIds.length > 0) {
+        query._id = { $nin: reportedReelIds };
+      }
     }
   }
 
-  const reels = await Reel.find(query)
-    .sort({ createdAt: -1 })
-    .skip(skip)
-    .limit(limit)
-    .populate('user', 'username fullName profilePicture isVerified downloadPrivacy')
-    .populate('music.audioId')
-    .populate({ path: 'originalReel', populate: { path: 'user', select: 'username fullName profilePicture isVerified' } });
-
-  const total = await Reel.countDocuments(query);
+  const [reels, total] = await Promise.all([
+    Reel.find(query)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .populate('user', 'username fullName profilePicture isVerified downloadPrivacy')
+      .populate('music.audioId')
+      .populate({ path: 'originalReel', populate: { path: 'user', select: 'username fullName profilePicture isVerified' } }),
+    Reel.countDocuments(query)
+  ]);
 
   let reelsObj = reels.map(r => r.toObject ? r.toObject({ virtuals: true }) : { ...r });
 
