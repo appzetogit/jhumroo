@@ -14,6 +14,20 @@ export const startLive = asyncHandler(async (req, res) => {
   const userId = req.user._id;
   const { title, thumbnailUrl } = req.body;
 
+  // Only users with active Premium subscription can broadcast live
+  const hasActivePremium = Boolean(
+    req.user.isPremium &&
+    req.user.premiumExpiresAt &&
+    new Date(req.user.premiumExpiresAt) > new Date()
+  );
+
+  if (!hasActivePremium) {
+    return res.status(403).json({
+      success: false,
+      message: 'Only Premium members can go live. Upgrade to Jhumroo Premium to start streaming!'
+    });
+  }
+
   // Mark any previous active live stream for this user as ended
   await LiveStream.updateMany(
     { broadcaster: userId, status: 'live' },

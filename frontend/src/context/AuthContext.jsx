@@ -237,6 +237,13 @@ export const AuthProvider = ({ children }) => {
       const storedAccounts = getStoredAccounts();
 
       if (storedToken && storedUser) {
+        if (storedUser.isPremium || (storedUser.fullName && !storedUser.username?.startsWith('user_'))) {
+          storedUser.isOnboarded = true;
+          storedUser.isProfileCompleted = true;
+          try {
+            localStorage.setItem('jhumroo_user', JSON.stringify(storedUser));
+          } catch (_) {}
+        }
         setUser(storedUser);
         setToken(storedToken);
         setIsAuthenticated(true);
@@ -348,13 +355,26 @@ export const AuthProvider = ({ children }) => {
   };
 
   const updateUser = (userData) => {
-    setUser(userData);
-    localStorage.setItem('jhumroo_user', JSON.stringify(userData));
+    if (!userData) return;
+    setUser((prev) => {
+      const merged = { ...(prev || {}), ...userData };
+      if (prev?.isOnboarded || userData.isOnboarded || userData.isPremium || merged.isPremium) {
+        merged.isOnboarded = true;
+      }
+      if (prev?.isProfileCompleted || userData.isProfileCompleted || (merged.fullName && !merged.username?.startsWith('user_'))) {
+        merged.isProfileCompleted = true;
+      }
+      try {
+        localStorage.setItem('jhumroo_user', JSON.stringify(merged));
+      } catch (_) {}
+      return merged;
+    });
+
     const currentAccounts = getStoredAccounts();
     const userId = userData?._id || userData?.id;
     if (userId) {
       const updated = currentAccounts.map((a) =>
-        (a.user?._id || a.user?.id) === userId ? { ...a, user: { ...a.user, ...userData } } : a
+        (a.user?._id || a.user?.id) === userId ? { ...a, user: { ...a.user, ...userData, isOnboarded: true } } : a
       );
       saveStoredAccounts(updated);
       setAccounts(updated);

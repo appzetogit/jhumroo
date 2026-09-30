@@ -278,6 +278,7 @@ const CreatePage = () => {
   const audioRef = useRef(null);
   const overlayInputRef = useRef(null);
   const canvasRef = useRef(null);
+  const cameraVideoRef = useRef(null);
   const instacamRef = useRef(null);
   const zoomCanvasRef = useRef(null);
   const zoomRafRef = useRef(null);
@@ -934,7 +935,7 @@ const CreatePage = () => {
       liveVideoSourceRef.current = v;
     }
     const v = liveVideoSourceRef.current;
-    const streamToUse = sourceMediaStream || rawCameraStream || instacamRef.current?.v;
+    const streamToUse = sourceMediaStream || rawCameraStream || streamRef.current;
     if (streamToUse && v.srcObject !== streamToUse) {
       v.srcObject = streamToUse;
       v.play().catch(() => {});
@@ -967,10 +968,9 @@ const CreatePage = () => {
           // 2. Instacam internal playing video element (instacamRef.current?.i)
           // 3. Offscreen video source element (v) if ready
           const videoSource =
+            (cameraVideoRef.current && cameraVideoRef.current.readyState >= 2 ? cameraVideoRef.current : null) ||
             (canvasRef.current && canvasRef.current.width > 0 ? canvasRef.current : null) ||
-            (instacamRef.current?.i && instacamRef.current.i.readyState >= 2 ? instacamRef.current.i : null) ||
-            (v && v.readyState >= 2 ? v : null) ||
-            instacamRef.current?.i;
+            (v && v.readyState >= 2 ? v : null);
 
           if (videoSource) {
             ctx.save();
@@ -1901,7 +1901,7 @@ const CreatePage = () => {
       }
 
       setRecordedSeconds(elapsedSeconds);
-    }, 100);
+    }, 250);
 
     return () => window.clearInterval(intervalId);
     // recordedSeconds is read once at start (resume case) - keeping it in deps rebuilt the
@@ -1950,29 +1950,21 @@ const CreatePage = () => {
     if (stage !== 'camera') return;
     const speedValue = parseFloat(selectedSpeed) || 1;
 
-    // Apply to Instacam internal video element
-    if (instacamRef.current && instacamRef.current.v) {
+    // Apply to camera preview video element
+    if (cameraVideoRef.current) {
       try {
-        instacamRef.current.v.playbackRate = speedValue;
-      } catch (e) { /* ignore if not supported */ }
+        cameraVideoRef.current.playbackRate = speedValue;
+      } catch (e) { /* ignore */ }
     }
-
-    // Apply to the recorded clip preview video shown after recording stops
-    if (canvasRef.current) {
-      const parent = canvasRef.current.closest('[data-instacam]') || canvasRef.current.parentElement;
-      const internalVideo = parent?.querySelector('video');
-      if (internalVideo) {
-        try { internalVideo.playbackRate = speedValue; } catch (e) { /* ignore */ }
-      }
-    }
-  }, [selectedSpeed, stage, instacamRef.current]);
+  }, [selectedSpeed, stage]);
 
   const applyZoom = useCallback(async (zoomValue) => {
     const zoomNumber = parseFloat(zoomValue) || 1.0;
     let hardwareApplied = false;
     
-    if (instacamRef.current && instacamRef.current.v) {
-      const videoTrack = instacamRef.current.v.getVideoTracks()[0];
+    const activeStream = rawCameraStream || streamRef.current;
+    if (activeStream) {
+      const videoTrack = activeStream.getVideoTracks()[0];
       if (videoTrack) {
         try {
           const capabilities = videoTrack.getCapabilities ? videoTrack.getCapabilities() : {};
@@ -1992,48 +1984,55 @@ const CreatePage = () => {
       }
     }
 
+    const mirror = facingModeRef.current === 'user' ? 'scaleX(-1) ' : '';
+    if (cameraVideoRef.current) {
+      if (hardwareApplied) {
+        cameraVideoRef.current.style.transform = mirror.trim() || 'none';
+      } else {
+        cameraVideoRef.current.style.transform = `${mirror}scale(${zoomNumber})`.trim();
+        cameraVideoRef.current.style.transformOrigin = 'center';
+      }
+    }
     if (canvasRef.current) {
       if (hardwareApplied) {
-        canvasRef.current.style.transform = 'scale(1)';
+        canvasRef.current.style.transform = mirror.trim() || 'none';
       } else {
-        canvasRef.current.style.transform = `scale(${zoomNumber})`;
+        canvasRef.current.style.transform = `${mirror}scale(${zoomNumber})`.trim();
         canvasRef.current.style.transformOrigin = 'center';
       }
     }
 
-    // Without hardware zoom, the CSS transform above only zooms the on-screen preview -
-    // the recorded stream still comes from the raw, un-zoomed camera track. Bake the zoom
-    // into a second canvas (cropped + scaled from the preview canvas) and record from that
-    // instead, so the exported video actually matches what was previewed.
     if (zoomRafRef.current) {
       cancelAnimationFrame(zoomRafRef.current);
       zoomRafRef.current = null;
     }
 
-    if (instacamRef.current?.v && streamRef.current) {
-      const rawVideoTrack = instacamRef.current.v.getVideoTracks()[0];
+    if (activeStream && streamRef.current) {
+      const rawVideoTrack = activeStream.getVideoTracks()[0];
       const audioTracks = streamRef.current.getAudioTracks();
 
       if (hardwareApplied || zoomNumber === 1 || !rawVideoTrack) {
         if (rawVideoTrack) {
           streamRef.current = new MediaStream([rawVideoTrack, ...audioTracks]);
         }
-      } else if (canvasRef.current) {
-        const srcCanvas = canvasRef.current;
+      } else if (cameraVideoRef.current || canvasRef.current) {
+        const srcEl = cameraVideoRef.current || canvasRef.current;
         if (!zoomCanvasRef.current) {
           zoomCanvasRef.current = document.createElement('canvas');
         }
         const zoomCanvas = zoomCanvasRef.current;
-        zoomCanvas.width = srcCanvas.width;
-        zoomCanvas.height = srcCanvas.height;
-        const ctx = zoomCanvas.getContext('2d');
+        zoomCanvas.width = srcEl.videoWidth || srcEl.width || 720;
+        zoomCanvas.height = srcEl.videoHeight || srcEl.height || 1280;
+        const ctx = zoomCanvas.getContext('2d', { alpha: false, desynchronized: true });
 
         const drawZoomedFrame = () => {
-          const cropW = srcCanvas.width / zoomNumber;
-          const cropH = srcCanvas.height / zoomNumber;
-          const cropX = (srcCanvas.width - cropW) / 2;
-          const cropY = (srcCanvas.height - cropH) / 2;
-          ctx.drawImage(srcCanvas, cropX, cropY, cropW, cropH, 0, 0, zoomCanvas.width, zoomCanvas.height);
+          const w = zoomCanvas.width;
+          const h = zoomCanvas.height;
+          const cropW = w / zoomNumber;
+          const cropH = h / zoomNumber;
+          const cropX = (w - cropW) / 2;
+          const cropY = (h - cropH) / 2;
+          ctx.drawImage(srcEl, cropX, cropY, cropW, cropH, 0, 0, w, h);
           zoomRafRef.current = requestAnimationFrame(drawZoomedFrame);
         };
         drawZoomedFrame();
@@ -2042,7 +2041,7 @@ const CreatePage = () => {
         streamRef.current = new MediaStream([zoomedVideoTrack, ...audioTracks]);
       }
     }
-  }, []);
+  }, [rawCameraStream]);
 
   useEffect(() => {
     if (stage === 'camera') {
@@ -2055,13 +2054,25 @@ const CreatePage = () => {
   useEffect(() => {
     if (!(isFiltersTrayOpen && stage === 'camera')) return undefined;
     const snapshot = () => {
+      const videoEl = cameraVideoRef.current;
+      if (videoEl && videoEl.readyState >= 2) {
+        try {
+          if (!filterSnapshotCanvasRef.current) filterSnapshotCanvasRef.current = document.createElement('canvas');
+          const snapCanvas = filterSnapshotCanvasRef.current;
+          snapCanvas.width = 100;
+          snapCanvas.height = 100;
+          snapCanvas.getContext('2d').drawImage(videoEl, 0, 0, 100, 100);
+          setFilterPreviewFrame(snapCanvas.toDataURL('image/jpeg', 0.4));
+          return;
+        } catch (e) { }
+      }
       if (!canvasRef.current) return;
       try {
         setFilterPreviewFrame(canvasRef.current.toDataURL('image/jpeg', 0.4));
       } catch (e) { /* canvas not ready yet */ }
     };
     snapshot();
-    const id = setInterval(snapshot, 500);
+    const id = setInterval(snapshot, 1500);
     return () => clearInterval(id);
   }, [isFiltersTrayOpen, stage]);
 
@@ -2160,7 +2171,7 @@ const CreatePage = () => {
     if (stage === 'camera' && !streamRef.current) {
       const checkAndStart = () => {
         if (!active) return;
-        if (canvasRef.current) {
+        if (cameraVideoRef.current || canvasRef.current) {
           startCamera();
         } else {
           requestAnimationFrame(checkAndStart);
@@ -2178,91 +2189,75 @@ const CreatePage = () => {
   }, [stage]);
 
   const startCamera = async (overrideMode) => {
-    if (!canvasRef.current) return;
-
     const activeMode = overrideMode || facingMode;
     const isUser = activeMode === 'user';
 
-    // Intercept and optimize navigator.mediaDevices.getUserMedia for portrait wide-angle video
-    const originalGetUserMedia = navigator.mediaDevices.getUserMedia;
-    navigator.mediaDevices.getUserMedia = async (constraints) => {
-      // Check if mobile device or if the viewport is physically in portrait
-      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerHeight > window.innerWidth;
+    // Stop previous streams cleanly
+    if (zoomRafRef.current) {
+      cancelAnimationFrame(zoomRafRef.current);
+      zoomRafRef.current = null;
+    }
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => {
+        try { track.stop(); } catch (e) { }
+      });
+      streamRef.current = null;
+    }
+    if (rawCameraStream) {
+      rawCameraStream.getTracks().forEach(track => {
+        try { track.stop(); } catch (e) { }
+      });
+      setRawCameraStream(null);
+    }
+    if (instacamRef.current) {
+      try { instacamRef.current.stop(); } catch (e) { }
+      instacamRef.current = null;
+    }
 
-      const optimizedConstraints = {
-        ...constraints,
-        video: constraints.video ? {
-          facingMode: isUser ? 'user' : 'environment',
-          width: { ideal: isMobile ? 720 : 1280 },
-          height: { ideal: isMobile ? 1280 : 720 },
-          aspectRatio: { ideal: isMobile ? 9 / 16 : 16 / 9 }
-        } : false
-      };
-      return originalGetUserMedia.call(navigator.mediaDevices, optimizedConstraints);
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerHeight > window.innerWidth;
+
+    // High performance portrait 9:16 constraints with 30fps lock to eliminate front-camera stutter
+    const videoConstraints = {
+      facingMode: isUser ? 'user' : 'environment',
+      width: { ideal: isMobile ? 720 : 1280 },
+      height: { ideal: isMobile ? 1280 : 720 },
+      aspectRatio: { ideal: isMobile ? 9 / 16 : 16 / 9 },
+      frameRate: { ideal: 30, min: 24, max: 30 }
     };
 
     try {
-      if (instacamRef.current) {
-        instacamRef.current.stop();
+      let combinedStream = null;
+      try {
+        // Request video and microphone audio atomically in a single getUserMedia call
+        combinedStream = await navigator.mediaDevices.getUserMedia({
+          video: videoConstraints,
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true
+          }
+        });
+      } catch (audioErr) {
+        console.warn('getUserMedia with audio failed, falling back to video-only:', audioErr);
+        combinedStream = await navigator.mediaDevices.getUserMedia({
+          video: videoConstraints,
+          audio: false
+        });
       }
 
-      // Use standard high-definition 9:16 portrait resolution (720x1280)
-      // instead of viewport resolution to avoid digital crop/zoom by the browser.
-      const streamWidth = 720;
-      const streamHeight = 1280;
-      const streamRatio = 9 / 16;
+      streamRef.current = combinedStream;
+      setRawCameraStream(combinedStream);
 
-      instacamRef.current = new Instacam(canvasRef.current, {
-        width: streamWidth,
-        height: streamHeight,
-        ratio: streamRatio,
-        mode: isUser ? 'front' : 'back',
-        mirror: isUser,
-        autostart: true,
-        done: async () => {
-          console.log('Instacam ready');
-          // Get the stream for recording
-          if (instacamRef.current) {
-            applyZoom(selectedZoom);
-            const videoStream = instacamRef.current.v; // Accessing internal stream
-            setRawCameraStream(videoStream);
-            try {
-              // Request microphone audio stream
-              const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-              // Combine video tracks from canvas and audio tracks from microphone
-              const combinedStream = new MediaStream([
-                ...videoStream.getVideoTracks(),
-                ...audioStream.getAudioTracks()
-              ]);
-              streamRef.current = combinedStream;
-              console.log('Successfully combined canvas video with microphone audio stream!');
-            } catch (audioErr) {
-              console.warn('Microphone access failed or denied, using video-only stream:', audioErr);
-              streamRef.current = videoStream;
-            }
-          }
+      // Attach stream to high-performance zero-copy native video element
+      if (cameraVideoRef.current) {
+        cameraVideoRef.current.srcObject = combinedStream;
+        cameraVideoRef.current.play().catch(e => console.warn('Preview video play warning:', e));
+      }
 
-          // Ensure the generated wrapper is full screen
-          if (canvasRef.current) {
-            const wrapper = canvasRef.current.parentElement;
-            if (wrapper && wrapper.hasAttribute('data-instacam')) {
-              wrapper.style.width = '100%';
-              wrapper.style.height = '100%';
-              wrapper.style.position = 'absolute';
-              wrapper.style.inset = '0';
-            }
-          }
-        },
-        fail: (err) => {
-          console.error('Instacam failed:', err);
-          showToast('Camera access denied');
-        }
-      });
+      applyZoom(selectedZoom);
     } catch (err) {
-      console.error('Error starting Instacam:', err);
-    } finally {
-      // Restore original getUserMedia immediately after synchronous initialization
-      navigator.mediaDevices.getUserMedia = originalGetUserMedia;
+      console.error('Camera access failed:', err);
+      showToast('Camera access denied');
     }
   };
 
@@ -2277,6 +2272,18 @@ const CreatePage = () => {
       });
       streamRef.current = null;
     }
+    if (rawCameraStream) {
+      rawCameraStream.getTracks().forEach(track => {
+        try { track.stop(); } catch (e) { }
+      });
+      setRawCameraStream(null);
+    }
+
+    if (cameraVideoRef.current) {
+      try {
+        cameraVideoRef.current.srcObject = null;
+      } catch (e) { }
+    }
 
     if (instacamRef.current) {
       try {
@@ -2287,47 +2294,20 @@ const CreatePage = () => {
       instacamRef.current = null;
     }
 
-    // Clean up DOM elements created by Instacam to prevent nested wrapper leaks
+    // Clean up DOM elements if any legacy wrappers exist
     if (canvasRef.current) {
       const canvas = canvasRef.current;
       const parent = canvas.parentElement;
-
-      // If the parent is the Instacam wrapper, unwrap the canvas
       if (parent && parent.hasAttribute('data-instacam')) {
         const grandParent = parent.parentElement;
         if (grandParent && grandParent.contains(parent)) {
           try {
             grandParent.insertBefore(canvas, parent);
             grandParent.removeChild(parent);
-          } catch (e) {
-            console.warn('Error unwrapping instacam canvas:', e);
-          }
+          } catch (e) { }
         }
       }
-
-      // Look for any other orphaned instacam elements in the container
-      const container = canvas.parentElement;
-      if (container) {
-        try {
-          const elements = container.querySelectorAll('[data-instacam], [data-instacam-viewport], [data-instacam-stream], [data-instacam-blend]');
-          elements.forEach(el => {
-            if (el !== canvas && container.contains(el)) {
-              el.remove();
-            }
-          });
-        } catch (e) {
-          console.warn('Error cleaning up orphaned instacam elements:', e);
-        }
-      }
-
-      // Reset custom canvas styles if any
-      try {
-        canvas.removeAttribute('data-instacam-viewport');
-        canvas.style.transform = '';
-      } catch (e) {}
     }
-
-    streamRef.current = null;
   };
 
   // Swap the recorded video track between the raw camera and the face-effect overlay canvas,
@@ -2862,6 +2842,42 @@ const CreatePage = () => {
   };
 
   const handleTakePhoto = () => {
+    const videoEl = cameraVideoRef.current;
+    if (videoEl && videoEl.readyState >= 2) {
+      try {
+        const snapCanvas = document.createElement('canvas');
+        snapCanvas.width = videoEl.videoWidth || 720;
+        snapCanvas.height = videoEl.videoHeight || 1280;
+        const ctx = snapCanvas.getContext('2d');
+        if (facingMode === 'user') {
+          ctx.translate(snapCanvas.width, 0);
+          ctx.scale(-1, 1);
+        }
+        const filter = getCombinedFilter();
+        if (filter && filter !== 'none') {
+          try { ctx.filter = filter; } catch (e) { }
+        }
+        ctx.drawImage(videoEl, 0, 0, snapCanvas.width, snapCanvas.height);
+        const dataUrl = snapCanvas.toDataURL('image/jpeg', 0.95);
+        fetch(dataUrl)
+          .then((res) => res.blob())
+          .then((blob) => {
+            const file = new File([blob], 'photo.jpg', { type: 'image/jpeg' });
+            setVideoFile(file);
+            setPreviewUrl(dataUrl);
+            showToast('Photo captured');
+            pushStage('preview');
+          })
+          .catch((err) => {
+            console.error('Failed to create photo blob:', err);
+            showToast('Failed to capture photo');
+          });
+        return;
+      } catch (e) {
+        console.warn('Direct video snapshot failed, falling back to canvasRef:', e);
+      }
+    }
+
     if (canvasRef.current) {
       try {
         const dataUrl = canvasRef.current.toDataURL('image/jpeg', 0.95);
@@ -2879,7 +2895,7 @@ const CreatePage = () => {
             showToast('Failed to capture photo');
           });
       } catch (err) {
-        console.error('Failed to capture photo:', err);
+        console.error('Failed to capture photo from canvas:', err);
         showToast('Camera error');
       }
     } else {
@@ -3085,20 +3101,26 @@ const CreatePage = () => {
       duetVideoPlayerRef.current.play().catch(err => console.error("Failed to play duet original video:", err));
     }
 
-    // Find supported mime type
-    // VP8 first: VP9 is software-encoded on most phones and drops frames while recording.
+    // Find supported mime type prioritizing hardware-accelerated H.264 / AVC
     const types = [
-      'video/webm;codecs=vp8,opus',
-      'video/webm;codecs=vp9,opus',
-      'video/webm',
+      'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
+      'video/mp4;codecs=avc1',
       'video/mp4',
+      'video/webm;codecs=h264,opus',
+      'video/webm;codecs=h264',
+      'video/webm;codecs=vp8,opus',
+      'video/webm',
       'video/quicktime'
     ];
-    let selectedType = types.find(t => MediaRecorder.isTypeSupported(t)) || '';
+    let selectedType = types.find(t => {
+      try {
+        return MediaRecorder.isTypeSupported(t);
+      } catch (e) {
+        return false;
+      }
+    }) || '';
 
-    // Cap bitrate so unedited clips (which skip the compression re-encode and upload this
-    // recording directly - see handleNextClick) aren't stuck at the browser's uncapped
-    // default, which is what made those uploads slow.
+    // Cap bitrate so unedited clips aren't stuck at the browser's uncapped default
     const recorderOptions = { videoBitsPerSecond: 2500000 };
     if (selectedType) recorderOptions.mimeType = selectedType;
     const recorder = new MediaRecorder(streamRef.current, recorderOptions);
@@ -3113,9 +3135,12 @@ const CreatePage = () => {
     autoConfirmOnStopRef.current = false;
 
     recorder.onstop = () => {
-      const blob = new Blob(chunksRef.current, { type: 'video/webm' });
+      const mime = recorder.mimeType || selectedType || 'video/mp4';
+      const isMp4 = mime.includes('mp4');
+      const ext = isMp4 ? 'mp4' : 'webm';
+      const blob = new Blob(chunksRef.current, { type: mime });
       const url = URL.createObjectURL(blob);
-      const file = new File([blob], 'recording.webm', { type: 'video/webm' });
+      const file = new File([blob], `recording.${ext}`, { type: mime });
 
       setVideoFile(file);
       setPreviewUrl(url);
@@ -3128,7 +3153,8 @@ const CreatePage = () => {
       }
     };
 
-    recorder.start();
+    // Timeslice flushes data smoothly every 1000ms, preventing memory spikes and GC frame drops
+    recorder.start(1000);
     setRecordStatus('recording');
 
     // Stop camera preview audio before starting recording audio (avoid double play)
@@ -4954,7 +4980,15 @@ const CreatePage = () => {
     { id: 'speed', label: '' },
   ];
 
-  const cameraDurationModes = ['10m', '60s', '15s', 'Photo', 'Live'];
+  const isPremiumUser = Boolean(
+    user?.isPremium &&
+    user?.premiumExpiresAt &&
+    new Date(user.premiumExpiresAt) > new Date()
+  );
+
+  const cameraDurationModes = isPremiumUser
+    ? ['10m', '60s', '15s', 'Photo', 'Live']
+    : ['10m', '60s', '15s', 'Photo'];
 
   const renderCameraHeader = () => {
     if (recordStatus === 'recording') return null;
@@ -5601,6 +5635,11 @@ const CreatePage = () => {
                           type="button"
                           onClick={() => {
                             if (modeOpt.toUpperCase() === 'LIVE') {
+                              if (!isPremiumUser) {
+                                showToast('Live streaming is exclusive to Jhumroo Premium members! 👑', 'error');
+                                navigate('/profile/premium');
+                                return;
+                              }
                               setCaptureMode('live');
                             } else if (modeOpt.toUpperCase() === 'PHOTO') {
                               setCaptureMode('photo');
@@ -5813,8 +5852,9 @@ const CreatePage = () => {
     const progressPercent = (recordedSeconds / maxDurationSeconds) * 100;
 
     const supportsHardwareZoom = (() => {
-      if (!instacamRef.current || !instacamRef.current.v) return false;
-      const videoTrack = instacamRef.current.v.getVideoTracks()[0];
+      const activeStream = rawCameraStream || streamRef.current;
+      if (!activeStream) return false;
+      const videoTrack = activeStream.getVideoTracks()[0];
       if (!videoTrack || !videoTrack.getCapabilities) return false;
       try {
         return !!videoTrack.getCapabilities().zoom;
@@ -5880,13 +5920,22 @@ const CreatePage = () => {
                     @{duetVideo.user?.username || 'creator'}
                   </div>
                 </div>
-                {/* Right Column: Camera Canvas */}
+                {/* Right Column: Camera Video Preview */}
                 <div className="w-1/2 h-full bg-black relative">
-                  <canvas
-                    ref={canvasRef}
+                  <video
+                    ref={cameraVideoRef}
+                    autoPlay
+                    playsInline
+                    muted
                     onDoubleClick={handleCanvasDoubleClick}
-                    className="w-full h-full object-cover transition-all duration-300"
+                    className="w-full h-full object-cover transition-all duration-150"
+                    style={{
+                      transform: facingMode === 'user' ? 'scaleX(-1)' : undefined,
+                      transformOrigin: 'center',
+                      filter: getCombinedFilter()
+                    }}
                   />
+                  <canvas ref={canvasRef} className="hidden" />
                   {recordStatus === 'recorded' && previewUrl && (
                     <video
                       src={previewUrl}
@@ -5896,7 +5945,7 @@ const CreatePage = () => {
                       autoPlay
                       muted={isVideoMuted}
                       style={{
-                        transform: supportsHardwareZoom ? 'none' : `scale(${parseFloat(selectedZoom) || 1.0})`,
+                        transform: `${facingMode === 'user' ? 'scaleX(-1) ' : ''}${supportsHardwareZoom ? '' : `scale(${parseFloat(selectedZoom) || 1.0})`}`.trim() || undefined,
                         transformOrigin: 'center',
                         filter: getCombinedFilter()
                       }}
@@ -5906,12 +5955,20 @@ const CreatePage = () => {
               </>
             ) : (
               <>
-                <canvas
-                  ref={canvasRef}
+                <video
+                  ref={cameraVideoRef}
+                  autoPlay
+                  playsInline
+                  muted
                   onDoubleClick={handleCanvasDoubleClick}
-                  className="h-full w-full object-cover rounded-[24px] sm:rounded-[28px]"
-                  style={{ filter: getCombinedFilter() }}
+                  className={`h-full w-full object-cover rounded-[24px] sm:rounded-[28px] transition-all duration-150 ${activeFaceEffect ? 'opacity-0 pointer-events-none absolute' : ''}`}
+                  style={{
+                    transform: `${facingMode === 'user' ? 'scaleX(-1)' : ''} ${supportsHardwareZoom ? '' : `scale(${parseFloat(selectedZoom) || 1.0})`}`.trim() || undefined,
+                    transformOrigin: 'center',
+                    filter: getCombinedFilter()
+                  }}
                 />
+                <canvas ref={canvasRef} className="hidden" />
                 {activeFaceEffect && (
                   <FaceEffectCanvas
                     mediaStream={rawCameraStream}
@@ -5933,7 +5990,7 @@ const CreatePage = () => {
                       if (el) el.playbackRate = parseFloat(selectedSpeed) || 1;
                     }}
                     style={{
-                      transform: supportsHardwareZoom ? 'none' : `scale(${parseFloat(selectedZoom) || 1.0})`,
+                      transform: `${facingMode === 'user' ? 'scaleX(-1) ' : ''}${supportsHardwareZoom ? '' : `scale(${parseFloat(selectedZoom) || 1.0})`}`.trim() || undefined,
                       transformOrigin: 'center',
                       filter: getCombinedFilter()
                     }}

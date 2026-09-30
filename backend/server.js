@@ -26,6 +26,7 @@ import staticPageRoutes from './modules/staticPage/staticPage.routes.js';
 import adRoutes from './modules/ad/routes/ad.routes.js';
 import recRoutes from './modules/recommendation/routes/rec.routes.js';
 import liveRoutes from './modules/live/routes/live.routes.js';
+import premiumRoutes from './modules/premium/routes/premium.routes.js';
 import { expireAds } from './cron/ad_expiry.js';
 
 // Import Admin Routes
@@ -125,6 +126,7 @@ app.use('/api/interests', adminInterestRoutes);
 app.use('/api/ads', adRoutes);
 app.use('/api/rec', recRoutes);
 app.use('/api/live', liveRoutes);
+app.use('/api/premium', premiumRoutes);
 
 // Admin API Routes
 app.use('/api/admin/auth', adminAuthRoutes);

@@ -3,12 +3,146 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/png" href="/favicon.png?v=2" />
+    <link rel="manifest" href="/manifest.json" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, shrink-to-fit=no" />
     <title>Jhumroo</title>
     <script>
-      // Safe guard against external extension / Chrome DevTools Performance Live Metrics reportAllChanges startTime bug
+      // Safe guard against external SDKs (Razorpay fraud tracking, local port scans, MediaPipe WASM, etc.)
       if (typeof window !== 'undefined') {
-        const isStartTimeNoise = function (item) {
+        const isSuspiciousLocalhost = function (val) {
+          return typeof val === 'string' && /^(https?:)?\/\/(localhost|127\.0\.0\.1):(?!(5173|5000|5007|3000)\b)\d+/i.test(val);
+        };
+
+        // Intercept new window.Image() and prototype setters
+        try {
+          const OrigImage = window.Image;
+          if (OrigImage) {
+            window.Image = function (width, height) {
+              const img = new OrigImage(width, height);
+              let localSrc = '';
+              Object.defineProperty(img, 'src', {
+                get() {
+                  return localSrc;
+                },
+                set(url) {
+                  localSrc = url;
+                  if (isSuspiciousLocalhost(url)) {
+                    setTimeout(() => {
+                      if (typeof img.onerror === 'function') {
+                        img.onerror(new Event('error'));
+                      }
+                    }, 0);
+                    return;
+                  }
+                  try {
+                    const desc = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, 'src');
+                    if (desc && desc.set) {
+                      desc.set.call(img, url);
+                    } else {
+                      img.setAttribute('src', url);
+                    }
+                  } catch (_) {}
+                },
+                configurable: true,
+                enumerable: true
+              });
+              return img;
+            };
+            window.Image.prototype = OrigImage.prototype;
+          }
+        } catch (_) {}
+
+        try {
+          const origSetAttr = Element.prototype.setAttribute;
+          Element.prototype.setAttribute = function (name, val) {
+            if (this instanceof HTMLImageElement && String(name).toLowerCase() === 'src' && isSuspiciousLocalhost(val)) {
+              setTimeout(() => {
+                if (typeof this.onerror === 'function') {
+                  this.onerror(new Event('error'));
+                }
+              }, 0);
+              return;
+            }
+            return origSetAttr.apply(this, arguments);
+          };
+        } catch (_) {}
+
+        try {
+          const origFetch = window.fetch;
+          window.fetch = function (input, init) {
+            const url = typeof input === 'string' ? input : (input?.url || '');
+            if (isSuspiciousLocalhost(url)) {
+              return Promise.reject(new TypeError('Failed to fetch'));
+            }
+            return origFetch.apply(this, arguments);
+          };
+        } catch (_) {}
+
+        try {
+          const origXhrOpen = XMLHttpRequest.prototype.open;
+          XMLHttpRequest.prototype.open = function (method, url) {
+            if (isSuspiciousLocalhost(url)) {
+              this._isBlockedLocalhost = true;
+            }
+            return origXhrOpen.apply(this, arguments);
+          };
+          const origXhrSend = XMLHttpRequest.prototype.send;
+          XMLHttpRequest.prototype.send = function () {
+            if (this._isBlockedLocalhost) {
+              setTimeout(() => {
+                if (typeof this.onerror === 'function') {
+                  this.onerror(new ProgressEvent('error'));
+                }
+              }, 0);
+              return;
+            }
+            return origXhrSend.apply(this, arguments);
+          };
+        } catch (_) {}
+
+        // Prevent unsafe header warnings on XHR
+        try {
+          const origGetResponseHeader = XMLHttpRequest.prototype.getResponseHeader;
+          XMLHttpRequest.prototype.getResponseHeader = function (headerName) {
+            if (!headerName) return null;
+            const nameStr = String(headerName).toLowerCase();
+            if (nameStr === 'x-rtb-fingerprint-id' || nameStr === 'request-id' || nameStr.includes('fingerprint') || nameStr.startsWith('x-rtb')) {
+              return null;
+            }
+            try {
+              return origGetResponseHeader.apply(this, arguments);
+            } catch (_) {
+              return null;
+            }
+          };
+        } catch (_) {}
+
+        // Accelerometer violation guard
+        try {
+          if ('Accelerometer' in window) {
+            class DummyAccelerometer {
+              constructor() {
+                throw new DOMException('Accelerometer not allowed in this document', 'SecurityError');
+              }
+            }
+            Object.defineProperty(window, 'Accelerometer', {
+              value: DummyAccelerometer,
+              configurable: true,
+              writable: true
+            });
+          }
+          if (navigator && navigator.permissions && navigator.permissions.query) {
+            const origPermQuery = navigator.permissions.query.bind(navigator.permissions);
+            navigator.permissions.query = function (desc) {
+              if (desc && desc.name === 'accelerometer') {
+                return Promise.resolve({ state: 'denied', onchange: null });
+              }
+              return origPermQuery(desc);
+            };
+          }
+        } catch (_) {}
+
+        const isNoise = function (item) {
           if (!item) return false;
           try {
             const str = typeof item === 'string'
@@ -28,45 +162,65 @@
               lower.includes('xnnpack') ||
               lower.includes('vision_wasm') ||
               lower.includes('delegate for cpu') ||
-              lower.includes('face landmarker')
+              lower.includes('face landmarker') ||
+              lower.includes('serviceworker') ||
+              lower.includes('manifest') ||
+              lower.includes('accelerometer') ||
+              lower.includes('unsafe header') ||
+              lower.includes('x-rtb-fingerprint-id') ||
+              lower.includes('request-id') ||
+              lower.includes('permissions policy violation') ||
+              lower.includes('violation') ||
+              lower.includes('37857') ||
+              lower.includes('7070') ||
+              lower.includes('connection_refused') ||
+              lower.includes('connection refused')
             );
           } catch (e) {
             return false;
           }
         };
 
-        // Intercept console.error, warn & info to suppress WASM and performance noise
+        // Intercept all console levels to suppress third-party & WASM noise
         const origConsoleError = console.error;
         console.error = function (...args) {
-          if (args.some(isStartTimeNoise)) return;
-          try {
-            if (isStartTimeNoise(args.map(function(a) { return String(a || ''); }).join(' '))) return;
-          } catch (_) {}
+          if (args.some(isNoise)) return;
+          try { if (isNoise(args.map(a => String(a || '')).join(' '))) return; } catch (_) {}
           origConsoleError.apply(console, args);
         };
 
         const origConsoleWarn = console.warn;
         console.warn = function (...args) {
-          if (args.some(isStartTimeNoise)) return;
-          try {
-            if (isStartTimeNoise(args.map(function(a) { return String(a || ''); }).join(' '))) return;
-          } catch (_) {}
+          if (args.some(isNoise)) return;
+          try { if (isNoise(args.map(a => String(a || '')).join(' '))) return; } catch (_) {}
           origConsoleWarn.apply(console, args);
         };
 
         const origConsoleInfo = console.info;
         console.info = function (...args) {
-          if (args.some(isStartTimeNoise)) return;
-          try {
-            if (isStartTimeNoise(args.map(function(a) { return String(a || ''); }).join(' '))) return;
-          } catch (_) {}
+          if (args.some(isNoise)) return;
+          try { if (isNoise(args.map(a => String(a || '')).join(' '))) return; } catch (_) {}
           origConsoleInfo.apply(console, args);
+        };
+
+        const origConsoleLog = console.log;
+        console.log = function (...args) {
+          if (args.some(isNoise)) return;
+          try { if (isNoise(args.map(a => String(a || '')).join(' '))) return; } catch (_) {}
+          origConsoleLog.apply(console, args);
+        };
+
+        const origConsoleDebug = console.debug;
+        console.debug = function (...args) {
+          if (args.some(isNoise)) return;
+          try { if (isNoise(args.map(a => String(a || '')).join(' '))) return; } catch (_) {}
+          origConsoleDebug.apply(console, args);
         };
 
         // Suppress uncaught window errors
         window.onerror = function (message, source, lineno, colno, error) {
-          if (isStartTimeNoise(message) || isStartTimeNoise(source) || isStartTimeNoise(error)) {
-            return true; // Suppress console logging
+          if (isNoise(message) || isNoise(source) || isNoise(error)) {
+            return true;
           }
         };
 

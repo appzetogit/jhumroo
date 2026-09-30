@@ -69,6 +69,20 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       default: false
     },
+    // Premium Subscription
+    isPremium: {
+      type: Boolean,
+      default: false,
+      index: true
+    },
+    premiumExpiresAt: {
+      type: Date,
+      default: null
+    },
+    premiumPlan: {
+      type: String,
+      default: 'monthly'
+    },
     // Social Links
     socialLinks: {
       instagram: String,

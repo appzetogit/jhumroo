@@ -218,6 +218,12 @@ const ProfilePage = () => {
   const profileUserLive = getUserLive(activeProfile?._id, displayUsername);
   const isProfileUserLive = Boolean(profileUserLive);
 
+  const isProfileUserPremium = Boolean(
+    activeProfile?.isPremium &&
+    activeProfile?.premiumExpiresAt &&
+    new Date(activeProfile.premiumExpiresAt) > new Date()
+  );
+
   useEffect(() => {
     setProfile(null);
     if (!isOwnProfile) {
@@ -843,11 +849,31 @@ const ProfilePage = () => {
               </div>
             )}
 
+            {/* Premium Crown Floating Pin */}
+            {isProfileUserPremium && !isProfileUserLive && (
+              <div 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  navigate('/profile/premium');
+                }}
+                className="absolute -top-1 -right-1 z-10 w-7 h-7 rounded-full bg-gradient-to-tr from-amber-400 via-yellow-300 to-amber-500 p-[1.5px] shadow-[0_2px_10px_rgba(245,158,11,0.55)] flex items-center justify-center cursor-pointer active:scale-90 transition-transform"
+                title="Jhumroo Elite Premium"
+              >
+                <div className="w-full h-full bg-[#0F0F14] rounded-full flex items-center justify-center">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-3.5 h-3.5 text-amber-400 drop-shadow">
+                    <path d="M2 19h20v2H2zm1-4h18v2H3zm9-12.2L16.2 8l4.8-4.8L19 13.8H5L3 3.2 7.8 8z"/>
+                  </svg>
+                </div>
+              </div>
+            )}
+
             <div 
               className={`w-full h-full rounded-full transition-all ${
                 isProfileUserLive 
                   ? 'p-[3.5px] bg-gradient-to-tr from-[#FE2C55] via-red-500 to-rose-600 shadow-[0_0_18px_rgba(254,44,85,0.85)] animate-pulse cursor-pointer' 
-                  : 'p-[2.5px] bg-white'
+                  : isProfileUserPremium
+                    ? 'p-[3px] bg-gradient-to-tr from-amber-400 via-yellow-300 to-amber-500 shadow-[0_0_15px_rgba(245,158,11,0.45)]'
+                    : 'p-[2.5px] bg-white'
               }`}
               onClick={isProfileUserLive ? (e) => {
                 e.stopPropagation();
@@ -890,12 +916,40 @@ const ProfilePage = () => {
                 <h1 className="text-[17px] font-bold text-white group-hover:text-white/90">
                   {activeProfile?.fullName || displayUsername}
                 </h1>
+                {isProfileUserPremium && (
+                  <span 
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      navigate('/profile/premium');
+                    }}
+                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-gradient-to-r from-amber-500/20 via-yellow-400/20 to-amber-500/20 border border-amber-500/40 text-amber-400 text-[10px] font-black tracking-wider uppercase select-none cursor-pointer hover:border-amber-400 transition-colors shadow-sm"
+                    title="Jhumroo Elite Premium Member"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-3 h-3 text-amber-400">
+                      <path d="M2 19h20v2H2zm1-4h18v2H3zm9-12.2L16.2 8l4.8-4.8L19 13.8H5L3 3.2 7.8 8z"/>
+                    </svg>
+                    <span>PRO</span>
+                  </span>
+                )}
                 <BiChevronDown size={22} className="text-white shrink-0 -mt-0.5 opacity-90 group-hover:opacity-100" />
               </button>
             ) : (
-              <h1 className="text-[17px] font-bold text-white">
-                {activeProfile?.fullName || displayUsername}
-              </h1>
+              <div className="flex items-center gap-1.5">
+                <h1 className="text-[17px] font-bold text-white">
+                  {activeProfile?.fullName || displayUsername}
+                </h1>
+                {isProfileUserPremium && (
+                  <span 
+                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-gradient-to-r from-amber-500/20 via-yellow-400/20 to-amber-500/20 border border-amber-500/40 text-amber-400 text-[10px] font-black tracking-wider uppercase select-none shadow-sm"
+                    title="Jhumroo Elite Premium Member"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-3 h-3 text-amber-400">
+                      <path d="M2 19h20v2H2zm1-4h18v2H3zm9-12.2L16.2 8l4.8-4.8L19 13.8H5L3 3.2 7.8 8z"/>
+                    </svg>
+                    <span>PRO</span>
+                  </span>
+                )}
+              </div>
             )}
             
             {isOwnProfile && (
@@ -908,8 +962,20 @@ const ProfilePage = () => {
             )}
           </div>
 
-          {/* Username Handle */}
-          <p className="text-[13px] font-normal text-white/50 mb-3">@{displayUsername}</p>
+          {/* Username Handle & Premium Badge */}
+          <div className="flex flex-col items-center mb-3">
+            <p className="text-[13px] font-normal text-white/50">@{displayUsername}</p>
+            {isProfileUserPremium && (
+              <div 
+                onClick={() => navigate('/profile/premium')}
+                className="mt-1.5 inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-gradient-to-r from-amber-500/15 via-yellow-400/15 to-amber-500/15 border border-amber-500/40 text-[#b45309] dark:text-amber-400 text-[11px] font-black tracking-wider uppercase select-none cursor-pointer active:scale-95 transition-all shadow-[0_2px_8px_rgba(180,83,9,0.15)] hover:border-amber-500"
+                title="View Premium Benefits"
+              >
+                <span className="text-[11px]">👑</span>
+                <span>Elite Member</span>
+              </div>
+            )}
+          </div>
 
           {/* Stats Section with Dividers (Matching TikTok screenshot) */}
           <div className="flex items-center justify-center w-full mb-3">

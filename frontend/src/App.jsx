@@ -293,7 +293,7 @@ const AppContent = () => {
                         if (pathname !== '/signup') {
                             navigate('/signup', { replace: true });
                         }
-                    } else if (user && !user.isOnboarded) {
+                    } else if (user && !user.isOnboarded && !user.isPremium && (!user.interests || user.interests.length === 0)) {
                         setAppState('onboarding');
                         if (pathname !== '/signup/interests') {
                             navigate('/signup/interests', { replace: true });
@@ -329,7 +329,7 @@ const AppContent = () => {
                 if (pathname !== '/signup') {
                     navigate('/signup', { replace: true });
                 }
-            } else if (!user.isOnboarded) {
+            } else if (!user.isOnboarded && !user.isPremium && (!user.interests || user.interests.length === 0)) {
                 if (pathname === '/signup') {
                     // Allowed to go back to complete profile
                     if (appState !== 'auth') {
