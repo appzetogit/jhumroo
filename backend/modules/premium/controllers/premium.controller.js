@@ -66,6 +66,7 @@ export const getPlanDetails = asyncHandler(async (req, res) => {
       currency: pricing.currency,
       features: [
         'Go Live with followers and meetups online',
+        'Record up to 2-minute long videos',
         'Ultra HD 4K high-bitrate video uploads',
         'Ad-Free Browsing experience throughout the app'
       ]

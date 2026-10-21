@@ -3044,14 +3044,21 @@ const CreatePage = () => {
     if (recordStatus === 'recorded') return;
 
     if (recordStatus === 'recording') {
-      handleStartOrStopRecording();
+      handlePauseRecording();
       isPressingRef.current = false;
+      return;
+    }
+
+    if (recordStatus === 'paused') {
+      handleResumeRecording();
+      pressStartTimeRef.current = Date.now();
+      isPressingRef.current = true;
       return;
     }
 
     pressStartTimeRef.current = Date.now();
     isPressingRef.current = true;
-    handleStartOrStopRecording();
+    handleStartRecording();
   };
 
   const handleRecordPressEnd = (e) => {
@@ -3070,44 +3077,18 @@ const CreatePage = () => {
     const pressDuration = Date.now() - pressStartTimeRef.current;
 
     if (pressDuration > 350 && recordStatus === 'recording') {
-      handleStartOrStopRecording();
+      handlePauseRecording();
     }
   };
 
   const handleRecordPressLeave = () => {
     if (isPressingRef.current && recordStatus === 'recording') {
       isPressingRef.current = false;
-      handleStartOrStopRecording();
+      handlePauseRecording();
     }
   };
 
-  const handleStartOrStopRecording = (autoConfirm = false) => {
-    if (recordStatus === 'recording') {
-      // Stop recording
-      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-        autoConfirmOnStopRef.current = autoConfirm;
-        mediaRecorderRef.current.stop();
-      }
-      setRecordStatus('recorded');
-      if (duetVideoPlayerRef.current) {
-        duetVideoPlayerRef.current.pause();
-      }
-      setIsTimerRecording(false);
-
-      // Pause camera background audio
-      if (recordingAudioRef.current) {
-        recordingAudioRef.current.pause();
-        recordingAudioRef.current = null;
-      }
-      return;
-    }
-
-    if (recordStatus === 'recorded') {
-      setActiveSheet('discard-last-clip');
-      return;
-    }
-
-    // Start recording
+  const handleStartRecording = () => {
     if (!streamRef.current) {
       showToast('Camera not ready');
       return;
@@ -3147,7 +3128,7 @@ const CreatePage = () => {
     mediaRecorderRef.current = recorder;
 
     recorder.ondataavailable = (e) => {
-      if (e.data.size > 0) {
+      if (e.data && e.data.size > 0) {
         chunksRef.current.push(e.data);
       }
     };
@@ -3208,15 +3189,119 @@ const CreatePage = () => {
     }
   };
 
-  const handleConfirmClip = () => {
-    if (recordStatus !== 'recorded') {
+  const handlePauseRecording = () => {
+    if (recordStatus !== 'recording') return;
+
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+      try {
+        mediaRecorderRef.current.pause();
+      } catch (err) {
+        console.warn('Error pausing media recorder:', err);
+      }
+    }
+
+    setRecordStatus('paused');
+    setIsTimerRecording(false);
+
+    if (duetVideoPlayerRef.current) {
+      duetVideoPlayerRef.current.pause();
+    }
+
+    if (recordingAudioRef.current) {
+      recordingAudioRef.current.pause();
+    }
+  };
+
+  const handleResumeRecording = () => {
+    if (recordStatus !== 'paused') return;
+
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'paused') {
+      try {
+        mediaRecorderRef.current.resume();
+      } catch (err) {
+        console.warn('Error resuming media recorder:', err);
+      }
+    }
+
+    setRecordStatus('recording');
+
+    if (duetVideoPlayerRef.current) {
+      duetVideoPlayerRef.current.play().catch(err => console.error("Failed to play duet video on resume:", err));
+    }
+
+    if (recordingAudioRef.current) {
+      recordingAudioRef.current.play().catch(err => console.error("Failed to play recording audio on resume:", err));
+    }
+  };
+
+  const handleFinishRecording = (autoConfirm = true) => {
+    autoConfirmOnStopRef.current = autoConfirm;
+
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      try {
+        mediaRecorderRef.current.stop();
+      } catch (err) {
+        console.warn('Error stopping media recorder:', err);
+      }
+    } else if (autoConfirm) {
+      pushStage('preview');
+    }
+
+    setRecordStatus('recorded');
+    setIsTimerRecording(false);
+
+    if (duetVideoPlayerRef.current) {
+      duetVideoPlayerRef.current.pause();
+    }
+
+    if (recordingAudioRef.current) {
+      recordingAudioRef.current.pause();
+      recordingAudioRef.current = null;
+    }
+  };
+
+  const handleStartOrStopRecording = (autoConfirm = false) => {
+    if (autoConfirm) {
+      handleFinishRecording(true);
       return;
     }
 
-    pushStage('preview');
+    if (recordStatus === 'recording') {
+      handlePauseRecording();
+      return;
+    }
+
+    if (recordStatus === 'paused') {
+      handleResumeRecording();
+      return;
+    }
+
+    if (recordStatus === 'recorded') {
+      setActiveSheet('discard-last-clip');
+      return;
+    }
+
+    handleStartRecording();
+  };
+
+  const handleConfirmClip = () => {
+    if (recordStatus === 'recording' || recordStatus === 'paused') {
+      handleFinishRecording(true);
+      return;
+    }
+
+    if (recordStatus === 'recorded') {
+      pushStage('preview');
+    }
   };
 
   const handleDiscardClip = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      try {
+        autoConfirmOnStopRef.current = false;
+        mediaRecorderRef.current.stop();
+      } catch (e) {}
+    }
     setRecordStatus('idle');
     setRecordedSeconds(0);
     setVideoFile(null);
@@ -4233,11 +4318,28 @@ const CreatePage = () => {
     const rawFiles = Array.from(e.target.files || []);
     if (!rawFiles || rawFiles.length === 0) return;
 
-    const validFiles = rawFiles.filter(f => f.type.startsWith('video/') || f.type.startsWith('image/'));
-    if (validFiles.length === 0) {
-      showToast('Please select valid video or image files');
-      e.target.value = '';
-      return;
+    let validFiles = rawFiles;
+    if (captureMode === 'photo') {
+      validFiles = rawFiles.filter(f => f.type.startsWith('image/'));
+      if (validFiles.length === 0) {
+        showToast('Photo mode: please select image files only', 'error');
+        e.target.value = '';
+        return;
+      }
+    } else if (captureMode === 'video') {
+      validFiles = rawFiles.filter(f => f.type.startsWith('video/'));
+      if (validFiles.length === 0) {
+        showToast('Video mode: please select video files only', 'error');
+        e.target.value = '';
+        return;
+      }
+    } else {
+      validFiles = rawFiles.filter(f => f.type.startsWith('video/') || f.type.startsWith('image/'));
+      if (validFiles.length === 0) {
+        showToast('Please select valid video or image files');
+        e.target.value = '';
+        return;
+      }
     }
 
     // Multi-file selection handling from gallery
@@ -4355,7 +4457,16 @@ const CreatePage = () => {
   };
 
   const triggerFilePicker = () => {
-    fileInputRef.current?.click();
+    if (fileInputRef.current) {
+      if (captureMode === 'photo') {
+        fileInputRef.current.accept = 'image/*';
+      } else if (captureMode === 'video') {
+        fileInputRef.current.accept = 'video/*';
+      } else {
+        fileInputRef.current.accept = 'video/*,image/*';
+      }
+      fileInputRef.current.click();
+    }
   };
 
 
@@ -5007,11 +5118,17 @@ const CreatePage = () => {
   );
 
   const cameraDurationModes = isPremiumUser
-    ? ['10m', '60s', '15s', 'Photo', 'Live']
-    : ['10m', '60s', '15s', 'Photo'];
+    ? ['2m', '60s', '15s', 'Photo', 'Video', 'Live']
+    : ['60s', '15s', 'Photo', 'Video'];
+
+  useEffect(() => {
+    if (!isPremiumUser && selectedDuration === '2m') {
+      setSelectedDuration('15s');
+    }
+  }, [isPremiumUser, selectedDuration]);
 
   const renderCameraHeader = () => {
-    if (recordStatus === 'recording') return null;
+    if (recordStatus === 'recording' || recordStatus === 'paused') return null;
 
     if (isLiveActive) {
       return (
@@ -5124,7 +5241,7 @@ const CreatePage = () => {
 };
 
   const renderCameraSideTools = () => {
-    if (recordStatus === 'recording') return null;
+    if (recordStatus === 'recording' || recordStatus === 'paused') return null;
 
     if (isLiveActive) {
       return (
@@ -5636,7 +5753,7 @@ const CreatePage = () => {
             const strokeDasharray = 276.46; // 2 * Math.PI * 44
             const strokeDashoffset = strokeDasharray - (strokeDasharray * progressPercent) / 100;
             const isRecording = recordStatus === 'recording';
-            const hasRecordedClips = recordedSeconds > 0 || recordStatus === 'recorded';
+            const hasRecordedClips = recordedSeconds > 0 || recordStatus === 'recorded' || recordStatus === 'paused';
 
             return (
               <>
@@ -5647,6 +5764,7 @@ const CreatePage = () => {
                       const isSelected =
                         (modeOpt === selectedDuration && captureMode === 'camera') ||
                         (modeOpt.toUpperCase() === 'PHOTO' && captureMode === 'photo') ||
+                        (modeOpt.toUpperCase() === 'VIDEO' && captureMode === 'video') ||
                         (modeOpt.toUpperCase() === 'LIVE' && captureMode === 'live') ||
                         (modeOpt.toUpperCase() === 'TEXT' && captureMode === 'text');
                       return (
@@ -5661,8 +5779,18 @@ const CreatePage = () => {
                                 return;
                               }
                               setCaptureMode('live');
+                            } else if (modeOpt === '2m') {
+                              if (!isPremiumUser) {
+                                showToast('2-minute recording is exclusive to Jhumroo Premium members! 👑', 'error');
+                                navigate('/profile/premium');
+                                return;
+                              }
+                              setCaptureMode('camera');
+                              setSelectedDuration('2m');
                             } else if (modeOpt.toUpperCase() === 'PHOTO') {
                               setCaptureMode('photo');
+                            } else if (modeOpt.toUpperCase() === 'VIDEO') {
+                              setCaptureMode('video');
                             } else if (modeOpt.toUpperCase() === 'TEXT') {
                               setCaptureMode('text');
                               setStageStack((prev) => [...prev, 'text-overlay']);
@@ -5692,8 +5820,13 @@ const CreatePage = () => {
                   {/* Timer display above shutter button when recording or clips exist */}
                   {(isRecording || hasRecordedClips) && (
                     <div className="mb-2 flex items-center justify-center">
-                      <span className="text-[12px] font-extrabold tracking-widest text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)] bg-black/45 backdrop-blur-md px-3 py-0.5 rounded-full border border-white/15">
-                        {formatElapsed(recordedSeconds)}
+                      <span className="text-[12px] font-extrabold tracking-widest text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)] bg-black/45 backdrop-blur-md px-3 py-0.5 rounded-full border border-white/15 flex items-center gap-1.5">
+                        {recordStatus === 'recording' && <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />}
+                        {recordStatus === 'paused' && <span className="w-2 h-2 rounded-full bg-amber-400" />}
+                        <span>{formatElapsed(recordedSeconds)}</span>
+                        {recordStatus === 'paused' && (
+                          <span className="text-[10px] font-bold text-amber-300 uppercase tracking-wider ml-0.5">PAUSED</span>
+                        )}
                       </span>
                     </div>
                   )}
@@ -5738,6 +5871,12 @@ const CreatePage = () => {
                       {isRecording ? (
                         <div className="w-8 h-8 rounded-md bg-[#fe2c55] shadow-lg flex items-center justify-center transition-all duration-200">
                           <span className="w-3 h-3 rounded-[2px] bg-white animate-pulse" />
+                        </div>
+                      ) : recordStatus === 'paused' ? (
+                        <div className="w-full h-full rounded-full bg-[#fe2c55] shadow-lg flex items-center justify-center transition-all duration-200">
+                          <svg width="24" height="24" viewBox="0 0 24 24" fill="white" className="ml-0.5 drop-shadow">
+                            <polygon points="7 4 19 12 7 20 7 4" />
+                          </svg>
                         </div>
                       ) : captureMode === 'live' ? (
                         <div className="w-full h-full rounded-full bg-gradient-to-tr from-[#fe2c55] to-[#ff0055] shadow-lg shadow-red-500/50 flex flex-col items-center justify-center text-white p-1">
@@ -6141,7 +6280,7 @@ const CreatePage = () => {
         </div>
 
         {/* Bottom Black Navigation Footer Bar (Outside Camera Card) */}
-        {recordStatus !== 'recorded' && recordStatus !== 'recording' && activeCameraTool !== 'filters' && !isLiveActive && (
+        {recordStatus !== 'recorded' && recordStatus !== 'recording' && recordStatus !== 'paused' && activeCameraTool !== 'filters' && !isLiveActive && (
           <div className="bg-black text-white h-20 pt-2 pb-4 w-full flex items-center justify-between px-6 z-40 shrink-0 border-t border-white/10 select-none">
             {/* Left: Gallery Thumbnail Stack Button */}
             <div className="w-12 flex items-center justify-start">
@@ -10464,13 +10603,7 @@ const CreatePage = () => {
         accept="image/*,video/*"
         onChange={handleOverlaySelect}
       />
-      <input
-        type="file"
-        ref={fileInputRef}
-        className="hidden"
-        accept="video/*,image/*"
-        onChange={handleFileChange}
-      />
+
 
       {toastMessage && (
         <div
@@ -11642,7 +11775,7 @@ const CreatePage = () => {
       <input
         ref={fileInputRef}
         type="file"
-        accept="video/*,image/*"
+        accept={captureMode === 'photo' ? 'image/*' : captureMode === 'video' ? 'video/*' : 'video/*,image/*'}
         multiple
         className="hidden"
         onChange={handleFileChange}

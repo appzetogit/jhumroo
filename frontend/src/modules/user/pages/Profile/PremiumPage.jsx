@@ -16,6 +16,16 @@ const PREMIUM_FEATURES = [
   },
   {
     icon: (
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="text-emerald-400 w-5 h-5">
+        <circle cx="12" cy="12" r="9" />
+        <polyline points="12 7 12 12 15 15" />
+      </svg>
+    ),
+    title: 'Up to 2 Min Videos',
+    desc: 'Record extended videos up to 2 minutes to showcase your creativity without time limits.'
+  },
+  {
+    icon: (
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="text-purple-400 w-5 h-5">
         <rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18" />
         <line x1="7" y1="2" x2="7" y2="22" />
