@@ -45,13 +45,21 @@ export default function FaceEffectCanvas({ mediaStream, activeEffectId, mirrored
     readyCalledRef.current = false;
 
     let lastDetectTime = 0;
+    let lastDrawTime = 0;
     let cachedLandmarks = null;
     let isDetecting = false;
 
-    // Throttle ML detection to 30fps (every 33ms) while rendering canvas at full 60fps
-    const DETECT_INTERVAL_MS = 33;
+    // Camera delivers 30fps; drawing at the display rate (60/90/120Hz) just repeats frames and
+    // starves the main thread that canvas.captureStream() records from.
+    const DRAW_INTERVAL_MS = 1000 / 30 - 4;
+    // ponytail: detection at 15Hz, cached landmarks fill the gaps; move to a Worker if low-end phones still stutter
+    const DETECT_INTERVAL_MS = 66;
 
-    const draw = () => {
+    const draw = (frameTime) => {
+      rafRef.current = requestAnimationFrame(draw);
+      if (frameTime - lastDrawTime < DRAW_INTERVAL_MS) return;
+      lastDrawTime = frameTime;
+
       if (video.readyState >= 2 && video.videoWidth && video.videoHeight) {
         if (canvas.width !== video.videoWidth) {
           canvas.width = video.videoWidth;
@@ -111,7 +119,6 @@ export default function FaceEffectCanvas({ mediaStream, activeEffectId, mirrored
           }
         }
       }
-      rafRef.current = requestAnimationFrame(draw);
     };
     rafRef.current = requestAnimationFrame(draw);
 

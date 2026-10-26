@@ -40,18 +40,23 @@ if (typeof window !== 'undefined' && !window.__mediapipe_logs_filtered) {
   };
 }
 
-const WASM_BASE = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm';
+// Keep in sync with the installed @mediapipe/tasks-vision: a JS/WASM mismatch breaks GPU init
+// and silently drops effects to the much slower CPU path.
+const WASM_BASE = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/wasm';
 const MODEL_URL = 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task';
 
 let loaderPromise = null;
 
 async function createLandmarker(delegate) {
   const vision = await FilesetResolver.forVisionTasks(WASM_BASE);
-  return FaceLandmarker.createFromOptions(vision, {
+  const landmarker = await FaceLandmarker.createFromOptions(vision, {
     baseOptions: { modelAssetPath: MODEL_URL, delegate },
     runningMode: 'VIDEO',
     numFaces: 1,
   });
+  // Shows on-device whether effects run on GPU or fell back to CPU (main cause of laggy effects)
+  console.info('[FaceFX] delegate', delegate);
+  return landmarker;
 }
 
 // Singleton loader: first caller triggers the (CDN) load, everyone else awaits the same promise.

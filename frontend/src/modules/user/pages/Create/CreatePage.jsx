@@ -535,6 +535,8 @@ const CreatePage = () => {
   const [recordedSeconds, setRecordedSeconds] = useState(() => {
     return Number(localStorage.getItem('create_recordedSeconds')) || 0;
   });
+  // Exact elapsed time while recording; state only follows whole seconds (see recording tick).
+  const recordedSecondsRef = useRef(recordedSeconds);
   const [selectedDuration, setSelectedDuration] = useState('15s');
   const [selectedSpeed, setSelectedSpeed] = useState('1x');
   const [activeCountdown, setActiveCountdown] = useState(null);
@@ -1888,10 +1890,12 @@ const CreatePage = () => {
     }
 
     const startAt = Date.now() - recordedSeconds * 1000;
+    recordedSecondsRef.current = recordedSeconds;
     const intervalId = window.setInterval(() => {
       const elapsedSeconds = Math.min(maxDuration, (Date.now() - startAt) / 1000);
 
       if (elapsedSeconds >= maxDuration) {
+        recordedSecondsRef.current = maxDuration;
         setRecordedSeconds(maxDuration);
         // Automatically stop recording and move to preview
         handleStartOrStopRecording(true);
@@ -1900,7 +1904,10 @@ const CreatePage = () => {
         return;
       }
 
-      setRecordedSeconds(elapsedSeconds);
+      // Re-render this whole page once per second, not every tick: the timer text only shows
+      // whole seconds and the ring/bar tween via CSS. Pause/finish flush the exact value.
+      recordedSecondsRef.current = elapsedSeconds;
+      setRecordedSeconds(prev => (Math.floor(prev) === Math.floor(elapsedSeconds) ? prev : elapsedSeconds));
     }, 250);
 
     return () => window.clearInterval(intervalId);
@@ -3200,6 +3207,7 @@ const CreatePage = () => {
       }
     }
 
+    setRecordedSeconds(recordedSecondsRef.current);
     setRecordStatus('paused');
     setIsTimerRecording(false);
 
@@ -3247,6 +3255,7 @@ const CreatePage = () => {
       pushStage('preview');
     }
 
+    setRecordedSeconds(recordedSecondsRef.current);
     setRecordStatus('recorded');
     setIsTimerRecording(false);
 
@@ -5202,7 +5211,7 @@ const CreatePage = () => {
         <button
           type="button"
           onClick={() => setActiveSheet('music-library')}
-          className={`bg-black/40 backdrop-blur-md border border-white/15 text-white px-3.5 py-1.5 rounded-full text-xs font-bold flex items-center gap-2 max-w-[190px] overflow-hidden shadow-lg shadow-black/30 active:scale-95 transition-transform ${
+          className={`bg-black/40 border border-white/15 text-white px-3.5 py-1.5 rounded-full text-xs font-bold flex items-center gap-2 max-w-[190px] overflow-hidden shadow-lg shadow-black/30 active:scale-95 transition-transform ${
             selectedSound?.title && !['Original sound', 'Original audio', 'Original Audio'].includes(selectedSound.title) ? 'pr-1.5' : ''
           }`}
         >
@@ -5250,7 +5259,7 @@ const CreatePage = () => {
           <button
             type="button"
             onClick={() => handleCameraToolClick('flip')}
-            className="w-10 h-10 rounded-full bg-black/45 backdrop-blur-md border border-white/15 flex items-center justify-center text-white active:scale-90 transition-transform hover:bg-white/10 shadow-lg"
+            className="w-10 h-10 rounded-full bg-black/45 border border-white/15 flex items-center justify-center text-white active:scale-90 transition-transform hover:bg-white/10 shadow-lg"
             title="Flip camera"
           >
             <IoCameraReverseOutline size={22} />
@@ -5260,7 +5269,7 @@ const CreatePage = () => {
           <button
             type="button"
             onClick={() => handleCameraToolClick('flash')}
-            className={`w-10 h-10 rounded-full bg-black/45 backdrop-blur-md border border-white/15 flex items-center justify-center text-white active:scale-90 transition-transform hover:bg-white/10 shadow-lg ${
+            className={`w-10 h-10 rounded-full bg-black/45 border border-white/15 flex items-center justify-center text-white active:scale-90 transition-transform hover:bg-white/10 shadow-lg ${
               flashMode !== 'off' ? 'text-amber-300 ring-2 ring-amber-300/50' : ''
             }`}
             title="Flash"
@@ -5279,7 +5288,7 @@ const CreatePage = () => {
                 showToast(isMicMuted ? 'Microphone unmuted' : 'Microphone muted', 'info');
               }
             }}
-            className={`w-10 h-10 rounded-full bg-black/45 backdrop-blur-md border border-white/15 flex items-center justify-center text-white active:scale-90 transition-transform hover:bg-white/10 shadow-lg ${
+            className={`w-10 h-10 rounded-full bg-black/45 border border-white/15 flex items-center justify-center text-white active:scale-90 transition-transform hover:bg-white/10 shadow-lg ${
               isMicMuted ? 'text-red-400 ring-2 ring-red-400/50' : ''
             }`}
             title="Mute mic"
@@ -5291,7 +5300,7 @@ const CreatePage = () => {
           <button
             type="button"
             onClick={() => setActiveCameraTool((prev) => (prev === 'filters' ? null : 'filters'))}
-            className={`w-10 h-10 rounded-full bg-black/45 backdrop-blur-md border border-white/15 flex items-center justify-center text-white active:scale-90 transition-transform hover:bg-white/10 shadow-lg ${
+            className={`w-10 h-10 rounded-full bg-black/45 border border-white/15 flex items-center justify-center text-white active:scale-90 transition-transform hover:bg-white/10 shadow-lg ${
               activeCameraTool === 'filters' || selectedFilter !== 'Normal' ? 'text-amber-300 ring-2 ring-amber-300/50' : ''
             }`}
             title="Filters"
@@ -5303,7 +5312,7 @@ const CreatePage = () => {
           <button
             type="button"
             onClick={() => setActiveCameraTool((prev) => (prev === 'effects' ? null : 'effects'))}
-            className={`w-10 h-10 rounded-full bg-black/45 backdrop-blur-md border border-white/15 flex items-center justify-center text-white active:scale-90 transition-transform hover:bg-white/10 shadow-lg ${
+            className={`w-10 h-10 rounded-full bg-black/45 border border-white/15 flex items-center justify-center text-white active:scale-90 transition-transform hover:bg-white/10 shadow-lg ${
               activeCameraTool === 'effects' || activeFaceEffect ? 'text-amber-300 ring-2 ring-amber-300/50' : ''
             }`}
             title="Face Effects"
@@ -5820,7 +5829,7 @@ const CreatePage = () => {
                   {/* Timer display above shutter button when recording or clips exist */}
                   {(isRecording || hasRecordedClips) && (
                     <div className="mb-2 flex items-center justify-center">
-                      <span className="text-[12px] font-extrabold tracking-widest text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)] bg-black/45 backdrop-blur-md px-3 py-0.5 rounded-full border border-white/15 flex items-center gap-1.5">
+                      <span className="text-[12px] font-extrabold tracking-widest text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)] bg-black/45 px-3 py-0.5 rounded-full border border-white/15 flex items-center gap-1.5">
                         {recordStatus === 'recording' && <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />}
                         {recordStatus === 'paused' && <span className="w-2 h-2 rounded-full bg-amber-400" />}
                         <span>{formatElapsed(recordedSeconds)}</span>
@@ -5861,7 +5870,7 @@ const CreatePage = () => {
                               strokeDasharray={strokeDasharray}
                               strokeDashoffset={strokeDashoffset}
                               strokeLinecap="round"
-                              className="transition-all duration-100 ease-linear"
+                              className="transition-all duration-1000 ease-linear"
                             />
                           )}
                         </svg>
@@ -6183,7 +6192,7 @@ const CreatePage = () => {
             <div className="absolute top-0 inset-x-0 z-30 h-1.5 bg-black/20 px-1 py-1">
               <div className="h-full bg-white/30 rounded-full overflow-hidden">
                 <div
-                  className="h-full bg-[#fe2c55] transition-all duration-75 ease-linear"
+                  className="h-full bg-[#fe2c55] transition-all duration-1000 ease-linear"
                   style={{ width: `${progressPercent}%` }}
                 />
               </div>
@@ -8757,17 +8766,9 @@ const CreatePage = () => {
                   <video
                     key={`preview-video-${currentPreviewClipIndex}-${clipSequence[currentPreviewClipIndex]?.url || 'none'}`}
                     ref={(el) => {
+                      // Seek/speed/play live in onLoadedMetadata + the preview effects - doing it here
+                      // re-ran on every render and jumped the video back to the start.
                       previewVideoRef.current = el;
-                      if (el && stage === 'preview') {
-                        const currentClip = clipSequence[currentPreviewClipIndex];
-                        const startOffset = currentClip?.startOffset || 0;
-                        const speed = currentClip?.speed || 1;
-                        if (el.currentTime !== startOffset) {
-                          el.currentTime = startOffset;
-                        }
-                        el.playbackRate = speed;
-                        el.play().catch(() => { });
-                      }
                     }}
                     src={clipSequence.length > 0 ? clipSequence[currentPreviewClipIndex]?.url : previewUrl}
                     className="h-full w-full object-cover transition-all duration-500"
@@ -8821,17 +8822,8 @@ const CreatePage = () => {
                 isVideo: previewUrl && !videoFile?.type?.startsWith('image/'),
                 mediaUrl: clipSequence.length > 0 ? clipSequence[currentPreviewClipIndex]?.url : previewUrl,
                 videoRef: (el) => {
+                  // See duet ref above: no seeking here, it ran on every render.
                   previewVideoRef.current = el;
-                  if (el && stage === 'preview') {
-                    const currentClip = clipSequence[currentPreviewClipIndex];
-                    const startOffset = currentClip?.startOffset || 0;
-                    const speed = currentClip?.speed || 1;
-                    if (el.currentTime !== startOffset) {
-                      el.currentTime = startOffset;
-                    }
-                    el.playbackRate = speed;
-                    el.play().catch(() => { });
-                  }
                 },
                 videoProps: {
                   key: `preview-video-${currentPreviewClipIndex}-${clipSequence[currentPreviewClipIndex]?.url || 'none'}`,
