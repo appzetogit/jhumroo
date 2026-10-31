@@ -17,7 +17,8 @@ import {
   BiFile,
   BiLineChart,
   BiCreditCard,
-  BiCrown
+  BiCrown,
+  BiLink
 } from 'react-icons/bi';
 import AdminDashboard from './pages/AdminDashboard';
 import AdminUsers from './pages/AdminUsers';
@@ -38,6 +39,7 @@ import AdminAnalytics from './pages/AdminAnalytics';
 import AdminAdsPaymentSetup from './pages/AdminAdsPaymentSetup';
 import AdminAdsPaymentRecords from './pages/AdminAdsPaymentRecords';
 import AdminPremiumUsers from './pages/AdminPremiumUsers';
+import AdminAppLinks from './pages/AdminAppLinks';
 import { useAdminConfig } from '../../context/AdminConfigContext';
 import { useNavigate } from 'react-router-dom';
 import adminAuthService from '../../services/adminAuthService';
@@ -83,6 +85,7 @@ const NAV_ITEMS = [
   { id: 'ads-payment-setup', label: 'Ads Payment Setup', icon: BiCreditCard, path: '/admin/ads-payment-setup' },
   { id: 'ads-payment-records', label: 'Ads Payment Record', icon: BiCreditCard, path: '/admin/ads-payment-records' },
   { id: 'premium-users', label: 'Premium Users', icon: BiCrown, path: '/admin/premium-users' },
+  { id: 'app-links', label: 'App Links', icon: BiLink, path: '/admin/app-links' },
 ];
 
 const AdminLayout = () => {
@@ -194,6 +197,7 @@ const AdminLayout = () => {
             <Route path="ads-payment-setup" element={<AdminAdsPaymentSetup />} />
             <Route path="ads-payment-records" element={<AdminAdsPaymentRecords />} />
             <Route path="premium-users" element={<AdminPremiumUsers />} />
+            <Route path="app-links" element={<AdminAppLinks />} />
             <Route path="profile" element={<AdminProfile />} />
           </Routes>
         </main>

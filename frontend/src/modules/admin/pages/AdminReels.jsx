@@ -33,6 +33,8 @@ const AdminReels = () => {
   const [comments, setComments] = useState([]);
   const [commentsLoading, setCommentsLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   // Geo-targeting state
   const [showTargetingModal, setShowTargetingModal] = useState(false);
@@ -61,6 +63,7 @@ const AdminReels = () => {
 
   const fetchReels = async () => {
     setLoading(true);
+    setSelectedIds([]);
     try {
       const response = await adminContentService.getAllReels({ page, limit: 10 });
       if (response.success) {
@@ -98,6 +101,23 @@ const AdminReels = () => {
         alert('Error deleting reel');
       }
     }
+  };
+
+  const toggleSelect = (reelId) => {
+    setSelectedIds((prev) => prev.includes(reelId) ? prev.filter((id) => id !== reelId) : [...prev, reelId]);
+  };
+
+  const allSelected = reels.length > 0 && selectedIds.length === reels.length;
+
+  const handleBulkDelete = async () => {
+    if (!window.confirm(`Are you sure you want to delete ${selectedIds.length} selected reel(s)?`)) return;
+    setBulkDeleting(true);
+    // ponytail: one DELETE per reel (max 10 per page), add a bulk endpoint if page size grows
+    const results = await Promise.allSettled(selectedIds.map((id) => adminContentService.deleteReel(id)));
+    const failed = results.filter((r) => r.status === 'rejected').length;
+    setBulkDeleting(false);
+    alert(failed ? `${selectedIds.length - failed} deleted, ${failed} failed` : `${selectedIds.length} reel(s) deleted successfully`);
+    fetchReels();
   };
 
   const handleSyncDurations = async () => {
@@ -206,7 +226,18 @@ const AdminReels = () => {
           <p className="admin-page-subtitle">Manage all video content, monitor engagement, and moderate reels.</p>
         </div>
         <div className="flex gap-3">
-          <button 
+          {selectedIds.length > 0 && (
+            <button
+              className="admin-secondary-btn flex items-center gap-2"
+              onClick={handleBulkDelete}
+              disabled={bulkDeleting}
+              style={{ borderColor: '#fe2c55', color: '#fe2c55' }}
+            >
+              <BiTrash />
+              {bulkDeleting ? 'Deleting...' : `Delete Selected (${selectedIds.length})`}
+            </button>
+          )}
+          <button
             className="admin-secondary-btn flex items-center gap-2"
             onClick={handleSyncDurations}
             disabled={syncing || loading}
@@ -252,7 +283,16 @@ const AdminReels = () => {
         ) : (
           <div className="admin-table">
             <div className="admin-table-head admin-table-head--reels">
-              <span>Reel</span>
+              <span className="flex items-center gap-3">
+                <input
+                  type="checkbox"
+                  className="w-4 h-4 cursor-pointer accent-[#FE2C55]"
+                  checked={allSelected}
+                  onChange={() => setSelectedIds(allSelected ? [] : reels.map((r) => r._id))}
+                  aria-label="Select all reels"
+                />
+                Reel
+              </span>
               <span>Creator</span>
               <span>Engagement</span>
               <span>Duration</span>
@@ -268,7 +308,14 @@ const AdminReels = () => {
                 <div key={reel._id} className="admin-table-row admin-table-row--reels">
                   {/* Reel Preview */}
                   <div className="flex items-center gap-3">
-                    <div 
+                    <input
+                      type="checkbox"
+                      className="w-4 h-4 shrink-0 cursor-pointer accent-[#FE2C55]"
+                      checked={selectedIds.includes(reel._id)}
+                      onChange={() => toggleSelect(reel._id)}
+                      aria-label="Select reel"
+                    />
+                    <div
                       className="w-12 h-20 rounded-lg bg-black overflow-hidden relative cursor-pointer group"
                       onClick={() => {
                         setSelectedReel(reel);

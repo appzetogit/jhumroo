@@ -12,7 +12,7 @@ export const HASHTAG_CATEGORY_MAP = {
   'otaku': 'entertainment',
   'movie': 'entertainment',
   'netflix': 'entertainment',
-  
+
   // Fitness & Health
   'fitness': 'fitness',
   'gym': 'fitness',
@@ -20,7 +20,7 @@ export const HASHTAG_CATEGORY_MAP = {
   'health': 'fitness',
   'yoga': 'fitness',
   'bodybuilding': 'fitness',
-  
+
   // Technology
   'tech': 'technology',
   'coding': 'technology',
@@ -29,28 +29,28 @@ export const HASHTAG_CATEGORY_MAP = {
   'apple': 'technology',
   'iphone': 'technology',
   'ai': 'technology',
-  
+
   // Automotive
   'cars': 'automotive',
   'supercars': 'automotive',
   'racing': 'automotive',
   'bikes': 'automotive',
   'luxurycars': 'automotive',
-  
+
   // Fashion & Beauty
   'fashion': 'fashion',
   'style': 'fashion',
   'makeup': 'fashion',
   'beauty': 'fashion',
   'outfit': 'fashion',
-  
-  // Food
-  'food': 'food',
-  'cooking': 'food',
-  'recipe': 'food',
-  'yummy': 'food',
-  'streetfood': 'food',
-  
+
+  // 
+  '': '',
+  'cooking': '',
+  'recipe': '',
+  'yummy': '',
+  'street': '',
+
   // Travel
   'travel': 'travel',
   'nature': 'travel',
@@ -66,7 +66,7 @@ export const HASHTAG_CATEGORY_MAP = {
  */
 export const getCategoriesFromHashtags = (hashtags) => {
   if (!hashtags || !Array.isArray(hashtags)) return ['general'];
-  
+
   const categories = new Set();
   hashtags.forEach(tag => {
     const normalizedTag = tag.toLowerCase().replace('#', '');
@@ -74,7 +74,7 @@ export const getCategoriesFromHashtags = (hashtags) => {
       categories.add(HASHTAG_CATEGORY_MAP[normalizedTag]);
     }
   });
-  
+
   return categories.size > 0 ? Array.from(categories) : ['general'];
 };
 
@@ -90,7 +90,7 @@ export const SIGNAL_WEIGHTS = {
   SHARE: 30,
   SAVE: 35,
   FOLLOW: 50,
-  
+
   // Negative signals
   INSTANT_SKIP: -20, // Watched < 2 seconds
   QUICK_SWIPE: -10, // Watched < 25%

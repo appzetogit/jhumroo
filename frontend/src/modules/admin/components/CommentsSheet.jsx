@@ -10,11 +10,11 @@ import {
   BiBlock,
   BiTrash
 } from 'react-icons/bi';
-import { useTheme } from '../../../../context/ThemeContext';
-import { useAppContent } from '../../../../hooks/useAppContent';
-import { useAuth } from '../../../../context/AuthContext';
-import reelService from '../../../../services/reelService';
-import userService from '../../../../services/userService';
+import { useTheme } from '../../../context/ThemeContext';
+import { useAppContent } from '../../../hooks/useAppContent';
+import { useAuth } from '../../../context/AuthContext';
+import reelService from '../../../services/reelService';
+import userService from '../../../services/userService';
 
 const CommentsSheet = ({ isOpen, onClose, commentCount = 0, reelId, reelOwnerId, onCommentAdded }) => {
   const { isDarkMode } = useTheme();

@@ -21,7 +21,7 @@ import {
   BiEditAlt
 } from 'react-icons/bi';
 import adService from '../../../services/adService';
-import CommentsSheet from '../../user/components/modals/CommentsSheet';
+import CommentsSheet from '../components/CommentsSheet';
 
 const AdminAds = () => {
   const navigate = useNavigate();

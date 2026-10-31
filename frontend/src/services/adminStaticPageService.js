@@ -27,7 +27,20 @@ const adminStaticPageService = {
     } catch (error) {
       throw error;
     }
-  }
+  },
+
+  /**
+   * Get app links (public)
+   * @returns {Promise} Response with { links: { playStoreUrl, appStoreUrl } }
+   */
+  getAppLinks: () => api.get('/static-pages/app-links'),
+
+  /**
+   * Update app links
+   * @param {Object} links - { playStoreUrl, appStoreUrl }
+   * @returns {Promise} Response
+   */
+  updateAppLinks: (links) => api.post('/admin/static-pages/app-links', links)
 };
 
 export default adminStaticPageService;

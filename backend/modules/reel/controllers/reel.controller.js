@@ -921,12 +921,10 @@ export const submitReelAnalytics = asyncHandler(async (req, res) => {
     return res.status(404).json({ success: false, message: 'Reel not found' });
   }
 
-  // Record aggregate stats
+  // Record aggregate stats. Views are counted only by addView (once per user); this runs on every
+  // pause / swipe / loop, so counting here made each re-watch add a view.
   await Reel.findByIdAndUpdate(reelId, {
-    $inc: { 
-      'stats.totalWatchTime': watchDuration || 0,
-      'stats.viewsCount': (watchDuration > 1) ? 1 : 0 
-    }
+    $inc: { 'stats.totalWatchTime': watchDuration || 0 }
   });
 
   // Record detailed analytics if user is logged in
@@ -1361,14 +1359,29 @@ export const addView = asyncHandler(async (req, res) => {
   const { id: reelId } = req.params;
   const userId = req.user?._id;
 
-  const reel = await Reel.findById(reelId);
-  if (!reel) {
-    return res.status(404).json({ success: false, message: 'Reel not found' });
+  // An expired/invalid token must not fall through to the guest branch (that counts every view):
+  // 401 makes the client refresh its token and retry as the user.
+  if (!userId && req.headers.authorization?.startsWith('Bearer')) {
+    return res.status(401).json({ success: false, message: 'Not authorized, token failed' });
   }
 
   // ─── Unique View Logic ───
   // If user is logged in, record WatchAnalytics and unique view
   if (userId) {
+    // Count only if this user isn't in views yet — one atomic update, so parallel requests can't double count.
+    const counted = await Reel.findOneAndUpdate(
+      { _id: reelId, 'views.user': { $ne: userId } },
+      {
+        $inc: { 'stats.viewsCount': 1 },
+        $push: { views: { user: userId, viewedAt: new Date() } }
+      },
+      { new: true, projection: { 'stats.viewsCount': 1 } }
+    );
+    const reel = counted || await Reel.findById(reelId).select('stats.viewsCount');
+    if (!reel) {
+      return res.status(404).json({ success: false, message: 'Reel not found' });
+    }
+
     // Asynchronously record watch analytics for watch history tracking
     WatchAnalytics.create({
       user: userId,
@@ -1378,32 +1391,11 @@ export const addView = asyncHandler(async (req, res) => {
       isFullWatch: false
     }).catch(() => {});
 
-    const hasViewed = reel.views.some(v => v.user && v.user.toString() === userId.toString());
-    
-    if (!hasViewed) {
-      // First time viewing: increment count and add to tracking array
-      const updatedReel = await Reel.findByIdAndUpdate(
-        reelId,
-        { 
-          $inc: { 'stats.viewsCount': 1 },
-          $push: { views: { user: userId, viewedAt: new Date() } }
-        },
-        { new: true }
-      );
-
-      return res.status(200).json({
-        success: true,
-        isNewView: true,
-        viewsCount: updatedReel.stats.viewsCount
-      });
-    } else {
-      // Already viewed: just return current count without incrementing
-      return res.status(200).json({
-        success: true,
-        isNewView: false,
-        viewsCount: reel.stats.viewsCount
-      });
-    }
+    return res.status(200).json({
+      success: true,
+      isNewView: !!counted,
+      viewsCount: reel.stats.viewsCount
+    });
   } else {
     // Guest user: Simple increment (or you could track by IP/Fingerprint if needed)
     // For now, let's keep it simple for guests
@@ -1412,6 +1404,9 @@ export const addView = asyncHandler(async (req, res) => {
       { $inc: { 'stats.viewsCount': 1 } },
       { new: true }
     );
+    if (!updatedReel) {
+      return res.status(404).json({ success: false, message: 'Reel not found' });
+    }
 
     return res.status(200).json({
       success: true,

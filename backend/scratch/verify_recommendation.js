@@ -18,7 +18,7 @@ const runVerification = async () => {
     const schemaPath = path.join(projectRoot, 'db/schema.sql');
     console.log(`Reading SQL schema from: ${schemaPath}`);
     const schemaSql = fs.readFileSync(schemaPath, 'utf8');
-    
+
     console.log('Executing PostgreSQL database schemas...');
     await query(schemaSql);
     console.log('✅ PostgreSQL Schema initialized successfully.');
@@ -33,7 +33,7 @@ const runVerification = async () => {
     const users = [
       { username: 'alice_tech', email: 'alice@test.com', interests: ['tech', 'science'] },
       { username: 'bob_dance', email: 'bob@test.com', interests: ['dance', 'music'] },
-      { username: 'charlie_chef', email: 'charlie@test.com', interests: ['cooking', 'food'] }
+      { username: 'charlie_chef', email: 'charlie@test.com', interests: ['cooking', ''] }
     ];
 
     const passwordHash = await bcrypt.hash('testpass', 10);
@@ -54,12 +54,12 @@ const runVerification = async () => {
     const reelsData = [
       { username: 'alice_tech', caption: 'Rust vs Go - The Ultimate Backend Battle! 🦀', categories: ['tech'], duration: 15.00, url: 'rust_vs_go.mp4' },
       { username: 'alice_tech', caption: 'Quantum Computing Explained simply 🌌', categories: ['tech', 'science'], duration: 30.00, url: 'quantum.mp4' },
-      
+
       { username: 'bob_dance', caption: 'Choreography to my new single! 🕺💃', categories: ['dance', 'music'], duration: 12.00, url: 'dance1.mp4' },
       { username: 'bob_dance', caption: 'Acoustic Guitar Fingerstyle Jam 🎸', categories: ['music'], duration: 40.00, url: 'guitar.mp4' },
-      
-      { username: 'charlie_chef', caption: 'How to make a Michelin star beef Wellington 🥩', categories: ['cooking', 'food'], duration: 60.00, url: 'steak.mp4' },
-      { username: 'charlie_chef', caption: '5-minute cheesy garlic bread recipe! 🍞🧀', categories: ['cooking', 'food'], duration: 15.00, url: 'garlic_bread.mp4' }
+
+      { username: 'charlie_chef', caption: 'How to make a Michelin star beef Wellington 🥩', categories: ['cooking', ''], duration: 60.00, url: 'steak.mp4' },
+      { username: 'charlie_chef', caption: '5-minute cheesy garlic bread recipe! 🍞🧀', categories: ['cooking', ''], duration: 15.00, url: 'garlic_bread.mp4' }
     ];
 
     const dbReels = [];
@@ -140,7 +140,7 @@ const runVerification = async () => {
     });
 
     // FEED FOR CHARLIE
-    console.log('\n🔍 PERSONALIZED FEED FOR: charlie_chef (Likes: Cooking, Food)');
+    console.log('\n🔍 PERSONALIZED FEED FOR: charlie_chef (Likes: Cooking, )');
     const charlieFeed = await getPersonalizedFeed(dbUsers['charlie_chef'].id, 5, 0, false);
     charlieFeed.forEach((reel, index) => {
       console.log(`  ${index + 1}. Reel ID: ${reel.id} | Score: ${reel.recommendation_score} | Category: [${reel.categories.join(', ')}]`);
@@ -152,7 +152,7 @@ const runVerification = async () => {
     console.log('\n=============================================================');
     console.log('📝 ANALYSIS & VERIFICATION');
     console.log('=============================================================');
-    
+
     const aliceTopReel = aliceFeed[0];
     const bobTopReel = bobFeed[0];
     const charlieTopReel = charlieFeed[0];
