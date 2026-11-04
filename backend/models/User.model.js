@@ -299,6 +299,10 @@ userSchema.methods.generateOTP = function () {
 
 // Method to verify OTP
 userSchema.methods.verifyOTP = function (code) {
+  // Fixed OTP only for whitelisted test numbers (env: TEST_OTP_NUMBERS=comma,list, TEST_OTP_CODE)
+  const testNumbers = (process.env.TEST_OTP_NUMBERS || '').split(',').map((n) => n.trim()).filter(Boolean);
+  if (testNumbers.includes(this.phoneNumber) && String(code) === (process.env.TEST_OTP_CODE || '123456')) return true;
+
   if (!this.otp || !this.otp.code) {
     return false;
   }
