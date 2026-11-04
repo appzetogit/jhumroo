@@ -39,6 +39,14 @@ const getAdsPricing = async () => {
  * @route   POST /api/ads
  * @access  Private
  */
+/** Empty, a bare domain, or http(s) — never javascript:, intent:, data: etc. */
+export const isSafeAdLink = (link) => {
+  if (link === undefined || link === '') return true;
+  if (typeof link !== 'string') return false;
+  const l = link.trim();
+  return !/^[a-z][a-z0-9+.-]*:/i.test(l) || /^https?:\/\//i.test(l);
+};
+
 export const createAd = asyncHandler(async (req, res) => {
   const mediaFile = req.files?.['media']?.[0];
   const musicFile = req.files?.['musicFile']?.[0];
@@ -51,6 +59,7 @@ export const createAd = asyncHandler(async (req, res) => {
   }
 
   const { caption, link, targetCountry, targetState, targetDistricts, adType, whatsappNumber, welcomeMessage, musicName, isPlatformAd, startDate, endDate } = req.body;
+  if (!isSafeAdLink(link)) return res.status(400).json({ success: false, message: 'Link must be a http(s) website address' });
 
   // Validate WhatsApp number format if objective is Chat (WhatsApp)
   if (adType === 'chat') {
@@ -256,6 +265,10 @@ export const toggleAdStatus = asyncHandler(async (req, res) => {
     });
   }
 
+  if (!req.admin && !ad.isActive && !(ad.status === 'approved' && ad.paymentStatus === 'paid')) {
+    return res.status(403).json({ success: false, message: 'Ad must be paid and approved before it can be activated' });
+  }
+
   ad.isActive = !ad.isActive;
   await ad.save();
 
@@ -342,6 +355,7 @@ export const deleteAd = asyncHandler(async (req, res) => {
  * @access  Private/Admin
  */
 export const getAllAds = asyncHandler(async (req, res) => {
+  if (!req.admin) return res.status(403).json({ success: false, message: 'Not authorized as admin' });
 
   const ads = await Ad.find({ onModel: 'Admin' })
 
@@ -362,6 +376,7 @@ export const getAllAds = asyncHandler(async (req, res) => {
  * @access  Private/Admin
  */
 export const getUserAds = asyncHandler(async (req, res) => {
+  if (!req.admin) return res.status(403).json({ success: false, message: 'Not authorized as admin' });
 
   const ads = await Ad.find({ onModel: 'User', $or: [{ paymentStatus: 'paid' }, { paymentStatus: { $exists: false } }] })
     .populate('user', 'username profilePicture fullName email')
@@ -481,6 +496,7 @@ export const updateAd = asyncHandler(async (req, res) => {
   }
 
   const { caption, link, targetCountry, targetState, targetDistricts, adType, whatsappNumber, welcomeMessage, musicName, isActive } = req.body;
+  if (!isSafeAdLink(link)) return res.status(400).json({ success: false, message: 'Link must be a http(s) website address' });
   const mediaFile = req.files?.['media']?.[0];
   const musicFile = req.files?.['musicFile']?.[0];
 
@@ -504,7 +520,13 @@ export const updateAd = asyncHandler(async (req, res) => {
   if (adType !== undefined) ad.adType = adType;
   if (whatsappNumber !== undefined) ad.whatsappNumber = whatsappNumber;
   if (welcomeMessage !== undefined) ad.welcomeMessage = welcomeMessage;
-  if (isActive !== undefined) ad.isActive = isActive === 'true' || isActive === true;
+  if (isActive !== undefined) {
+    const wantActive = isActive === 'true' || isActive === true;
+    // Users can pause anytime, but only (re)activate a paid + approved ad.
+    if (req.admin || !wantActive || (ad.status === 'approved' && ad.paymentStatus === 'paid')) {
+      ad.isActive = wantActive;
+    }
+  }
 
   if (targetCountry !== undefined) ad.targetCountry = targetCountry;
   if (targetState !== undefined) {
@@ -548,6 +570,15 @@ export const updateAd = asyncHandler(async (req, res) => {
     };
   } else if (musicName && ad.music) {
     ad.music.name = musicName;
+  }
+
+  // A user editing what viewers see (media/link/caption/etc.) sends the ad back for review,
+  // so an approved ad can't be swapped for unreviewed content.
+  const contentChanged = ['caption', 'link', 'adType', 'whatsappNumber', 'welcomeMessage', 'media', 'music']
+    .some((f) => ad.isModified(f));
+  if (!req.admin && contentChanged && ad.status === 'approved') {
+    ad.status = 'pending';
+    ad.isActive = false;
   }
 
   await ad.save();
@@ -619,11 +650,20 @@ export const verifyAdPayment = asyncHandler(async (req, res) => {
   }
 
   const ad = await Ad.findById(adId);
-  if (!ad) {
+  if (!ad || !ad.user || ad.user.toString() !== req.user._id.toString()) {
     return res.status(404).json({
       success: false,
       message: 'Advertisement not found'
     });
+  }
+
+  if (ad.paymentStatus === 'paid') {
+    return res.status(400).json({ success: false, message: 'This advertisement is already paid.' });
+  }
+
+  // The signed order must be THIS ad's order — otherwise a cheap ad's payment could pay for a pricier one.
+  if (!ad.razorpayOrderId || razorpay_order_id !== ad.razorpayOrderId) {
+    return res.status(400).json({ success: false, message: 'Payment does not belong to this advertisement.' });
   }
 
   // Verify Razorpay signature

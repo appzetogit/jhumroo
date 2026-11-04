@@ -49,6 +49,7 @@ const conversationSchema = new mongoose.Schema(
 
 // Compound index to ensure unique conversations between two users
 conversationSchema.index({ participants: 1 });
+conversationSchema.index({ participants: 1, 'lastMessage.timestamp': -1 });
 
 // Helper method to get unread count for a user
 conversationSchema.methods.getUnreadCount = function(userId) {

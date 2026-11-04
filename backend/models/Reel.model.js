@@ -185,17 +185,7 @@ const reelSchema = new mongoose.Schema(
         min: 0
       }
     },
-    // Engagement tracking
-    views: [{
-      user: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'User'
-      },
-      viewedAt: {
-        type: Date,
-        default: Date.now
-      }
-    }],
+    // Per-user views live in the ReelView collection (see scripts/migrate_reel_views.js).
     // Status
     isActive: {
       type: Boolean,
@@ -344,6 +334,10 @@ reelSchema.index({ hashtags: 1 });
 reelSchema.index({ 'stats.likesCount': -1 });
 reelSchema.index({ 'stats.viewsCount': -1 });
 reelSchema.index({ createdAt: -1 });
+// Feed / profile / hashtag hot-path filters
+reelSchema.index({ isActive: 1, status: 1, audience: 1, createdAt: -1 });
+reelSchema.index({ user: 1, isActive: 1, status: 1, createdAt: -1 });
+reelSchema.index({ hashtags: 1, isActive: 1, status: 1 });
 
 // Virtual populate for likes
 reelSchema.virtual('likes', {

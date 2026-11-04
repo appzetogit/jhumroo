@@ -34,6 +34,14 @@ export const sendOTP = asyncHandler(async (req, res) => {
     });
   }
 
+  // Per-number cooldown: one OTP per 30s, whatever IP asks (stops SMS-bombing a victim).
+  if (user.otp?.expiresAt) {
+    const issuedAt = user.otp.expiresAt.getTime() - parseInt(process.env.OTP_EXPIRY_MINUTES || 10) * 60 * 1000;
+    if (Date.now() - issuedAt < 30 * 1000) {
+      return res.status(429).json({ success: false, message: 'Please wait 30 seconds before requesting another OTP' });
+    }
+  }
+
   // Generate OTP
   const otp = user.generateOTP();
   await user.save({ validateBeforeSave: false });
@@ -79,6 +87,7 @@ export const verifyOTP = asyncHandler(async (req, res) => {
 
   // Verify OTP
   if (!user.verifyOTP(otp)) {
+    await user.save({ validateBeforeSave: false }); // persist the failed-attempt count
     return res.status(400).json({
       success: false,
       message: 'Invalid or expired OTP'

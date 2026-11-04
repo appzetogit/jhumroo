@@ -4,6 +4,7 @@ import User from '../../../models/User.model.js';
 import { asyncHandler } from '../../../middleware/errorHandler.js';
 import { uploadToS3 } from '../../../utils/s3.js';
 import fs from 'fs';
+import { escapeRegex } from '../../../utils/regex.js';
 
 /**
  * @desc    Get all active audios
@@ -19,7 +20,7 @@ export const getAudios = asyncHandler(async (req, res) => {
   }
 
   if (q) {
-    query.title = { $regex: q, $options: 'i' };
+    query.title = { $regex: escapeRegex(q), $options: 'i' };
   }
 
   const audios = await Audio.aggregate([

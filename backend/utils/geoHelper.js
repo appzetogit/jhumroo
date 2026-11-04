@@ -5,9 +5,18 @@ import SystemSetting from '../models/SystemSetting.model.js';
  * @param {Object} req - Express request object containing req.user
  * @returns {Boolean} - True if allowed, false otherwise
  */
+// ponytail: per-process 60s cache; admin changes take up to 60s to apply.
+let cached = { at: 0, setting: null };
+const getTargeting = async () => {
+  if (Date.now() - cached.at > 60_000) {
+    cached = { at: Date.now(), setting: await SystemSetting.findOne({ key: 'global_reels_targeting' }).lean() };
+  }
+  return cached.setting;
+};
+
 export const isUserAllowedToViewReels = async (req) => {
   try {
-    const setting = await SystemSetting.findOne({ key: 'global_reels_targeting' });
+    const setting = await getTargeting();
     if (!setting || !setting.value || setting.value.length === 0) {
       return true; // No global rules, everyone is allowed!
     }

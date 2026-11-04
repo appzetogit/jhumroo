@@ -3,6 +3,19 @@ import User from '../models/User.model.js';
 import Admin from '../models/Admin.model.js';
 
 /**
+ * Verify a Bearer token as an ACCESS token. Refresh tokens share the signing secret, so they
+ * are rejected by their `type` claim, and legacy ones (no claim) by lifetime: access tokens
+ * live <= 24h, refresh tokens 7-30 days. Throws like jwt.verify on failure.
+ */
+export const verifyAccessToken = (token) => {
+  const decoded = jwt.verify(token, process.env.JWT_SECRET);
+  if (decoded.type === 'refresh' || (decoded.exp - decoded.iat) > 2 * 24 * 60 * 60) {
+    throw new Error('Refresh token cannot be used as an access token');
+  }
+  return decoded;
+};
+
+/**
  * Protect routes - verify JWT token
  */
 export const protect = async (req, res, next) => {
@@ -23,7 +36,7 @@ export const protect = async (req, res, next) => {
 
     try {
       // Verify token
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      const decoded = verifyAccessToken(token);
 
       // Prioritize Admin check if token claims admin status
       if (decoded.isAdmin) {
@@ -70,8 +83,7 @@ export const protect = async (req, res, next) => {
       console.error('JWT Verification failed:', error.message);
       return res.status(401).json({
         success: false,
-        message: 'Not authorized, token failed',
-        error: error.message
+        message: 'Not authorized, token failed'
       });
     }
   } catch (error) {
@@ -92,8 +104,10 @@ export const optionalAuth = async (req, res, next) => {
 
     if (token) {
       try {
-        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        const decoded = verifyAccessToken(token);
         req.user = await User.findById(decoded.id).select('-otp -deviceTokens');
+        // Banned/deactivated accounts browse as guests
+        if (req.user && (!req.user.isActive || req.user.isBanned)) req.user = null;
       } catch (error) {
         // Token invalid, but continue without user
         req.user = null;
@@ -119,7 +133,7 @@ export const generateToken = (id) => {
  * Generate Refresh JWT token
  */
 export const generateRefreshToken = (id) => {
-  return jwt.sign({ id }, process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET, {
+  return jwt.sign({ id, type: 'refresh' }, process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET, {
     expiresIn: process.env.JWT_REFRESH_EXPIRY || '7d'
   });
 };

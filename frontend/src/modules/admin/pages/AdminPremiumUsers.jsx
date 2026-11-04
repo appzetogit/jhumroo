@@ -15,8 +15,15 @@ import {
 } from 'react-icons/bi';
 import premiumService from '../../../services/premiumService';
 
+// Matches PREMIUM_PLANS in backend premium.controller.js.
+const PLAN_FIELDS = [
+  { key: 'weeklyPrice', label: '1 Week', days: 7, unit: '/ week', tone: 'tone-blue' },
+  { key: 'monthlyPrice', label: '1 Month', days: 30, unit: '/ month', tone: 'tone-amber', popular: true },
+  { key: 'halfYearlyPrice', label: '6 Months', days: 180, unit: '/ 6 months', tone: 'tone-pink' }
+];
+
 const AdminPremiumUsers = () => {
-  const [monthlyPrice, setMonthlyPrice] = useState('');
+  const [prices, setPrices] = useState({ weeklyPrice: '', monthlyPrice: '', halfYearlyPrice: '' });
   const [savingPrice, setSavingPrice] = useState(false);
   const [priceMessage, setPriceMessage] = useState({ text: '', type: '' });
   const [selectedSubForDelete, setSelectedSubForDelete] = useState(null);
@@ -44,7 +51,11 @@ const AdminPremiumUsers = () => {
     try {
       const res = await premiumService.getPricingAdmin();
       if (res.success && res.pricing) {
-        setMonthlyPrice(res.pricing.monthlyPrice);
+        setPrices({
+          weeklyPrice: res.pricing.weeklyPrice ?? '',
+          monthlyPrice: res.pricing.monthlyPrice ?? '',
+          halfYearlyPrice: res.pricing.halfYearlyPrice ?? ''
+        });
       }
     } catch (err) {
       console.error('Error fetching premium pricing:', err);
@@ -76,19 +87,27 @@ const AdminPremiumUsers = () => {
     setSavingPrice(true);
     setPriceMessage({ text: '', type: '' });
 
-    const num = parseFloat(monthlyPrice);
-    if (isNaN(num) || num <= 0) {
-      setPriceMessage({ text: 'Please enter a valid positive price in INR.', type: 'error' });
-      setSavingPrice(false);
-      return;
+    const body = {};
+    for (const f of PLAN_FIELDS) {
+      const num = parseFloat(prices[f.key]);
+      if (isNaN(num) || num <= 0) {
+        setPriceMessage({ text: `Please enter a valid positive ${f.label} price in INR.`, type: 'error' });
+        setSavingPrice(false);
+        return;
+      }
+      body[f.key] = num;
     }
 
     try {
-      const res = await premiumService.updatePricingAdmin({ monthlyPrice: num });
+      const res = await premiumService.updatePricingAdmin(body);
       if (res.success) {
-        setPriceMessage({ text: 'Premium monthly price updated successfully!', type: 'success' });
-        if (res.pricing?.monthlyPrice) {
-          setMonthlyPrice(res.pricing.monthlyPrice);
+        setPriceMessage({ text: 'Premium plan prices updated successfully!', type: 'success' });
+        if (res.pricing) {
+          setPrices({
+            weeklyPrice: res.pricing.weeklyPrice,
+            monthlyPrice: res.pricing.monthlyPrice,
+            halfYearlyPrice: res.pricing.halfYearlyPrice
+          });
         }
       }
     } catch (err) {
@@ -143,7 +162,7 @@ const AdminPremiumUsers = () => {
               <BiCrown size={18} /> ELITE
             </span>
           </div>
-          <p>Configure subscription pricing per month and view all active and historical premium users.</p>
+          <p>Configure pricing for the 1 week, 1 month and 6 month plans and view all premium users.</p>
         </div>
         <button 
           className="admin-secondary-btn" 
@@ -164,52 +183,60 @@ const AdminPremiumUsers = () => {
       {/* Top Grid: Pricing Config Card + Quick Stats */}
       <div className="premium-top-grid">
         {/* Price Configuration Form */}
-        <div className="admin-card premium-price-card">
-          <div className="card-header-styled">
-            <div className="card-header-icon">
-              <BiMoney size={18} />
+        <form onSubmit={handleSavePrice} className="admin-card premium-price-card">
+          <div className="price-card-head">
+            <div className="card-header-styled">
+              <div className="card-header-icon">
+                <BiMoney size={18} />
+              </div>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '14px', fontWeight: 700 }}>Subscription Plans</h3>
+                <p style={{ margin: '1px 0 0 0', fontSize: '12px', color: 'var(--admin-muted)' }}>
+                  Set the price users pay for each plan.
+                </p>
+              </div>
             </div>
-            <div>
-              <h3 style={{ margin: 0, fontSize: '14px', fontWeight: 700 }}>Monthly Subscription Price</h3>
-              <p style={{ margin: '1px 0 0 0', fontSize: '12px', color: 'var(--admin-muted)' }}>
-                Set the price charged to users per month (30 days validity).
-              </p>
-            </div>
+            <button type="submit" className="admin-primary-btn save-price-btn" disabled={savingPrice}>
+              <BiSave size={16} />
+              <span>{savingPrice ? 'Saving...' : 'Update Prices'}</span>
+            </button>
           </div>
 
-          <form onSubmit={handleSavePrice} className="price-form-inline">
-            <div className="price-input-group">
-              <span className="currency-prefix">₹</span>
-              <input
-                type="number"
-                min="1"
-                step="1"
-                value={monthlyPrice}
-                onChange={(e) => setMonthlyPrice(e.target.value)}
-                placeholder="199"
-                required
-                className="admin-input price-input"
-              />
-              <span className="per-month-tag">/ month</span>
-            </div>
-
-            <button 
-              type="submit" 
-              className="admin-primary-btn save-price-btn" 
-              disabled={savingPrice}
-            >
-              <BiSave size={16} />
-              <span>{savingPrice ? 'Saving...' : 'Update Price'}</span>
-            </button>
-          </form>
+          <div className="plan-price-grid">
+            {PLAN_FIELDS.map((f) => (
+              <label key={f.key} className={`plan-price-tile ${f.tone}`}>
+                <div className="plan-tile-top">
+                  <span className="plan-tile-name">{f.label}</span>
+                  {f.popular && <span className="plan-tile-badge">POPULAR</span>}
+                </div>
+                <span className="plan-tile-days">{f.days} days validity</span>
+                <div className="price-input-group">
+                  <span className="currency-prefix">₹</span>
+                  <input
+                    type="number"
+                    min="1"
+                    step="1"
+                    value={prices[f.key]}
+                    onChange={(e) => setPrices((p) => ({ ...p, [f.key]: e.target.value }))}
+                    required
+                    className="admin-input price-input"
+                  />
+                  <span className="per-month-tag">{f.unit}</span>
+                </div>
+                <span className="plan-tile-per-day">
+                  {prices[f.key] > 0 ? `≈ ₹${(prices[f.key] / f.days).toFixed(1)} / day` : ' '}
+                </span>
+              </label>
+            ))}
+          </div>
 
           {priceMessage.text && (
             <div className={`price-alert ${priceMessage.type}`}>
-              {priceMessage.type === 'success' ? <BiCheckCircle size={15} /> : null}
+              {priceMessage.type === 'success' ? <BiCheckCircle size={15} /> : <BiErrorCircle size={15} />}
               <span>{priceMessage.text}</span>
             </div>
           )}
-        </div>
+        </form>
 
         {/* Stats Grid */}
         <div className="premium-stats-cards">
@@ -238,8 +265,10 @@ const AdminPremiumUsers = () => {
               <BiCrown size={18} />
             </div>
             <div className="p-stat-info">
-              <span className="p-stat-label">Current Plan</span>
-              <strong className="p-stat-val">₹{monthlyPrice || '199'}/mo</strong>
+              <span className="p-stat-label">Current Plans</span>
+              <strong className="p-stat-val">
+                ₹{prices.weeklyPrice || '-'}/wk · ₹{prices.monthlyPrice || '-'}/mo · ₹{prices.halfYearlyPrice || '-'}/6mo
+              </strong>
             </div>
           </div>
         </div>
@@ -375,6 +404,9 @@ const AdminPremiumUsers = () => {
                       {/* Plan & Dates */}
                       <td>
                         <div className="plan-date-cell">
+                          <span className="plan-tile-badge" style={{ alignSelf: 'flex-start' }}>
+                            {(PLAN_FIELDS.find((f) => f.days === sub.planDurationDays)?.label || `${sub.planDurationDays || 30} days`).toUpperCase()}
+                          </span>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '13px', fontWeight: 600 }}>
                             <BiCalendar size={15} style={{ color: 'var(--admin-muted)' }} />
                             <span>{startDateStr} &rarr; {endDateStr}</span>
@@ -599,7 +631,7 @@ const AdminPremiumUsers = () => {
 
         .premium-top-grid {
           display: grid;
-          grid-template-columns: 1.25fr 1fr;
+          grid-template-columns: 1.8fr 1fr;
           gap: 0.85rem;
           margin-bottom: 1.25rem;
           align-items: stretch;
@@ -617,6 +649,70 @@ const AdminPremiumUsers = () => {
           flex-direction: column;
           justify-content: center;
           gap: 0.75rem;
+        }
+
+        .price-card-head {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 0.75rem;
+          flex-wrap: wrap;
+        }
+
+        .plan-price-grid {
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 0.6rem;
+        }
+
+        @media (max-width: 640px) {
+          .plan-price-grid {
+            grid-template-columns: 1fr;
+          }
+        }
+
+        .plan-price-tile {
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+          padding: 0.75rem;
+          border-radius: 12px;
+          border: 1.5px solid #e2e8f0;
+          background: #ffffff;
+          cursor: text;
+        }
+
+        .plan-price-tile.tone-blue { border-top: 4px solid #3b82f6; }
+        .plan-price-tile.tone-amber { border-top: 4px solid #f59e0b; background: rgba(245, 158, 11, 0.04); }
+        .plan-price-tile.tone-pink { border-top: 4px solid #ec4899; }
+
+        .plan-tile-top {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+        }
+
+        .plan-tile-name {
+          font-size: 14px;
+          font-weight: 800;
+          color: var(--admin-strong);
+        }
+
+        .plan-tile-badge {
+          font-size: 9.5px;
+          font-weight: 800;
+          letter-spacing: 0.08em;
+          color: #d97706;
+          background: rgba(245, 158, 11, 0.15);
+          padding: 2px 7px;
+          border-radius: 20px;
+        }
+
+        .plan-tile-days,
+        .plan-tile-per-day {
+          font-size: 11.5px;
+          color: var(--admin-muted);
+          font-weight: 600;
         }
 
         .card-header-styled {

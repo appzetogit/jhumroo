@@ -1,4 +1,7 @@
+import 'dotenv/config'; // first: env must be loaded before any module reads it
 import express from 'express';
+import fs from 'fs';
+import path from 'path';
 import { createServer } from 'http';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -24,7 +27,6 @@ import problemReportRoutes from './modules/problemReport/problemReport.routes.js
 import supportRoutes from './modules/support/support.routes.js';
 import staticPageRoutes from './modules/staticPage/staticPage.routes.js';
 import adRoutes from './modules/ad/routes/ad.routes.js';
-import recRoutes from './modules/recommendation/routes/rec.routes.js';
 import liveRoutes from './modules/live/routes/live.routes.js';
 import premiumRoutes from './modules/premium/routes/premium.routes.js';
 import { expireAds } from './cron/ad_expiry.js';
@@ -54,10 +56,26 @@ connectDB();
 // Initialize Socket.io
 initSocket(server);
 
-// Schedule cron: expire ads every hour
-expireAds(); // run immediately on startup
-setInterval(expireAds, 60 * 60 * 1000); // then every 1 hour
-console.log('⏰ Ad expiry cron scheduled (every 1 hour)');
+// Schedule cron: expire ads every hour. With REDIS_URL the single worker.js process owns it
+// (otherwise every PM2 instance would run it).
+if (!process.env.REDIS_URL) {
+  expireAds(); // run immediately on startup
+  setInterval(expireAds, 60 * 60 * 1000); // then every 1 hour
+  console.log('⏰ Ad expiry cron scheduled (every 1 hour)');
+}
+
+// Multer temp files are left behind whenever a controller returns early (validation error, etc.).
+// Sweep ./uploads hourly so the disk can't slowly fill up and take the server down.
+const sweepUploads = () => {
+  const dir = './uploads';
+  const cutoff = Date.now() - 2 * 60 * 60 * 1000;
+  fs.promises.readdir(dir).then((names) => Promise.all(names.map(async (n) => {
+    const p = path.join(dir, n);
+    const st = await fs.promises.stat(p);
+    if (st.isFile() && st.mtimeMs < cutoff) await fs.promises.unlink(p);
+  }))).catch(() => {});
+};
+setInterval(sweepUploads, 60 * 60 * 1000);
 
 // Middleware
 app.use(helmet()); // Security headers
@@ -93,10 +111,10 @@ app.use(cors({
   credentials: true
 }));
 app.use(compression()); // Compress responses
-app.use(express.json({ limit: '50mb' })); // Parse JSON bodies
-app.use(express.urlencoded({ extended: true, limit: '50mb' })); // Parse URL-encoded bodies
+app.use(express.json({ limit: '2mb' })); // Parse JSON bodies
+app.use(express.urlencoded({ extended: true, limit: '2mb' })); // Parse URL-encoded bodies
 app.use(cookieParser()); // Parse cookies
-app.use(morgan(process.env.NODE_ENV === 'development' ? 'dev' : 'combined')); // Logging
+if (process.env.NODE_ENV === 'development') app.use(morgan('dev')); // Logging (off in prod: per-request stdout is costly)
 
 // Rate limiting
 app.use('/api/', rateLimiter);
@@ -124,7 +142,6 @@ app.use('/api/support-requests', supportRoutes);
 app.use('/api/static-pages', staticPageRoutes);
 app.use('/api/interests', adminInterestRoutes);
 app.use('/api/ads', adRoutes);
-app.use('/api/rec', recRoutes);
 app.use('/api/live', liveRoutes);
 app.use('/api/premium', premiumRoutes);
 
@@ -159,7 +176,8 @@ server.listen(PORT, () => {
 });
 
 // Handle unhandled promise rejections
+// A failed background promise (push notification, stats sync, etc.) must not kill every user's
+// connection — log it and keep serving. (Node would otherwise crash the process by default.)
 process.on('unhandledRejection', (err) => {
   console.error('Unhandled Rejection:', err);
-  process.exit(1);
 });

@@ -115,6 +115,7 @@ commentSchema.pre('save', async function (next) {
 // Indexes
 commentSchema.index({ reel: 1, createdAt: -1 });
 commentSchema.index({ parentComment: 1, createdAt: -1 });
+commentSchema.index({ reel: 1, parentComment: 1, isDeleted: 1, isPinned: -1, createdAt: -1 });
 
 // Update reel/ad comment count & replies count
 commentSchema.post('save', async function (doc) {

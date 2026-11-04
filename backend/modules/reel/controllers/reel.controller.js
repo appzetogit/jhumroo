@@ -11,14 +11,19 @@ import { createNotification } from '../../../utils/notificationService.js';
 import { createAdminAlert } from '../../../utils/adminAlertService.js';
 import { asyncHandler } from '../../../middleware/errorHandler.js';
 import { uploadToS3, getPresignedUploadUrl, getFileUrl, getPresignedDownloadUrl, deleteFromS3 } from '../../../utils/s3.js';
-import { processReelWithAudio } from '../../../utils/videoProcessor.js';
+import { enqueueEncode } from '../../../utils/encodeQueue.js';
 import { deleteFile } from '../../../config/cloudinary.js';
 import RecommendationEngine from '../../../utils/recommendationEngine.js';
 import WatchAnalytics from '../../../models/WatchAnalytics.model.js';
+import ReelView from '../../../models/ReelView.model.js';
 import { isUserAllowedToViewReels } from '../../../utils/geoHelper.js';
 import { getIO } from '../../../config/socket.js';
 import fs from 'fs';
 import axios from 'axios';
+import { escapeRegex } from '../../../utils/regex.js';
+
+// Premium creators get Ultra HD (1080p, higher bitrate) processing.
+const hdFor = (u) => ({ hd: Boolean(u?.isPremium && u?.premiumExpiresAt && new Date(u.premiumExpiresAt) > new Date()) });
 
 /**
  * Safely parses location fields from the client
@@ -89,8 +94,13 @@ const getBlockedUserIds = async (user) => {
  */
 export const createUploadUrl = asyncHandler(async (req, res) => {
   const { contentType, fileName } = req.body;
+  // Only video/photo uploads; anything else (text/html, image/svg+xml) would be served from our CDN as-is → XSS.
+  if (typeof contentType !== 'string' || !/^(video\/[a-z0-9.+-]+|image\/(jpeg|png|webp|gif|heic|heif))$/i.test(contentType)) {
+    return res.status(400).json({ success: false, message: 'Only video or image uploads are allowed' });
+  }
+  const safeName = String(fileName || 'video').replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 80);
   const videoId = new mongoose.Types.ObjectId();
-  const key = `uploads/raw/${req.user._id}/${videoId}-${fileName}`;
+  const key = `uploads/raw/${req.user._id}/${videoId}-${safeName}`;
 
   const uploadUrl = await getPresignedUploadUrl(key, contentType);
 
@@ -129,6 +139,13 @@ export const completeUpload = asyncHandler(async (req, res) => {
     isRemix,
     originalReel
   } = req.body;
+
+  // The key/videoId pair must be the one createUploadUrl issued to THIS user — otherwise a user
+  // could point a reel at someone else's S3 object and later delete it via deleteReel.
+  if (typeof key !== 'string' || !mongoose.Types.ObjectId.isValid(videoId) ||
+      !key.startsWith(`uploads/raw/${req.user._id}/${videoId}-`) || key.includes('..')) {
+    return res.status(400).json({ success: false, message: 'Invalid upload key' });
+  }
 
   if ((isRemix === 'true' || isRemix === true) && originalReel) {
     const sourceReel = await Reel.findById(originalReel).select('allowDuet');
@@ -190,22 +207,9 @@ export const completeUpload = asyncHandler(async (req, res) => {
 
   // Non-blocking background processing (merges audio, extracts duration)
   // This will update the video URL and thumbnail once done.
-  processReelWithAudio(reel._id, key, reel.music)
-    .then(async (processed) => {
-      console.log(`[ReelController] Processing successful for ${reel._id}`);
-      await Reel.findByIdAndUpdate(reel._id, {
-        'video.url': processed.videoUrl,
-        'video.publicId': processed.videoKey,
-        // Only overwrite thumbnail if client didn't provide one
-        ...(!thumbnailUrl && { 'video.thumbnail': processed.thumbnailUrl }),
-        'video.duration': processed.duration || 0,
-      });
-    })
-    .catch(async (err) => {
-      // Processing failed (e.g. FFmpeg not on live server) — reel is
-      // already 'completed' with raw URL, so no further action needed.
-      console.error(`[ReelController] Background processing failed for ${reel._id}:`, err);
-    });
+  // Reel is already 'completed' with the raw URL; on failure it simply stays that way.
+  // Only overwrite thumbnail if client didn't provide one.
+  enqueueEncode({ reelId: reel._id, key, music: reel.music, ...hdFor(req.user), setThumbnail: !thumbnailUrl, fallbackOnFail: false });
 
   res.status(201).json({
     success: true,
@@ -318,27 +322,8 @@ export const createReel = asyncHandler(async (req, res) => {
   }).catch(err => console.error('[createReel] admin alert failed:', err));
 
   // Trigger background processing for uploaded files
-  processReelWithAudio(reel._id, s3Result.key, reel.music)
-    .then(async (processed) => {
-      await Reel.findByIdAndUpdate(reel._id, {
-        'video.url': processed.videoUrl,
-        'video.publicId': processed.videoKey,
-        'video.thumbnail': processed.thumbnailUrl,
-        'video.duration': processed.duration || 0,
-        status: 'completed'
-      });
-    })
-    .catch(async (err) => {
-       console.error(`[ReelController] createReel processing failed:`, err);
-       // Fallback: If processing fails, mark as completed using the raw video URL and fallback thumbnail
-       const fallbackUrl = reel.video?.url || (await getFileUrl(s3Result.key));
-       await Reel.findByIdAndUpdate(reel._id, {
-         'video.url': fallbackUrl,
-         'video.thumbnail': '',
-         status: 'completed'
-       });
-       console.log(`[ReelController] Gracefully fell back to completed status for reel ${reel._id} in createReel`);
-    });
+  // On final failure the job marks the reel completed with its raw video URL.
+  enqueueEncode({ reelId: reel._id, key: s3Result.key, music: reel.music, ...hdFor(req.user), setThumbnail: true, fallbackOnFail: true });
 
   await reel.populate([
     { path: 'user', select: 'username fullName profilePicture isVerified downloadPrivacy isPrivate' },
@@ -435,9 +420,11 @@ export const getFeedReels = asyncHandler(async (req, res) => {
   if (!req.user) {
     baseQuery.audience = 'everyone';
   } else {
-    const following = await Follow.find({ follower: req.user._id, status: 'accepted' }).select('following');
+    const [following, followers] = await Promise.all([
+      Follow.find({ follower: req.user._id, status: 'accepted' }).select('following').lean(),
+      Follow.find({ following: req.user._id, status: 'accepted' }).select('follower').lean()
+    ]);
     followingIds = following.map(f => f.following);
-    const followers = await Follow.find({ following: req.user._id, status: 'accepted' }).select('follower');
     const followerIds = followers.map(f => f.follower);
 
     baseQuery.$and = [
@@ -470,7 +457,9 @@ export const getFeedReels = asyncHandler(async (req, res) => {
   }
 
   // Retrieve candidate pool of the 1000 most recent active reels matching the privacy rules
+  // Only the fields needed to shuffle/classify; full docs are fetched for the page slice below.
   const candidates = await Reel.find(baseQuery)
+    .select('_id isPhoto postType video.type video.url rawVideoUrl')
     .sort({ createdAt: -1 })
     .limit(1000)
     .lean();
@@ -522,7 +511,11 @@ export const getFeedReels = asyncHandler(async (req, res) => {
   let nextCursor = null;
 
   const batch = combinedCandidates.slice(offset, offset + limit);
-  pageReels = batch;
+  const fullDocs = await Reel.find({ _id: { $in: batch.map(b => b._id) } }).select('-views').lean();
+  const byId = new Map(fullDocs.map(d => [d._id.toString(), d]));
+  pageReels = batch
+    .map(b => { const d = byId.get(b._id.toString()); return d && { ...d, isPhoto: b.isPhoto, postType: b.postType }; })
+    .filter(Boolean);
   
   const nextOffset = offset + batch.length;
   hasMore = combinedCandidates.length > nextOffset;
@@ -543,6 +536,7 @@ export const getFeedReels = asyncHandler(async (req, res) => {
   // Inject Ads and Like/Save status
   if (reels.length > 0) {
     const ads = await Ad.find({ isActive: true, status: 'approved' })
+      .limit(5)
       .populate('user', 'username profilePicture isVerified')
       .lean();
 
@@ -713,12 +707,14 @@ export const recordWatchTime = asyncHandler(async (req, res) => {
   const { id: reelId } = req.params;
   const { duration } = req.body; // seconds watched
 
-  if (!duration || isNaN(duration)) {
+  const secs = Number(duration);
+  if (!Number.isFinite(secs) || secs <= 0) {
     return res.status(400).json({ success: false, message: 'Valid duration is required' });
   }
 
+  // Public endpoint: cap one report at 10 min so a client can't inflate/poison watch-time stats.
   await Reel.findByIdAndUpdate(reelId, {
-    $inc: { 'stats.totalWatchTime': duration }
+    $inc: { 'stats.totalWatchTime': Math.min(secs, 600) }
   });
 
   res.status(200).json({ success: true });
@@ -747,7 +743,7 @@ export const shareReel = asyncHandler(async (req, res) => {
   // Broadcast real-time share stats update
   try {
     const io = getIO();
-    io.emit('reel_stats_updated', {
+    io.to('reel:' + String(reelId)).emit('reel_stats_updated', {
       reelId,
       stats: {
         sharesCount: updatedReel.stats.sharesCount,
@@ -779,7 +775,7 @@ export const getTrendingReels = asyncHandler(async (req, res) => {
   }
 
   const page = parseInt(req.query.page) || 1;
-  const limit = parseInt(req.query.limit) || 10;
+  const limit = Math.min(parseInt(req.query.limit) || 10, 50);
   const skip = (page - 1) * limit;
 
   // Optimize: Retrieve a candidate pool of the 300 most recent active public reels
@@ -916,20 +912,20 @@ export const submitReelAnalytics = asyncHandler(async (req, res) => {
     deviceInfo 
   } = req.body;
 
-  const reel = await Reel.findById(reelId);
-  if (!reel) {
+  // Record aggregate stats. Views are counted only by addView (once per user); this runs on every
+  // pause / swipe / loop, so counting here made each re-watch add a view.
+  const { matchedCount } = await Reel.updateOne({ _id: reelId }, {
+    $inc: { 'stats.totalWatchTime': Math.min(Math.max(Number(watchDuration) || 0, 0), 600) }
+  });
+  if (!matchedCount) {
     return res.status(404).json({ success: false, message: 'Reel not found' });
   }
 
-  // Record aggregate stats. Views are counted only by addView (once per user); this runs on every
-  // pause / swipe / loop, so counting here made each re-watch add a view.
-  await Reel.findByIdAndUpdate(reelId, {
-    $inc: { 'stats.totalWatchTime': watchDuration || 0 }
-  });
+  // Fires on every swipe: answer now, write the detail rows in the background.
+  res.status(200).json({ success: true });
 
-  // Record detailed analytics if user is logged in
   if (req.user) {
-    await WatchAnalytics.create({
+    WatchAnalytics.create({
       user: req.user._id,
       reel: reelId,
       watchDuration,
@@ -938,18 +934,15 @@ export const submitReelAnalytics = asyncHandler(async (req, res) => {
       isFullWatch,
       swipeTiming,
       deviceInfo
-    });
-
-    // Update user interest profile
-    await RecommendationEngine.updateUserInterests(req.user._id, reelId, 'watch', {
-      watchDuration,
-      completionPercentage,
-      replayCount,
-      isFullWatch
-    });
+    })
+      .then(() => RecommendationEngine.updateUserInterests(req.user._id, reelId, 'watch', {
+        watchDuration,
+        completionPercentage,
+        replayCount,
+        isFullWatch
+      }))
+      .catch(err => console.error('[submitReelAnalytics] background write failed:', err.message));
   }
-
-  res.status(200).json({ success: true });
 });
 
 /**
@@ -1113,11 +1106,11 @@ export const toggleLike = asyncHandler(async (req, res) => {
   const uId = new mongoose.Types.ObjectId(userId);
 
   // 1. Find the content (Reel or Ad)
-  let content = await Reel.findById(cId);
+  let content = await Reel.findById(cId).select('user stats').lean();
   let isAd = false;
-  
+
   if (!content) {
-    content = await Ad.findById(cId);
+    content = await Ad.findById(cId).select('user stats').lean();
     isAd = true;
   }
 
@@ -1131,41 +1124,23 @@ export const toggleLike = asyncHandler(async (req, res) => {
   
   if (existingLike) {
     // ─── UNLIKE FLOW ───
-    const actualLikesCount = await Like.countDocuments(isAd ? { ad: cId } : { reel: cId });
-
-    let updatedContent;
-    if (isAd) {
-      updatedContent = await Ad.findByIdAndUpdate(
-        cId,
-        { 'stats.likesCount': actualLikesCount },
-        { new: true }
-      );
-    } else {
-      updatedContent = await Reel.findByIdAndUpdate(
-        cId,
-        { 'stats.likesCount': actualLikesCount },
-        { new: true }
-      );
-
-      // Update owner's total likes count for reels
-      if (content.user) {
-        const userReels = await Reel.find({ user: content.user });
-        const totalUserLikes = userReels.reduce((sum, r) => {
-          const count = String(r._id) === String(cId) ? actualLikesCount : (r.stats?.likesCount || 0);
-          return sum + count;
-        }, 0);
-        await User.updateOne(
-          { _id: content.user },
-          { 'stats.likesCount': totalUserLikes }
-        ).catch(err => console.error('[toggleLike] User stats update failed:', err));
-      }
+    // Like doc delete above is atomic, so a -1 $inc stays consistent (no count scan).
+    const Model = isAd ? Ad : Reel;
+    const updatedContent = await Model.findByIdAndUpdate(
+      cId,
+      { $inc: { 'stats.likesCount': -1 } },
+      { new: true, projection: 'stats' }
+    ).lean();
+    if (!isAd && content.user) {
+      User.updateOne({ _id: content.user }, { $inc: { 'stats.likesCount': -1 } })
+        .catch(err => console.error('[toggleLike] User stats update failed:', err));
     }
 
     // Broadcast real-time stats update if not an Ad
     if (!isAd && updatedContent) {
       try {
         const io = getIO();
-        io.emit('reel_stats_updated', {
+        io.to('reel:' + String(contentId)).emit('reel_stats_updated', {
           reelId: contentId,
           stats: {
             likesCount: updatedContent.stats.likesCount,
@@ -1198,33 +1173,17 @@ export const toggleLike = asyncHandler(async (req, res) => {
       throw err;
     }
 
-    const actualLikesCount = await Like.countDocuments(isAd ? { ad: cId } : { reel: cId });
-
-    let updatedContent;
-    if (isAd) {
-      updatedContent = await Ad.findByIdAndUpdate(
-        cId,
-        { 'stats.likesCount': actualLikesCount },
-        { new: true }
-      );
-    } else {
-      updatedContent = await Reel.findByIdAndUpdate(
-        cId,
-        { 'stats.likesCount': actualLikesCount },
-        { new: true }
-      );
-
-      // Update owner's total likes count for reels
+    // Like doc insert above is unique-indexed, so a +1 $inc stays consistent (no count scan).
+    const Model = isAd ? Ad : Reel;
+    const updatedContent = await Model.findByIdAndUpdate(
+      cId,
+      { $inc: { 'stats.likesCount': 1 } },
+      { new: true, projection: 'stats' }
+    ).lean();
+    if (!isAd) {
       if (content.user) {
-        const userReels = await Reel.find({ user: content.user });
-        const totalUserLikes = userReels.reduce((sum, r) => {
-          const count = String(r._id) === String(cId) ? actualLikesCount : (r.stats?.likesCount || 0);
-          return sum + count;
-        }, 0);
-        await User.updateOne(
-          { _id: content.user },
-          { 'stats.likesCount': totalUserLikes }
-        ).catch(err => console.error('[toggleLike] User stats update failed:', err));
+        User.updateOne({ _id: content.user }, { $inc: { 'stats.likesCount': 1 } })
+          .catch(err => console.error('[toggleLike] User stats update failed:', err));
 
         // Create notification for owner (if not liking own reel)
         if (content.user.toString() !== uId.toString()) {
@@ -1243,7 +1202,7 @@ export const toggleLike = asyncHandler(async (req, res) => {
     if (!isAd && updatedContent) {
       try {
         const io = getIO();
-        io.emit('reel_stats_updated', {
+        io.to('reel:' + String(contentId)).emit('reel_stats_updated', {
           reelId: contentId,
           stats: {
             likesCount: updatedContent.stats.likesCount,
@@ -1368,19 +1327,22 @@ export const addView = asyncHandler(async (req, res) => {
   // ─── Unique View Logic ───
   // If user is logged in, record WatchAnalytics and unique view
   if (userId) {
-    // Count only if this user isn't in views yet — one atomic update, so parallel requests can't double count.
-    const counted = await Reel.findOneAndUpdate(
-      { _id: reelId, 'views.user': { $ne: userId } },
-      {
-        $inc: { 'stats.viewsCount': 1 },
-        $push: { views: { user: userId, viewedAt: new Date() } }
-      },
-      { new: true, projection: { 'stats.viewsCount': 1 } }
-    );
-    const reel = counted || await Reel.findById(reelId).select('stats.viewsCount');
+    // Count once per user: the unique {reel,user} index makes the insert atomic, so parallel requests can't double count.
+    let isNew = true;
+    try {
+      await ReelView.create({ reel: reelId, user: userId });
+    } catch (err) {
+      if (err.code !== 11000) throw err;
+      isNew = false;
+    }
+    const reel = isNew
+      ? await Reel.findByIdAndUpdate(reelId, { $inc: { 'stats.viewsCount': 1 } }, { new: true, projection: { 'stats.viewsCount': 1 } }).lean()
+      : await Reel.findById(reelId).select('stats.viewsCount').lean();
     if (!reel) {
+      if (isNew) ReelView.deleteOne({ reel: reelId, user: userId }).catch(() => {});
       return res.status(404).json({ success: false, message: 'Reel not found' });
     }
+    const counted = isNew;
 
     // Asynchronously record watch analytics for watch history tracking
     WatchAnalytics.create({
@@ -1402,8 +1364,8 @@ export const addView = asyncHandler(async (req, res) => {
     const updatedReel = await Reel.findByIdAndUpdate(
       reelId,
       { $inc: { 'stats.viewsCount': 1 } },
-      { new: true }
-    );
+      { new: true, projection: { 'stats.viewsCount': 1 } }
+    ).lean();
     if (!updatedReel) {
       return res.status(404).json({ success: false, message: 'Reel not found' });
     }
@@ -1428,13 +1390,13 @@ export const searchReels = asyncHandler(async (req, res) => {
     return res.status(200).json({
       success: true,
       reels: [],
-      pagination: { total: 0, pages: 0, page: 1, limit }
+      pagination: { total: 0, pages: 0, page: 1, limit: 0 }
     });
   }
 
   const { q, hashtag } = req.query;
   const page = parseInt(req.query.page) || 1;
-  const limit = parseInt(req.query.limit) || 20;
+  const limit = Math.min(parseInt(req.query.limit) || 20, 50);
   const skip = (page - 1) * limit;
 
   let query = { 
@@ -1446,9 +1408,9 @@ export const searchReels = asyncHandler(async (req, res) => {
     query.hashtags = hashtag.toLowerCase();
   } else if (q) {
     query.$or = [
-      { caption: { $regex: q, $options: 'i' } },
-      { 'music.name': { $regex: q, $options: 'i' } },
-      { 'music.artist': { $regex: q, $options: 'i' } }
+      { caption: { $regex: escapeRegex(q), $options: 'i' } },
+      { 'music.name': { $regex: escapeRegex(q), $options: 'i' } },
+      { 'music.artist': { $regex: escapeRegex(q), $options: 'i' } }
     ];
   } else {
     return res.status(400).json({
@@ -1644,6 +1606,16 @@ export const downloadReel = asyncHandler(async (req, res) => {
 
   // Find the uploader user to check their download privacy setting
   const uploader = await User.findById(reel.user);
+
+  // Same audience rule as getReel: followers/following-only reels can't be pulled by outsiders.
+  const isOwner = req.user && req.user._id.toString() === reel.user.toString();
+  if (reel.audience && reel.audience !== 'everyone' && !isOwner) {
+    const rel = !req.user ? null : reel.audience === 'followers'
+      ? await Follow.exists({ follower: req.user._id, following: reel.user, status: 'accepted' })
+      : await Follow.exists({ follower: reel.user, following: req.user._id, status: 'accepted' });
+    if (!rel) return res.status(403).json({ success: false, message: 'This reel is not available to you' });
+  }
+
   if ((uploader?.downloadPrivacy === 'Off') || (reel.allowDownload === false)) {
     console.log(`[DOWNLOAD LOG - BLOCKED] Download blocked for Reel ID: ${reel._id}. Privacy: Off or allowDownload: false.`);
     return res.status(403).json({ success: false, message: 'Downloading this reel is disabled' });
@@ -1712,13 +1684,14 @@ export const downloadReel = asyncHandler(async (req, res) => {
  * @access  Public
  */
 export const getReelLikers = asyncHandler(async (req, res) => {
-  const { page = 1, limit = 20 } = req.query;
-  const skip = (parseInt(page) - 1) * parseInt(limit);
+  const page = Math.max(parseInt(req.query.page) || 1, 1);
+  const limit = Math.min(Math.max(parseInt(req.query.limit) || 20, 1), 50);
+  const skip = (page - 1) * limit;
 
   const likes = await Like.find({ reel: req.params.id })
     .sort({ createdAt: -1 })
     .skip(skip)
-    .limit(parseInt(limit))
+    .limit(limit)
     .populate('user', 'username fullName profilePicture isVerified');
 
   const total = await Like.countDocuments({ reel: req.params.id });

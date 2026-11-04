@@ -7,7 +7,8 @@ import jwt from 'jsonwebtoken';
  */
 const generateAdminToken = (id, isRefresh = false) => {
   const expiresIn = isRefresh ? '30d' : '24h';
-  return jwt.sign({ id, isAdmin: true }, process.env.JWT_SECRET, { expiresIn });
+  const payload = isRefresh ? { id, isAdmin: true, type: 'refresh' } : { id, isAdmin: true };
+  return jwt.sign(payload, process.env.JWT_SECRET, { expiresIn });
 };
 
 /**
@@ -19,7 +20,7 @@ export const adminLogin = asyncHandler(async (req, res) => {
   const { email, password } = req.body;
 
   // Validation
-  if (!email || !password) {
+  if (typeof email !== 'string' || typeof password !== 'string' || !email || !password) {
     return res.status(400).json({
       success: false,
       message: 'Please provide email and password'
@@ -221,10 +222,10 @@ export const changeAdminPassword = asyncHandler(async (req, res) => {
     });
   }
 
-  if (newPassword.length < 6) {
+  if (typeof newPassword !== 'string' || newPassword.length < 8) {
     return res.status(400).json({
       success: false,
-      message: 'New password must be at least 6 characters'
+      message: 'New password must be at least 8 characters'
     });
   }
 

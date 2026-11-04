@@ -9,11 +9,12 @@ import {
   getActivityLog
 } from '../controllers/auth.controller.js';
 import { protectAdmin } from '../../../middleware/adminAuth.js';
+import { authRateLimiter } from '../../../middleware/rateLimiter.js';
 
 const router = express.Router();
 
 // Public routes
-router.post('/login', adminLogin);
+router.post('/login', authRateLimiter, adminLogin);
 router.post('/refresh', refreshAdminToken);
 
 // Protected routes

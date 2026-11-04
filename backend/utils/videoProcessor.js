@@ -4,14 +4,49 @@ import fs from 'fs';
 import axios from 'axios';
 import { uploadToS3, getFileUrl, downloadFromS3 } from './s3.js';
 
+const MAX_AUDIO_BYTES = 30 * 1024 * 1024;
+
+/** https URL on our CDN / S3 / Cloudinary, or a host listed in AUDIO_ALLOWED_HOSTS (comma-separated). */
+export const isTrustedMediaUrl = (raw) => {
+  let u;
+  try { u = new URL(raw); } catch { return false; }
+  if (u.protocol !== 'https:') return false;
+  const host = u.hostname.toLowerCase();
+  const extra = (process.env.AUDIO_ALLOWED_HOSTS || '').split(',').map((h) => h.trim().toLowerCase()).filter(Boolean);
+  return host === (process.env.CLOUDFRONT_DOMAIN || '').toLowerCase() ||
+    /(^|\.)s3[.-][a-z0-9.-]*amazonaws\.com$/.test(host) ||
+    host === 'res.cloudinary.com' ||
+    extra.includes(host);
+};
+
 /**
  * Process a reel: Download raw, merge with music, upload final
  * @param {string} videoId - Reel ID
  * @param {string} rawKey - S3 key for raw video
  * @param {object} music - Music metadata (url, startTime, duration)
+ * @param {object} [opts] - { hd: true } for premium creators: keep up to 1080p at higher quality
  * @returns {Promise<object>} - Processed URLs
  */
-export const processReelWithAudio = async (videoId, rawKey, music) => {
+// ponytail: in-process encode queue — per Node process and lost on restart.
+// Upgrade to a BullMQ worker (already in package.json) once Redis runs on the VPS.
+const MAX_ENCODES = Number(process.env.MAX_CONCURRENT_ENCODES) || 1;
+let runningEncodes = 0;
+const waitingEncodes = [];
+export const withEncodeSlot = async (fn) => {
+  if (runningEncodes >= MAX_ENCODES) await new Promise((resolve) => waitingEncodes.push(resolve));
+  runningEncodes++;
+  try { return await fn(); } finally { runningEncodes--; waitingEncodes.shift()?.(); }
+};
+
+export const processReelWithAudio = (videoId, rawKey, music, opts = {}) =>
+  withEncodeSlot(() => encodeReel(videoId, rawKey, music, opts));
+
+const encodeReel = async (videoId, rawKey, music, opts = {}) => {
+  // Standard: 720p, crf 23. Premium (Ultra HD): 1080p, crf 18 (visually lossless), slower preset for detail.
+  // -threads caps CPU per encode so uploads never starve the API on a 4-core VPS.
+  const maxW = opts.hd ? 1080 : 720;
+  const threads = `-threads ${Number(process.env.FFMPEG_THREADS) || 2}`;
+  const quality = opts.hd ? ['-preset veryfast', '-crf 18', threads] : ['-preset superfast', '-crf 23', threads];
   const tempDir = path.join('temp', videoId.toString());
   if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
 
@@ -30,16 +65,26 @@ export const processReelWithAudio = async (videoId, rawKey, music) => {
     if (music && music.url) {
       console.log(`[Processor:${videoId}] Downloading audio from: ${music.url}`);
       try {
+        // music.url comes from the client: only fetch from our own media hosts (SSRF guard).
+        if (!isTrustedMediaUrl(music.url)) throw new Error(`Untrusted audio host: ${music.url}`);
         const response = await axios({
           url: music.url,
           method: 'GET',
-          responseType: 'stream'
+          responseType: 'stream',
+          timeout: 30000,
+          maxRedirects: 0
         });
         const writer = fs.createWriteStream(audioLocalPath);
+        let bytes = 0;
+        response.data.on('data', (chunk) => {
+          bytes += chunk.length;
+          if (bytes > MAX_AUDIO_BYTES) response.data.destroy(new Error('Audio file too large'));
+        });
         response.data.pipe(writer);
         await new Promise((resolve, reject) => {
           writer.on('finish', resolve);
           writer.on('error', reject);
+          response.data.on('error', reject);
         });
         audioReady = true;
         console.log(`[Processor:${videoId}] Audio downloaded successfully`);
@@ -82,8 +127,7 @@ export const processReelWithAudio = async (videoId, rawKey, music) => {
             '-map 0:v:0',    // Map video from first input
             '-map 1:a:0',    // Map audio from second input
             '-c:v libx264',  // Transcode video to H.264
-            '-preset superfast',
-            '-crf 23',
+            ...quality,
             '-c:a aac',      // Transcode audio to AAC
             '-b:a 128k',
             '-shortest',     // End when the shortest stream ends
@@ -95,8 +139,7 @@ export const processReelWithAudio = async (videoId, rawKey, music) => {
           command = command
             .outputOptions([
               '-c:v libx264',
-              '-preset superfast',
-              '-crf 23',
+              ...quality,
               '-c:a aac',
               '-b:a 128k',
               '-movflags +faststart'
@@ -105,8 +148,7 @@ export const processReelWithAudio = async (videoId, rawKey, music) => {
           command = command
             .outputOptions([
               '-c:v libx264',
-              '-preset superfast',
-              '-crf 23',
+              ...quality,
               '-an', // Disable audio stream in output since input has no audio stream
               '-movflags +faststart'
             ]);
@@ -115,15 +157,10 @@ export const processReelWithAudio = async (videoId, rawKey, music) => {
 
 
       command
-        // Cap at 720p wide: smaller files load faster in the feed (never upscales)
-        .videoFilters("scale='min(720,iw)':-2")
+        // Cap width (720 standard / 1080 premium): smaller files load faster in the feed (never upscales)
+        .videoFilters(`scale='min(${maxW},iw)':-2`)
         .output(outputLocalPath)
         .on('start', (cmd) => console.log(`[Processor:${videoId}] FFmpeg Command:`, cmd))
-        .on('progress', (progress) => {
-          if (progress.percent) {
-            console.log(`[Processor:${videoId}] Processing: ${Math.round(progress.percent)}%`);
-          }
-        })
         .on('end', () => {
           console.log(`[Processor:${videoId}] FFmpeg merge completed`);
           resolve();
@@ -187,10 +224,7 @@ export const processReelWithAudio = async (videoId, rawKey, music) => {
   } finally {
     // Cleanup
     try {
-      if (fs.existsSync(tempDir)) {
-        fs.rmSync(tempDir, { recursive: true, force: true });
-        console.log(`[Processor:${videoId}] Cleanup done`);
-      }
+      await fs.promises.rm(tempDir, { recursive: true, force: true });
     } catch (cleanupErr) {
       console.error(`[Processor:${videoId}] Cleanup failed:`, cleanupErr);
     }

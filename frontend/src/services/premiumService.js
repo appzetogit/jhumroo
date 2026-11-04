@@ -11,8 +11,8 @@ const premiumService = {
   /**
    * Create Razorpay order to buy premium
    */
-  createOrder: async () => {
-    return await api.post('/premium/create-order');
+  createOrder: async (plan = 'monthly') => {
+    return await api.post('/premium/create-order', { plan });
   },
 
   /**

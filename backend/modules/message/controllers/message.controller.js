@@ -5,7 +5,7 @@ import Reel from '../../../models/Reel.model.js';
 import Follow from '../../../models/Follow.model.js';
 import { asyncHandler } from '../../../middleware/errorHandler.js';
 import { uploadImage, uploadVideo, deleteFile } from '../../../config/cloudinary.js';
-import { getIO, isUserOnline } from '../../../config/socket.js';
+import { getIO, getOnlineSet } from '../../../config/socket.js';
 import fs from 'fs';
 
 /**
@@ -31,6 +31,11 @@ export const getConversations = asyncHandler(async (req, res) => {
     .skip(skip)
     .limit(limit);
 
+  const otherIds = conversations
+    .map(conv => conv.participants.find(p => p._id.toString() !== userId.toString())?._id)
+    .filter(Boolean);
+  const onlineSet = await getOnlineSet(otherIds);
+
   const formattedConversations = conversations.map(conv => {
     const otherParticipant = conv.participants.find(
       p => p._id.toString() !== userId.toString()
@@ -38,7 +43,7 @@ export const getConversations = asyncHandler(async (req, res) => {
 
     let isOnline = false;
     if (otherParticipant) {
-      const userOnlineInSocket = isUserOnline(otherParticipant._id.toString());
+      const userOnlineInSocket = onlineSet.has(otherParticipant._id.toString());
       const privacy = otherParticipant.activeStatusPrivacy || 'friends';
       isOnline = userOnlineInSocket && privacy !== 'no_one';
     }
@@ -245,11 +250,18 @@ export const sendMessage = asyncHandler(async (req, res) => {
   const receiverParticipant = conversation.participants.find(
     p => p._id.toString() !== senderId.toString()
   );
+  if (!receiverParticipant) {
+    return res.status(400).json({ success: false, message: 'You cannot message yourself' });
+  }
 
   // Fetch full receiver user data for privacy check
   const receiver = await User.findById(receiverParticipant._id || receiverParticipant);
-  if (!receiver) {
+  if (!receiver || !receiver.isActive) {
     return res.status(404).json({ success: false, message: 'Receiver not found' });
+  }
+
+  if (await User.isBlockedBetween(senderId, receiver._id)) {
+    return res.status(403).json({ success: false, message: 'You cannot message this user' });
   }
 
   // Privacy Check

@@ -13,7 +13,7 @@ const router = express.Router();
 
 // Active streams & discovery
 router.get('/active', optionalAuth, getActiveLives);
-router.get('/ice-servers', optionalAuth, getIceServers);
+router.get('/ice-servers', protect, getIceServers);
 
 // Specific stream info
 router.get('/:id', optionalAuth, getLiveById);

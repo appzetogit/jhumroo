@@ -115,7 +115,8 @@ const userSchema = new mongoose.Schema(
     // OTP for authentication
     otp: {
       code: String,
-      expiresAt: Date
+      expiresAt: Date,
+      attempts: { type: Number, default: 0 }
     },
     // Device tokens for push notifications
     deviceTokens: [{
@@ -273,6 +274,7 @@ const userSchema = new mongoose.Schema(
 userSchema.index({ createdAt: -1 });
 userSchema.index({ 'stats.followersCount': -1 });
 userSchema.index({ liveLocation: '2dsphere' });
+userSchema.index({ blockedUsers: 1 }); // "who blocked me" lookup on every feed/reel request
 
 // Virtual for full phone number
 userSchema.virtual('fullPhoneNumber').get(function () {
@@ -297,16 +299,23 @@ userSchema.methods.generateOTP = function () {
 
 // Method to verify OTP
 userSchema.methods.verifyOTP = function (code) {
-  // Allow 123456 as a universal testing OTP
-  if (String(code) === '123456') return true;
-
   if (!this.otp || !this.otp.code) {
     return false;
   }
   if (this.otp.expiresAt < new Date()) {
     return false;
   }
-  return this.otp.code === code;
+  if (this.otp.code === String(code)) return true;
+  // Burn the OTP after 5 wrong guesses so it can't be brute-forced. Caller must save().
+  this.otp.attempts = (this.otp.attempts || 0) + 1;
+  if (this.otp.attempts >= 5) this.otp = undefined;
+  return false;
+};
+
+/** True if either user has blocked the other. */
+userSchema.statics.isBlockedBetween = async function (a, b) {
+  if (!a || !b) return false;
+  return !!(await this.exists({ $or: [{ _id: a, blockedUsers: b }, { _id: b, blockedUsers: a }] }));
 };
 
 // Method to clear OTP
@@ -319,6 +328,12 @@ userSchema.methods.toJSON = function () {
   const obj = this.toObject();
   delete obj.otp;
   delete obj.deviceTokens;
+  // Session/push secrets and live GPS never leave the server in any response.
+  delete obj.refreshToken;
+  delete obj.refreshTokens;
+  delete obj.fcmToken;
+  delete obj.fcmTokenMobile;
+  delete obj.liveLocation;
   delete obj.__v;
   return obj;
 };

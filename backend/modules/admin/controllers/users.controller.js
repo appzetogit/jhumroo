@@ -5,6 +5,7 @@ import Like from '../../../models/Like.model.js';
 import Comment from '../../../models/Comment.model.js';
 import Report from '../../../models/Report.model.js';
 import { asyncHandler } from '../../../middleware/errorHandler.js';
+import { escapeRegex } from '../../../utils/regex.js';
 
 /**
  * @desc    Get all users with pagination and filters
@@ -30,9 +31,9 @@ export const getAllUsers = asyncHandler(async (req, res) => {
   // Search by username, phone, or full name
   if (search) {
     query.$or = [
-      { username: { $regex: search, $options: 'i' } },
-      { phoneNumber: { $regex: search, $options: 'i' } },
-      { fullName: { $regex: search, $options: 'i' } }
+      { username: { $regex: escapeRegex(search), $options: 'i' } },
+      { phoneNumber: { $regex: escapeRegex(search), $options: 'i' } },
+      { fullName: { $regex: escapeRegex(search), $options: 'i' } }
     ];
   }
 

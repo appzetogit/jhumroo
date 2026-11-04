@@ -42,23 +42,11 @@ const populateCommentWithUserDetails = async (comments, currentUserId) => {
   // Check if current user liked these comments
   const commentIds = comments.map(c => c._id || c.id).filter(id => id);
   let likeStatuses = {};
-  let actualCounts = {};
-  
+
   if (commentIds.length > 0) {
     const commentObjectIds = commentIds.map(id => new mongoose.Types.ObjectId(id));
-    
-    // 1. Get real-time like counts for all comments in one aggregation (Self-healing)
-    const counts = await Like.aggregate([
-      { $match: { comment: { $in: commentObjectIds } } },
-      { $group: { _id: '$comment', count: { $sum: 1 } } }
-    ]);
-    
-    actualCounts = counts.reduce((acc, item) => {
-      acc[item._id.toString()] = item.count;
-      return acc;
-    }, {});
 
-    // 2. Get current user's like status
+    // likesCount is kept exact by $inc in toggleCommentLike; only fetch the viewer's like status.
     if (currentUserId) {
       const userObjectId = new mongoose.Types.ObjectId(currentUserId);
       const likes = await Like.find({
@@ -72,32 +60,24 @@ const populateCommentWithUserDetails = async (comments, currentUserId) => {
         }
         return acc;
       }, {});
-      console.log(`[Enrichment] User: ${currentUserId} | Comments: ${commentIds.length} | Likes found: ${likes.length}`);
     }
   }
 
   // Add follow and like status to each comment
-  return Promise.all(comments.map(async (comment) => {
+  return comments.map((comment) => {
     const commentObj = comment.toObject ? comment.toObject() : comment;
     const commentIdStr = (commentObj._id || commentObj.id)?.toString();
     const userId = commentObj.user?._id || commentObj.user;
-    
-    // Sync the likesCount in the database if it's out of sync (End-to-end reliability)
-    const trueCount = actualCounts[commentIdStr] || 0;
-    if (commentObj.likesCount !== trueCount) {
-      await Comment.updateOne({ _id: commentObj._id || commentObj.id }, { $set: { likesCount: trueCount } });
-    }
-
     const isLiked = commentIdStr ? !!likeStatuses[commentIdStr] : false;
 
     return {
       ...commentObj,
-      likesCount: trueCount,
+      likesCount: Math.max(0, commentObj.likesCount || 0),
       isFollowing: userId ? (followStatuses[userId.toString()] || false) : false,
       isOwnComment: (currentUserId && userId) ? userId.toString() === currentUserId.toString() : false,
       isLiked
     };
-  }));
+  });
 };
 
 /**
@@ -152,6 +132,10 @@ export const createComment = asyncHandler(async (req, res) => {
     });
   }
   
+  if (!isAd && contentOwner && await User.isBlockedBetween(req.user._id, contentOwner._id)) {
+    return res.status(403).json({ success: false, message: 'You cannot comment on this post' });
+  }
+
   if (!isAd && contentOwner && contentOwner._id.toString() !== req.user._id.toString()) {
     const privacy = contentOwner.commentPrivacy || 'everyone';
     if (privacy === 'no_one') {
@@ -248,7 +232,7 @@ export const createComment = asyncHandler(async (req, res) => {
       const io = getIO();
       const updatedReel = await Reel.findById(reelId).select('stats');
       if (updatedReel) {
-        io.emit('reel_stats_updated', {
+        io.to('reel:' + String(reelId)).emit('reel_stats_updated', {
           reelId,
           stats: {
             likesCount: updatedReel.stats.likesCount,
@@ -365,25 +349,23 @@ export const getReelComments = asyncHandler(async (req, res) => {
     req.user?._id
   );
 
-  // For each comment, get a preview of replies (first 2)
-  for (let comment of enrichedComments) {
-    if (comment.repliesCount > 0) {
-      const replyQuery = {
-        parentComment: comment._id,
-        isDeleted: false
-      };
-      if (blockedUsers.length > 0) {
-        replyQuery.user = { $nin: [...new Set(blockedUsers)] };
-      }
-      const replies = await Comment.find(replyQuery)
-        .sort({ createdAt: 1 })
-        .limit(2)
-        .populate('user', 'username fullName profilePicture isVerified')
-        .lean();
-
-      comment.replyPreview = await populateCommentWithUserDetails(replies, req.user?._id);
-    }
-  }
+  // Reply previews (first 2 per comment): fetched in parallel, enriched in one batch.
+  const withReplies = enrichedComments.filter(c => c.repliesCount > 0);
+  const replyLists = await Promise.all(withReplies.map(comment => {
+    const replyQuery = { parentComment: comment._id, isDeleted: false };
+    if (blockedUsers.length > 0) replyQuery.user = { $nin: [...new Set(blockedUsers)] };
+    return Comment.find(replyQuery)
+      .sort({ createdAt: 1 })
+      .limit(2)
+      .populate('user', 'username fullName profilePicture isVerified')
+      .lean();
+  }));
+  const enrichedReplies = await populateCommentWithUserDetails(replyLists.flat(), req.user?._id);
+  let ri = 0;
+  withReplies.forEach((comment, i) => {
+    comment.replyPreview = enrichedReplies.slice(ri, ri + replyLists[i].length);
+    ri += replyLists[i].length;
+  });
 
   let commentsBlocked = false;
   if (req.user && content.user && content.user.blockedCommenters) {
@@ -498,7 +480,7 @@ export const toggleCommentLike = asyncHandler(async (req, res) => {
   const { commentId } = req.params;
 
   // Check if comment exists
-  const comment = await Comment.findById(commentId);
+  const comment = await Comment.findById(commentId).select('likesCount').lean();
   if (!comment) {
     return res.status(404).json({
       success: false,
@@ -514,60 +496,29 @@ export const toggleCommentLike = asyncHandler(async (req, res) => {
 
   const commentObjectId = new mongoose.Types.ObjectId(commentId);
 
+  // Like create/delete are atomic (unique index), so $inc keeps likesCount consistent without scanning likes.
   if (existingLike) {
-    // Unliked
-    const actualLikesCount = await Like.countDocuments({ comment: commentObjectId });
-    await Comment.updateOne({ _id: commentObjectId }, { $set: { likesCount: actualLikesCount } });
-    
-    console.log(`[Like] DELETED. Comment: ${commentId} | Remaining: ${actualLikesCount}`);
-    
+    const updated = await Comment.findByIdAndUpdate(commentObjectId, { $inc: { likesCount: -1 } }, { new: true, projection: 'likesCount' }).lean();
     res.status(200).json({
       success: true,
       message: 'Comment unliked',
       isLiked: false,
-      likesCount: actualLikesCount
+      likesCount: Math.max(0, updated?.likesCount || 0)
     });
   } else {
-    // Like
     try {
-      // Check if already exists
-      let likeDoc = await Like.findOne({ user: req.user._id, comment: commentObjectId });
-      if (!likeDoc) {
-        likeDoc = await Like.create({
-          user: req.user._id,
-          comment: commentObjectId
-        });
-        console.log(`[Like] CREATED. ID: ${likeDoc._id} | User: ${req.user._id} | Comment: ${commentId}`);
-      }
-      
-      // Verification: actually find all likes for this comment
-      const allLikes = await Like.find({ comment: commentObjectId }).lean();
-      const actualCount = allLikes.length;
-      
-      // Force sync
-      await Comment.updateOne({ _id: commentObjectId }, { $set: { likesCount: actualCount } });
-      
-      console.log(`[Like] VERIFIED. Comment: ${commentId} | Total Likes: ${actualCount}`);
-      
-      res.status(200).json({
-        success: true,
-        message: 'Comment liked',
-        isLiked: true,
-        likesCount: actualCount
-      });
+      await Like.create({ user: req.user._id, comment: commentObjectId });
     } catch (err) {
-      if (err.code === 11000) {
-        const actualCount = await Like.countDocuments({ comment: commentObjectId });
-        return res.status(200).json({
-          success: true,
-          message: 'Comment liked',
-          isLiked: true,
-          likesCount: Math.max(actualCount, 1)
-        });
-      }
-      console.error('[Like] ERROR:', err);
-      throw err;
+      if (err.code !== 11000) throw err;
+      return res.status(200).json({ success: true, message: 'Comment liked', isLiked: true, likesCount: Math.max(comment.likesCount || 0, 1) });
     }
+    const updated = await Comment.findByIdAndUpdate(commentObjectId, { $inc: { likesCount: 1 } }, { new: true, projection: 'likesCount' }).lean();
+    res.status(200).json({
+      success: true,
+      message: 'Comment liked',
+      isLiked: true,
+      likesCount: updated?.likesCount || 1
+    });
   }
 });
 
@@ -610,7 +561,7 @@ export const deleteComment = asyncHandler(async (req, res) => {
       const io = getIO();
       const updatedReel = await Reel.findById(comment.reel).select('stats');
       if (updatedReel) {
-        io.emit('reel_stats_updated', {
+        io.to('reel:' + String(comment.reel.toString())).emit('reel_stats_updated', {
           reelId: comment.reel.toString(),
           stats: {
             likesCount: updatedReel.stats.likesCount,

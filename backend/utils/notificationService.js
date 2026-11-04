@@ -281,22 +281,14 @@ export const notifyFollowersLive = async ({ broadcasterId, liveStreamId, title }
     const followerIds = follows.map(f => f.follower.toString());
     console.log(`[LiveNotification] Notifying ${followerIds.length} followers of live stream ${liveStreamId}`);
 
-    // Create in-app notifications and trigger FCM for followers in batches
-    const batchPromises = followerIds.map(async (followerId) => {
-      try {
-        await createNotification({
-          recipient: followerId,
-          sender: broadcasterId,
-          type: 'live',
-          liveStream: liveStreamId,
-          text: `${broadcasterName} started a live video: "${title || 'Watch live now!'}"`
-        });
-      } catch (err) {
-        console.error(`[LiveNotification] Error notifying follower ${followerId}:`, err);
-      }
-    });
-
-    await Promise.allSettled(batchPromises);
+    // Batches of 100 so a big creator going live doesn't fire thousands of DB/FCM calls at once.
+    const text = `${broadcasterName} started a live video: "${title || 'Watch live now!'}"`;
+    for (let i = 0; i < followerIds.length; i += 100) {
+      await Promise.allSettled(followerIds.slice(i, i + 100).map(followerId =>
+        createNotification({ recipient: followerId, sender: broadcasterId, type: 'live', liveStream: liveStreamId, text })
+          .catch(err => console.error(`[LiveNotification] Error notifying follower ${followerId}:`, err))
+      ));
+    }
   } catch (error) {
     console.error('[LiveNotification] Error in notifyFollowersLive:', error);
   }

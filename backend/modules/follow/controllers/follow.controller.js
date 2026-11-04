@@ -22,11 +22,15 @@ export const followUser = asyncHandler(async (req, res) => {
 
   // Check if user exists
   const userToFollow = await User.findById(userId);
-  if (!userToFollow) {
+  if (!userToFollow || !userToFollow.isActive) {
     return res.status(404).json({
       success: false,
       message: 'User not found'
     });
+  }
+
+  if (await User.isBlockedBetween(req.user._id, userToFollow._id)) {
+    return res.status(403).json({ success: false, message: 'You cannot follow this user' });
   }
 
   // Check if already following
@@ -155,18 +159,7 @@ export const getFollowers = asyncHandler(async (req, res) => {
     .limit(limit)
     .populate('follower', 'username fullName profilePicture isVerified stats');
 
-  const followers = await Promise.all(follows.map(async follow => {
-    const follower = follow.follower.toJSON();
-    // Check if current user is following this follower
-    if (req.user) {
-      const followStatus = await Follow.findOne({
-        follower: req.user._id,
-        following: follower._id
-      });
-      follower.isFollowing = !!followStatus && followStatus.status === 'accepted';
-    }
-    return follower;
-  }));
+  const followers = await markFollowing(follows.map(f => f.follower), req.user);
 
   const total = await Follow.countDocuments({ following: userId, status: 'accepted' });
 
@@ -181,6 +174,16 @@ export const getFollowers = asyncHandler(async (req, res) => {
     }
   });
 });
+
+// One Follow query for the whole page instead of one per row; skips deleted users.
+const markFollowing = async (people, me) => {
+  const list = people.filter(Boolean).map(p => p.toJSON());
+  if (!me) return list;
+  const mine = await Follow.find({ follower: me._id, following: { $in: list.map(p => p._id) }, status: 'accepted' }).select('following').lean();
+  const set = new Set(mine.map(f => String(f.following)));
+  list.forEach(p => { p.isFollowing = set.has(String(p._id)); });
+  return list;
+};
 
 /**
  * @desc    Get user's following
@@ -232,18 +235,7 @@ export const getFollowing = asyncHandler(async (req, res) => {
     .limit(limit)
     .populate('following', 'username fullName profilePicture isVerified stats');
 
-  const following = await Promise.all(follows.map(async follow => {
-    const user = follow.following.toJSON();
-    // Check if current user is following this user
-    if (req.user) {
-      const followStatus = await Follow.findOne({
-        follower: req.user._id,
-        following: user._id
-      });
-      user.isFollowing = !!followStatus && followStatus.status === 'accepted';
-    }
-    return user;
-  }));
+  const following = await markFollowing(follows.map(f => f.following), req.user);
 
   const total = await Follow.countDocuments({ follower: userId, status: 'accepted' });
 

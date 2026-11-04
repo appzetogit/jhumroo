@@ -1,8 +1,15 @@
 import { Server } from 'socket.io';
-import jwt from 'jsonwebtoken';
 import User from '../models/User.model.js';
+import Conversation from '../models/Conversation.model.js';
+import { verifyAccessToken } from '../middleware/auth.js';
 import LiveStream from '../models/LiveStream.model.js';
 import LiveComment from '../models/LiveComment.model.js';
+import { createAdapter } from '@socket.io/redis-adapter';
+import { getRedis } from './redis.js';
+
+// With REDIS_URL, API processes (PM2 cluster) emit through Redis to the single socket process,
+// and online presence lives in a Redis set so any process can read it.
+const ONLINE_KEY = 'online_users';
 
 let io;
 
@@ -51,6 +58,13 @@ export const initSocket = (server) => {
     pingInterval: 25000
   });
 
+  const redis = getRedis();
+  if (redis) {
+    io.adapter(createAdapter(redis, redis.duplicate()));
+    // Only the process that owns the connections resets presence on boot (stale after a restart).
+    if (process.env.ROLE !== 'api') redis.del(ONLINE_KEY).catch(() => {});
+  }
+
   // Socket.io authentication middleware
   io.use(async (socket, next) => {
     try {
@@ -61,13 +75,16 @@ export const initSocket = (server) => {
       }
 
       // Verify token
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      
+      const decoded = verifyAccessToken(token);
+
       // Get user from database
       const user = await User.findById(decoded.id).select('-otp -deviceTokens');
-      
+
       if (!user) {
         return next(new Error('Authentication error: User not found'));
+      }
+      if (!user.isActive || user.isBanned) {
+        return next(new Error('Authentication error: Account is inactive or banned'));
       }
 
       // Attach user to socket
@@ -84,14 +101,36 @@ export const initSocket = (server) => {
   // Connection handler
   io.on('connection', (socket) => {
     const userId = socket.userId;
+
+    // Guard every handler below: a malformed client event (missing payload, wrong types) must never
+    // throw out of a listener — a sync throw or rejected promise there would take the whole server down.
+    const rawOn = socket.on.bind(socket);
+    socket.on = (event, handler) => rawOn(event, (payload, ...rest) => {
+      const safePayload = (payload && typeof payload === 'object') || event === 'join_conversation' || event === 'leave_conversation' || event === 'disconnect' || event === 'error'
+        ? payload : {};
+      try {
+        const r = handler(safePayload, ...rest);
+        if (r && typeof r.catch === 'function') r.catch((err) => console.error(`[Socket] ${event} failed:`, err.message));
+      } catch (err) {
+        console.error(`[Socket] ${event} failed:`, err.message);
+      }
+    });
     console.log(`✅ User connected: ${userId} (Socket: ${socket.id})`);
 
     // Add user to online users
     onlineUsers.set(userId, socket.id);
     userSockets.set(socket.id, userId);
+    getRedis()?.sadd(ONLINE_KEY, userId).catch(() => {});
 
     // Join user's personal room (for private messages)
     socket.join(userId);
+
+    // Live like/comment counts: the client says which reel is on screen; stats go only to that room.
+    socket.on('watch_reel', (reelId) => {
+      if (socket.data.watchReel) socket.leave(`reel:${socket.data.watchReel}`);
+      socket.data.watchReel = typeof reelId === 'string' && reelId.length <= 64 ? reelId : null;
+      if (socket.data.watchReel) socket.join(`reel:${socket.data.watchReel}`);
+    });
 
     // Broadcast user is online to their contacts if active status is enabled
     if (socket.user?.activeStatusPrivacy !== 'no_one') {
@@ -138,7 +177,10 @@ export const initSocket = (server) => {
     /**
      * Handle join conversation room
      */
-    socket.on('join_conversation', (conversationId) => {
+    socket.on('join_conversation', async (conversationId) => {
+      // Only participants may listen to a conversation's room
+      const isMember = await Conversation.exists({ _id: conversationId, participants: userId }).catch(() => null);
+      if (!isMember) return;
       socket.join(`conversation_${conversationId}`);
       console.log(`User ${userId} joined conversation ${conversationId}`);
     });
@@ -188,6 +230,9 @@ export const initSocket = (server) => {
      */
     socket.on('broadcaster_register', async ({ liveId }) => {
       if (!liveId) return;
+      // Only the stream's real owner can become its broadcaster (else anyone could hijack a live).
+      const stream = await LiveStream.findById(liveId).select('broadcaster status').lean().catch(() => null);
+      if (!stream || stream.broadcaster?.toString() !== userId || stream.status === 'ended') return;
       socket.join(`live_${liveId}`);
 
       let room = liveRooms.get(liveId);
@@ -216,6 +261,11 @@ export const initSocket = (server) => {
      */
     socket.on('join_live_room', async ({ liveId }) => {
       if (!liveId) return;
+      // Only real, running lives — otherwise random ids would pile up empty rooms in memory.
+      if (!liveRooms.has(liveId)) {
+        const live = await LiveStream.exists({ _id: liveId, status: 'live' }).catch(() => null);
+        if (!live) return;
+      }
       socket.join(`live_${liveId}`);
 
       let room = liveRooms.get(liveId);
@@ -329,8 +379,13 @@ export const initSocket = (server) => {
     /**
      * WebRTC Signaling: Live Offer (Broadcaster -> Viewer)
      */
+    // Signaling is only relayed between a live's registered broadcaster and its viewers,
+    // so nobody can push a fake stream/answer to sockets of a live they don't own.
+    const isBroadcasterOf = (liveId) => liveRooms.get(liveId)?.broadcasterSocketId === socket.id;
+    const isViewerOf = (liveId, sid) => !!liveRooms.get(liveId)?.viewers.has(sid);
+
     socket.on('live_offer', ({ toViewerSocketId, sdp, liveId }) => {
-      if (toViewerSocketId && sdp) {
+      if (toViewerSocketId && sdp && isBroadcasterOf(liveId) && isViewerOf(liveId, toViewerSocketId)) {
         io.to(toViewerSocketId).emit('live_offer', {
           fromBroadcasterSocketId: socket.id,
           sdp,
@@ -343,7 +398,8 @@ export const initSocket = (server) => {
      * WebRTC Signaling: Live Answer (Viewer -> Broadcaster)
      */
     socket.on('live_answer', ({ toBroadcasterSocketId, sdp, liveId }) => {
-      if (toBroadcasterSocketId && sdp) {
+      if (toBroadcasterSocketId && sdp && isViewerOf(liveId, socket.id) &&
+          liveRooms.get(liveId)?.broadcasterSocketId === toBroadcasterSocketId) {
         io.to(toBroadcasterSocketId).emit('live_answer', {
           fromViewerSocketId: socket.id,
           sdp,
@@ -356,7 +412,12 @@ export const initSocket = (server) => {
      * WebRTC Signaling: ICE Candidate (Bidirectional)
      */
     socket.on('live_ice_candidate', ({ targetSocketId, candidate, liveId }) => {
-      if (targetSocketId && candidate) {
+      const room = liveRooms.get(liveId);
+      const allowed = room && (
+        (room.broadcasterSocketId === socket.id && room.viewers.has(targetSocketId)) ||
+        (room.viewers.has(socket.id) && room.broadcasterSocketId === targetSocketId)
+      );
+      if (targetSocketId && candidate && allowed) {
         io.to(targetSocketId).emit('live_ice_candidate', {
           fromSocketId: socket.id,
           candidate,
@@ -369,7 +430,8 @@ export const initSocket = (server) => {
      * Real-time Live Comments
      */
     socket.on('send_live_comment', async ({ liveId, text }) => {
-      if (!liveId || !text || !text.trim()) return;
+      if (!liveId || typeof text !== 'string' || !text.trim() || text.length > 300) return;
+      if (!socket.rooms.has(`live_${liveId}`)) return; // must actually be in this live
 
       try {
         const comment = await LiveComment.create({
@@ -462,6 +524,7 @@ export const initSocket = (server) => {
       // Remove from online users
       onlineUsers.delete(userId);
       userSockets.delete(socket.id);
+      getRedis()?.srem(ONLINE_KEY, userId).catch(() => {});
 
       // Clean up any live rooms this socket was in
       if (socketToLives.has(socket.id)) {
@@ -546,6 +609,15 @@ export const isUserOnline = (userId) => {
   return onlineUsers.has(userId);
 };
 
+/** Which of these user ids are online — works from any process (Redis when configured). */
+export const getOnlineSet = async (userIds) => {
+  const ids = userIds.map(String);
+  const redis = getRedis();
+  if (!redis || !ids.length) return new Set(ids.filter((id) => onlineUsers.has(id)));
+  const flags = await redis.smismember(ONLINE_KEY, ...ids);
+  return new Set(ids.filter((_, i) => flags[i]));
+};
+
 /**
  * Get online users count
  */
@@ -563,12 +635,11 @@ export const getOnlineUserIds = () => {
 /**
  * Send event to specific user
  */
+// Every socket joins its userId room, so a room emit reaches the user from any process (no-op if offline).
 export const sendToUser = (userId, event, data) => {
-  if (io && onlineUsers.has(userId)) {
-    io.to(userId).emit(event, data);
-    return true;
-  }
-  return false;
+  if (!io) return false;
+  io.to(String(userId)).emit(event, data);
+  return true;
 };
 
 /**
@@ -577,11 +648,7 @@ export const sendToUser = (userId, event, data) => {
 export const sendToUsers = (userIds, event, data) => {
   if (!io) return;
   
-  userIds.forEach(userId => {
-    if (onlineUsers.has(userId)) {
-      io.to(userId).emit(event, data);
-    }
-  });
+  if (userIds.length) io.to(userIds.map(String)).emit(event, data);
 };
 
 export default { initSocket, getIO, isUserOnline, getOnlineUsersCount, sendToUser, sendToUsers };

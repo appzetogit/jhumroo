@@ -17,6 +17,10 @@ const premiumSubscriptionSchema = new mongoose.Schema(
       type: String,
       default: 'INR'
     },
+    plan: {
+      type: String,
+      default: 'monthly'
+    },
     planDurationDays: {
       type: Number,
       default: 30

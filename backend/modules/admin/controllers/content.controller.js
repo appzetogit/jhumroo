@@ -6,6 +6,7 @@ import Like from '../../../models/Like.model.js';
 import SystemSetting from '../../../models/SystemSetting.model.js';
 import { asyncHandler } from '../../../middleware/errorHandler.js';
 import { deleteFile } from '../../../config/cloudinary.js';
+import { escapeRegex } from '../../../utils/regex.js';
 
 /**
  * @desc    Get all reels with filters and pagination
@@ -27,8 +28,8 @@ export const getAllReels = asyncHandler(async (req, res) => {
   // Search by caption or hashtags
   if (search) {
     query.$or = [
-      { caption: { $regex: search, $options: 'i' } },
-      { hashtags: { $regex: search, $options: 'i' } }
+      { caption: { $regex: escapeRegex(search), $options: 'i' } },
+      { hashtags: { $regex: escapeRegex(search), $options: 'i' } }
     ];
   }
 
@@ -182,7 +183,7 @@ export const getAllComments = asyncHandler(async (req, res) => {
   const query = {};
 
   if (search) {
-    query.text = { $regex: search, $options: 'i' };
+    query.text = { $regex: escapeRegex(search), $options: 'i' };
   }
 
   if (reelId) {

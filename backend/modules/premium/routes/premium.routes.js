@@ -9,7 +9,7 @@ import {
   deleteSubscriptionAdmin
 } from '../controllers/premium.controller.js';
 import { protect, optionalAuth } from '../../../middleware/auth.js';
-import { protectAdmin } from '../../../middleware/adminAuth.js';
+import { protectAdmin, checkPermission } from '../../../middleware/adminAuth.js';
 
 const router = express.Router();
 
@@ -20,8 +20,8 @@ router.post('/verify-payment', protect, verifyPremiumPayment);
 
 // Admin endpoints
 router.get('/admin/pricing', protectAdmin, getPricingAdmin);
-router.put('/admin/pricing', protectAdmin, updatePricingAdmin);
+router.put('/admin/pricing', protectAdmin, checkPermission('manage_settings'), updatePricingAdmin);
 router.get('/admin/users', protectAdmin, getPremiumUsersAdmin);
-router.delete('/admin/subscriptions/:id', protectAdmin, deleteSubscriptionAdmin);
+router.delete('/admin/subscriptions/:id', protectAdmin, checkPermission('manage_settings'), deleteSubscriptionAdmin);
 
 export default router;

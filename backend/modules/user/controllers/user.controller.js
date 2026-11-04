@@ -8,9 +8,10 @@ import WatchAnalytics from '../../../models/WatchAnalytics.model.js';
 import { createAdminAlert } from '../../../utils/adminAlertService.js';
 import { asyncHandler } from '../../../middleware/errorHandler.js';
 import { uploadImage, deleteFile } from '../../../config/cloudinary.js';
-import { getFileUrl } from '../../../utils/s3.js';
+import { getFileUrl, deleteFromS3 } from '../../../utils/s3.js';
 import fs from 'fs';
 import { isUserAllowedToViewReels } from '../../../utils/geoHelper.js';
+import { escapeRegex } from '../../../utils/regex.js';
 
 /**
  * @desc    Get user profile by username
@@ -63,8 +64,9 @@ export const getUserProfile = asyncHandler(async (req, res) => {
     });
   }
 
-  // Sync stats (End-to-end reliability)
-  // 1. Re-calculate actual stats in parallel on MongoDB server-side using counts/aggregations
+  // Sync stats (End-to-end reliability) — only when the owner views their own profile.
+  // Counters are maintained by $inc hooks; this just repairs rare drift without taxing every profile view.
+  if (req.user && String(req.user._id) === String(user._id)) {
   const [
     actualReelsCount,
     likesAggregation,
@@ -107,6 +109,7 @@ export const getUserProfile = asyncHandler(async (req, res) => {
     user.stats.followersCount = actualFollowersCount;
     user.stats.followingCount = actualFollowingCount;
   }
+  }
 
   // Check follow relationships in parallel if logged in
   let isFollowing = false;
@@ -135,10 +138,20 @@ export const getUserProfile = asyncHandler(async (req, res) => {
   // Get the incoming follow status
   const incomingFollowStatus = user.incomingFollowStatus;
 
+  // Public endpoint: only the owner sees their own private/contact data.
+  const publicUser = user.toJSON();
+  if (!req.user || req.user._id.toString() !== user._id.toString()) {
+    for (const f of ['phoneNumber', 'countryCode', 'email', 'dateOfBirth', 'blockedUsers', 'blockedCommenters',
+      'savedAudios', 'notificationSettings', 'banReason', 'bannedAt', 'banExpiresAt', 'lastLoginAt',
+      'interests', 'district', 'premiumPlan', 'isOnboarded']) {
+      delete publicUser[f];
+    }
+  }
+
   res.status(200).json({
     success: true,
     user: {
-      ...user.toJSON(),
+      ...publicUser,
       isFollowing,
       followStatus,
       isFollower,
@@ -308,7 +321,7 @@ export const uploadProfilePicture = asyncHandler(async (req, res) => {
 export const getUserReels = asyncHandler(async (req, res) => {
   const { username } = req.params;
   const page = parseInt(req.query.page) || 1;
-  const limit = parseInt(req.query.limit) || 20;
+  const limit = Math.min(parseInt(req.query.limit) || 20, 50);
   const skip = (page - 1) * limit;
 
   const user = await User.findOne({ username: username.toLowerCase() });
@@ -445,7 +458,7 @@ export const getUserReels = asyncHandler(async (req, res) => {
  */
 export const getLikedReels = asyncHandler(async (req, res) => {
   const page = parseInt(req.query.page) || 1;
-  const limit = parseInt(req.query.limit) || 20;
+  const limit = Math.min(parseInt(req.query.limit) || 20, 50);
   const skip = (page - 1) * limit;
 
   const likes = await Like.find({ user: req.user._id })
@@ -514,7 +527,7 @@ export const getLikedReels = asyncHandler(async (req, res) => {
  */
 export const getSavedReels = asyncHandler(async (req, res) => {
   const page = parseInt(req.query.page) || 1;
-  const limit = parseInt(req.query.limit) || 20;
+  const limit = Math.min(parseInt(req.query.limit) || 20, 50);
   const skip = (page - 1) * limit;
   const collection = req.query.collection;
 
@@ -591,6 +604,21 @@ export const getSavedReels = asyncHandler(async (req, res) => {
   });
 });
 
+// One Follow query for the whole list instead of one per user.
+const withFollowStatus = async (users, me) => {
+  const follows = me
+    ? await Follow.find({ follower: me._id, following: { $in: users.map(u => u._id) } }).select('following status').lean()
+    : [];
+  const statusById = new Map(follows.map(f => [String(f.following), f.status]));
+  return users.map(u => {
+    const userObj = u.toJSON();
+    const status = statusById.get(String(u._id)) || null;
+    userObj.isFollowing = status === 'accepted';
+    userObj.followStatus = status;
+    return userObj;
+  });
+};
+
 /**
  * @desc    Search users
  * @route   GET /api/users/search
@@ -599,7 +627,7 @@ export const getSavedReels = asyncHandler(async (req, res) => {
 export const searchUsers = asyncHandler(async (req, res) => {
   const { q } = req.query;
   const page = parseInt(req.query.page) || 1;
-  const limit = parseInt(req.query.limit) || 20;
+  const limit = Math.min(parseInt(req.query.limit) || 20, 50);
   const skip = (page - 1) * limit;
 
   if (!q || q.trim() === '') {
@@ -611,8 +639,8 @@ export const searchUsers = asyncHandler(async (req, res) => {
 
   const queryObj = {
     $or: [
-      { username: { $regex: q, $options: 'i' } },
-      { fullName: { $regex: q, $options: 'i' } }
+      { username: { $regex: escapeRegex(q), $options: 'i' } },
+      { fullName: { $regex: escapeRegex(q), $options: 'i' } }
     ],
     isActive: true
   };
@@ -625,22 +653,7 @@ export const searchUsers = asyncHandler(async (req, res) => {
 
   const total = await User.countDocuments(queryObj);
 
-  // Add isFollowing status
-  const userList = await Promise.all(users.map(async (u) => {
-    const userObj = u.toJSON();
-    if (req.user) {
-      const follow = await Follow.findOne({
-        follower: req.user._id,
-        following: u._id
-      });
-      userObj.isFollowing = !!follow && follow.status === 'accepted';
-      userObj.followStatus = follow?.status || null;
-    } else {
-      userObj.isFollowing = false;
-      userObj.followStatus = null;
-    }
-    return userObj;
-  }));
+  const userList = await withFollowStatus(users, req.user);
 
   res.status(200).json({
     success: true,
@@ -660,7 +673,7 @@ export const searchUsers = asyncHandler(async (req, res) => {
  * @access  Private
  */
 export const getSuggestedUsers = asyncHandler(async (req, res) => {
-  const limit = parseInt(req.query.limit) || 10;
+  const limit = Math.min(parseInt(req.query.limit) || 10, 50);
 
   let excludeIds = [];
   
@@ -680,22 +693,7 @@ export const getSuggestedUsers = asyncHandler(async (req, res) => {
     .sort({ 'stats.followersCount': -1 })
     .limit(limit);
 
-  // Add isFollowing status
-  const userList = await Promise.all(users.map(async (u) => {
-    const userObj = u.toJSON();
-    if (req.user) {
-      const follow = await Follow.findOne({
-        follower: req.user._id,
-        following: u._id
-      });
-      userObj.isFollowing = !!follow && follow.status === 'accepted';
-      userObj.followStatus = follow?.status || null;
-    } else {
-      userObj.isFollowing = false;
-      userObj.followStatus = null;
-    }
-    return userObj;
-  }));
+  const userList = await withFollowStatus(users, req.user);
 
   res.status(200).json({
     success: true,
@@ -773,7 +771,7 @@ export const getMentionSuggestions = asyncHandler(async (req, res) => {
 
   // 1. Find users matching the query
   const queryObj = {
-    username: { $regex: q.startsWith('@') ? q.slice(1) : q, $options: 'i' },
+    username: { $regex: escapeRegex(q.startsWith('@') ? q.slice(1) : q), $options: 'i' },
     isActive: true,
     _id: { $ne: currentUserId }
   };
@@ -932,7 +930,12 @@ export const deleteAccount = asyncHandler(async (req, res) => {
   for (const reel of userReels) {
     if (reel.video && reel.video.publicId) {
       try {
-        await deleteFile(reel.video.publicId, 'video');
+        // Reels live on S3 now (publicId = S3 key); only legacy reels are on Cloudinary.
+        if (/^(uploads|reels)\//.test(reel.video.publicId)) {
+          await deleteFromS3(reel.video.publicId);
+        } else {
+          await deleteFile(reel.video.publicId, 'video');
+        }
       } catch (err) {
         console.error(`Account Delete: Cloudinary video delete failed for reel ${reel._id}:`, err.message);
       }
@@ -981,6 +984,11 @@ export const deleteAccount = asyncHandler(async (req, res) => {
 
   // 10. Instead of hard deleting, soft delete the user by setting isActive to false
   req.user.isActive = false;
+  // Kill every session and push target of the deleted account.
+  req.user.refreshToken = undefined;
+  req.user.refreshTokens = [];
+  req.user.fcmToken = '';
+  req.user.fcmTokenMobile = '';
   await req.user.save({ validateBeforeSave: false });
 
   res.status(200).json({
@@ -1204,9 +1212,9 @@ export const recordScreenTimeHeartbeat = asyncHandler(async (req, res) => {
     await WatchAnalytics.create({
       user: req.user._id,
       reel: latestReel._id,
-      watchDuration: Math.max(parseFloat(seconds) || 30, 1),
+      watchDuration: Math.min(Math.max(parseFloat(seconds) || 30, 1), 300),
       completionPercentage: 100,
-      swipeTiming: parseFloat(seconds) || 30
+      swipeTiming: Math.min(Math.max(parseFloat(seconds) || 30, 1), 300)
     });
   }
 
@@ -1223,7 +1231,7 @@ export const recordScreenTimeHeartbeat = asyncHandler(async (req, res) => {
  */
 export const getWatchHistory = asyncHandler(async (req, res) => {
   const page = parseInt(req.query.page) || 1;
-  const limit = parseInt(req.query.limit) || 30;
+  const limit = Math.min(parseInt(req.query.limit) || 30, 50);
   const skip = (page - 1) * limit;
 
   // Aggregate user's watched reels grouped by unique reel ID to get the latest watchedAt

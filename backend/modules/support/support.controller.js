@@ -12,6 +12,9 @@ export const createSupportRequest = async (req, res) => {
     if (!name || !email || !phoneNumber || !reason) {
       return res.status(400).json({ success: false, message: 'All fields are required' });
     }
+    if ([name, email, phoneNumber, reason].some((v) => typeof v !== 'string') || name.length > 60 || reason.length > 1000) {
+      return res.status(400).json({ success: false, message: 'Invalid or too long input' });
+    }
 
     // Name check
     const nameRegex = /^[a-zA-Z]{2,}(?:\s+[a-zA-Z]+)*$/;

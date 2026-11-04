@@ -67,6 +67,10 @@ export const createAdmin = asyncHandler(async (req, res) => {
   const { email, password, fullName, role, permissions, phoneNumber } = req.body;
 
   // Validation
+  if (typeof password === 'string' && password.length < 8) {
+    return res.status(400).json({ success: false, message: 'Password must be at least 8 characters' });
+  }
+
   if (!email || !password || !fullName || !role) {
     return res.status(400).json({
       success: false,

@@ -3,25 +3,43 @@ import SystemSetting from '../../../models/SystemSetting.model.js';
 import PremiumSubscription from '../../../models/PremiumSubscription.model.js';
 import razorpayService from '../../../services/razorpay.service.js';
 import { asyncHandler } from '../../../middleware/errorHandler.js';
+import { getIO } from '../../../config/socket.js';
 
 const DEFAULT_PREMIUM_PRICE = 199; // Default ₹199 per month
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+// Plan id → duration + the SystemSetting price key (monthlyPrice kept for existing data).
+export const PREMIUM_PLANS = {
+  weekly: { label: '1 Week', days: 7, priceKey: 'weeklyPrice', defaultPrice: 59 },
+  monthly: { label: '1 Month', days: 30, priceKey: 'monthlyPrice', defaultPrice: DEFAULT_PREMIUM_PRICE },
+  halfyearly: { label: '6 Months', days: 180, priceKey: 'halfYearlyPrice', defaultPrice: 999 }
+};
+
+/** Premium counts only until premiumExpiresAt; isPremium alone is never enough. */
+export const isPremiumActive = (u, now = new Date()) =>
+  Boolean(u?.isPremium && u?.premiumExpiresAt && new Date(u.premiumExpiresAt) > now);
+
+/** New expiry after buying `days`: stacks on top of a still-running plan, else starts now. */
+export const extendPremium = (u, days, now = new Date()) => {
+  const base = isPremiumActive(u, now) ? new Date(u.premiumExpiresAt) : now;
+  return new Date(base.getTime() + days * DAY_MS);
+};
 
 /**
  * Helper to fetch premium pricing from SystemSetting
  */
 export const getPremiumPricing = async () => {
   const setting = await SystemSetting.findOne({ key: 'premium_pricing' });
-  if (setting && setting.value && typeof setting.value.monthlyPrice === 'number') {
-    return {
-      monthlyPrice: setting.value.monthlyPrice,
-      currency: setting.value.currency || 'INR'
-    };
+  const v = setting?.value || {};
+  const pricing = { currency: v.currency || 'INR' };
+  for (const p of Object.values(PREMIUM_PLANS)) {
+    pricing[p.priceKey] = typeof v[p.priceKey] === 'number' ? v[p.priceKey] : p.defaultPrice;
   }
-  return {
-    monthlyPrice: DEFAULT_PREMIUM_PRICE,
-    currency: 'INR'
-  };
+  return pricing;
 };
+
+const plansList = (pricing) =>
+  Object.entries(PREMIUM_PLANS).map(([id, p]) => ({ id, label: p.label, days: p.days, price: pricing[p.priceKey] }));
 
 /**
  * @desc    Get current premium plan details & user status
@@ -38,11 +56,7 @@ export const getPlanDetails = asyncHandler(async (req, res) => {
   };
 
   if (req.user) {
-    const isStillActive = Boolean(
-      req.user.isPremium && 
-      req.user.premiumExpiresAt && 
-      new Date(req.user.premiumExpiresAt) > new Date()
-    );
+    const isStillActive = isPremiumActive(req.user);
 
     let daysLeft = 0;
     if (isStillActive) {
@@ -64,6 +78,7 @@ export const getPlanDetails = asyncHandler(async (req, res) => {
       durationDays: 30,
       monthlyPrice: pricing.monthlyPrice,
       currency: pricing.currency,
+      plans: plansList(pricing),
       features: [
         'Go Live with followers and meetups online',
         'Record up to 2-minute long videos',
@@ -82,8 +97,13 @@ export const getPlanDetails = asyncHandler(async (req, res) => {
  */
 export const createPremiumOrder = asyncHandler(async (req, res) => {
   const userId = req.user._id;
+  const planId = req.body?.plan || 'monthly';
+  const plan = PREMIUM_PLANS[planId];
+  if (!plan) {
+    return res.status(400).json({ success: false, message: 'Invalid premium plan.' });
+  }
   const pricing = await getPremiumPricing();
-  const amount = pricing.monthlyPrice;
+  const amount = pricing[plan.priceKey];
 
   // Create order via Razorpay service
   const receipt = `prem_${userId.toString().slice(-6)}_${Date.now().toString().slice(-6)}`;
@@ -94,23 +114,22 @@ export const createPremiumOrder = asyncHandler(async (req, res) => {
     notes: {
       userId: userId.toString(),
       type: 'premium_subscription',
-      durationDays: 30
+      plan: planId,
+      durationDays: plan.days
     }
   });
 
   // Calculate prospective start & end date
   const now = new Date();
-  const baseDate = (req.user.isPremium && req.user.premiumExpiresAt && new Date(req.user.premiumExpiresAt) > now)
-    ? new Date(req.user.premiumExpiresAt)
-    : now;
-  const prospectiveEndDate = new Date(baseDate.getTime() + 30 * 24 * 60 * 60 * 1000);
+  const prospectiveEndDate = extendPremium(req.user, plan.days, now);
 
   // Create pending subscription record
   const subscription = await PremiumSubscription.create({
     user: userId,
     amount,
     currency: pricing.currency,
-    planDurationDays: 30,
+    plan: planId,
+    planDurationDays: plan.days,
     startDate: now,
     endDate: prospectiveEndDate,
     status: 'pending',
@@ -123,7 +142,8 @@ export const createPremiumOrder = asyncHandler(async (req, res) => {
     subscriptionId: subscription._id,
     razorpayKeyId: process.env.RAZORPAY_KEY_ID,
     amount,
-    currency: pricing.currency
+    currency: pricing.currency,
+    plan: { id: planId, label: plan.label, days: plan.days }
   });
 });
 
@@ -152,7 +172,7 @@ export const verifyPremiumPayment = asyncHandler(async (req, res) => {
 
   if (!isSignatureValid) {
     if (subscriptionId) {
-      await PremiumSubscription.findByIdAndUpdate(subscriptionId, { status: 'failed' });
+      await PremiumSubscription.findOneAndUpdate({ _id: subscriptionId, user: userId, status: 'pending' }, { status: 'failed' });
     }
     return res.status(400).json({
       success: false,
@@ -160,14 +180,30 @@ export const verifyPremiumPayment = asyncHandler(async (req, res) => {
     });
   }
 
-  // Find or link subscription
-  let subscription = null;
-  if (subscriptionId) {
-    subscription = await PremiumSubscription.findById(subscriptionId);
+  // Look up by the signed order id (not the client-sent subscriptionId), so a paid 1-week
+  // order can't be used to activate a different, pricier pending plan.
+  let subscription = await PremiumSubscription.findOne({ razorpayOrderId: razorpay_order_id, user: userId });
+  if (subscription?.status === 'active') {
+    return res.status(400).json({ success: false, message: 'This payment has already been applied.' });
   }
+  // No pending premium order of THIS user behind the signature (e.g. an ad order, or someone
+  // else's order) → never grant premium.
   if (!subscription) {
-    subscription = await PremiumSubscription.findOne({ razorpayOrderId: razorpay_order_id });
+    return res.status(400).json({ success: false, message: 'No matching premium order found for this payment.' });
   }
+  const planId = subscription.plan || 'monthly';
+  const durationDays = subscription.planDurationDays || 30;
+
+  // Atomically claim the order so two parallel verify calls can't both extend premium.
+  const claimed = await PremiumSubscription.findOneAndUpdate(
+    { _id: subscription._id, status: { $ne: 'active' } },
+    { status: 'active', razorpayPaymentId: razorpay_payment_id, razorpaySignature: razorpay_signature },
+    { new: true }
+  );
+  if (!claimed) {
+    return res.status(400).json({ success: false, message: 'This payment has already been applied.' });
+  }
+  subscription = claimed;
 
   const user = await User.findById(userId);
   if (!user) {
@@ -176,16 +212,12 @@ export const verifyPremiumPayment = asyncHandler(async (req, res) => {
 
   // Calculate new end date (extend if already active, or start 30 days from now)
   const now = new Date();
-  const currentExpiry = user.premiumExpiresAt ? new Date(user.premiumExpiresAt) : null;
-  const baseDate = (user.isPremium && currentExpiry && currentExpiry > now)
-    ? currentExpiry
-    : now;
-  const newEndDate = new Date(baseDate.getTime() + 30 * 24 * 60 * 60 * 1000);
+  const newEndDate = extendPremium(user, durationDays, now);
 
   // Update User
   user.isPremium = true;
   user.premiumExpiresAt = newEndDate;
-  user.premiumPlan = 'monthly';
+  user.premiumPlan = planId;
   if (!user.isOnboarded) {
     user.isOnboarded = true;
   }
@@ -195,26 +227,8 @@ export const verifyPremiumPayment = asyncHandler(async (req, res) => {
   await user.save();
 
   // Update Subscription record
-  if (subscription) {
-    subscription.status = 'active';
-    subscription.endDate = newEndDate;
-    subscription.razorpayPaymentId = razorpay_payment_id;
-    subscription.razorpaySignature = razorpay_signature;
-    await subscription.save();
-  } else {
-    subscription = await PremiumSubscription.create({
-      user: userId,
-      amount: DEFAULT_PREMIUM_PRICE,
-      currency: 'INR',
-      planDurationDays: 30,
-      startDate: now,
-      endDate: newEndDate,
-      status: 'active',
-      razorpayOrderId: razorpay_order_id,
-      razorpayPaymentId: razorpay_payment_id,
-      razorpaySignature: razorpay_signature
-    });
-  }
+  subscription.endDate = newEndDate;
+  await subscription.save();
 
   res.status(200).json({
     success: true,
@@ -249,50 +263,55 @@ export const getPricingAdmin = asyncHandler(async (req, res) => {
   const pricing = await getPremiumPricing();
   res.status(200).json({
     success: true,
-    pricing
+    pricing,
+    plans: plansList(pricing)
   });
 });
 
 /**
- * @desc    Update premium monthly price (Admin)
+ * @desc    Update premium plan prices (Admin). Body: { weeklyPrice, monthlyPrice, halfYearlyPrice };
+ *          any key left out keeps its current value.
  * @route   PUT /api/premium/admin/pricing
  * @access  Private/Admin
  */
 export const updatePricingAdmin = asyncHandler(async (req, res) => {
-  const { monthlyPrice } = req.body;
+  const current = await getPremiumPricing();
+  const next = { ...current };
 
-  if (monthlyPrice === undefined || monthlyPrice === null) {
-    return res.status(400).json({
-      success: false,
-      message: 'Please provide monthlyPrice.'
-    });
-  }
-
-  const priceNum = parseFloat(monthlyPrice);
-  if (isNaN(priceNum) || priceNum < 0) {
-    return res.status(400).json({
-      success: false,
-      message: 'Monthly price must be a valid positive number.'
-    });
+  for (const p of Object.values(PREMIUM_PLANS)) {
+    const raw = req.body?.[p.priceKey];
+    if (raw === undefined || raw === null || raw === '') continue;
+    const num = parseFloat(raw);
+    if (isNaN(num) || num < 1) {
+      return res.status(400).json({
+        success: false,
+        message: `${p.label} price must be a valid positive number.`
+      });
+    }
+    next[p.priceKey] = Math.round(num);
   }
 
   const updatedSetting = await SystemSetting.findOneAndUpdate(
     { key: 'premium_pricing' },
     {
       key: 'premium_pricing',
-      value: {
-        monthlyPrice: Math.round(priceNum),
-        currency: 'INR',
-        updatedAt: new Date()
-      }
+      value: { ...next, currency: 'INR', updatedAt: new Date() }
     },
     { upsert: true, new: true }
   );
 
+  // Push new prices to every open Premium screen right away.
+  try {
+    getIO().emit('premium_pricing_updated', { plans: plansList(next) });
+  } catch (err) {
+    console.error('[Premium] pricing broadcast failed:', err.message);
+  }
+
   res.status(200).json({
     success: true,
-    message: 'Premium monthly price updated successfully.',
-    pricing: updatedSetting.value
+    message: 'Premium plan prices updated successfully.',
+    pricing: updatedSetting.value,
+    plans: plansList(next)
   });
 });
 
@@ -404,7 +423,7 @@ export const deleteSubscriptionAdmin = asyncHandler(async (req, res) => {
       await User.findByIdAndUpdate(userId, {
         isPremium: true,
         premiumExpiresAt: remainingActiveSub.endDate,
-        premiumPlan: 'monthly'
+        premiumPlan: remainingActiveSub.plan || 'monthly'
       });
     } else {
       await User.findByIdAndUpdate(userId, {

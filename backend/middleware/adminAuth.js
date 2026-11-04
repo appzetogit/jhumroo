@@ -1,5 +1,5 @@
-import jwt from 'jsonwebtoken';
 import Admin from '../models/Admin.model.js';
+import { verifyAccessToken } from './auth.js';
 
 /**
  * Protect admin routes - verify JWT token and check if user is admin
@@ -22,7 +22,7 @@ export const protectAdmin = async (req, res, next) => {
 
     try {
       // Verify token
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      const decoded = verifyAccessToken(token);
 
       // Check if token is for admin
       if (!decoded.isAdmin) {

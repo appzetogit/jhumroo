@@ -6,6 +6,7 @@ import { uploadImage } from '../../../config/cloudinary.js';
 import { messaging } from '../../../config/firebase.js';
 import { asyncHandler } from '../../../middleware/errorHandler.js';
 import fs from 'fs';
+import { escapeRegex } from '../../../utils/regex.js';
 
 /**
  * @desc    Send a targeted/public notification and save log
@@ -46,9 +47,9 @@ export const sendNotification = asyncHandler(async (req, res) => {
   // Construct query to match targeted users
   const query = { isActive: true, isBanned: false };
   if (targetType === 'location') {
-    if (country) query.country = { $regex: new RegExp(`^${country}$`, 'i') };
-    if (state) query.state = { $regex: new RegExp(`^${state}$`, 'i') };
-    if (district) query.district = { $regex: new RegExp(`^${district}$`, 'i') };
+    if (country) query.country = { $regex: new RegExp(`^${escapeRegex(country)}$`, 'i') };
+    if (state) query.state = { $regex: new RegExp(`^${escapeRegex(state)}$`, 'i') };
+    if (district) query.district = { $regex: new RegExp(`^${escapeRegex(district)}$`, 'i') };
   }
 
   // Find users matching query

@@ -19,6 +19,7 @@ import {
   getAdsPaymentRecordsAdminRoute
 } from '../controllers/ad.controller.js';
 import { protect } from '../../../middleware/auth.js';
+import { checkPermission } from '../../../middleware/adminAuth.js';
 import { uploadAdMedia, uploadAdWithMusic } from '../../../middleware/upload.js';
 
 const router = express.Router();
@@ -27,7 +28,7 @@ const router = express.Router();
 router.get('/pricing', getAdsPricingRoute);
 router.post('/verify-payment', protect, verifyAdPayment);
 router.get('/admin/pricing', protect, getAdsPricingAdminRoute);
-router.put('/admin/pricing', protect, updateAdsPricingAdminRoute);
+router.put('/admin/pricing', protect, checkPermission('manage_settings'), updateAdsPricingAdminRoute);
 router.get('/admin/payment-records', protect, getAdsPaymentRecordsAdminRoute);
 
 router.post('/', protect, uploadAdWithMusic, createAd);
@@ -42,8 +43,8 @@ router.put('/:id', protect, uploadAdWithMusic, updateAd);
 router.patch('/:id/toggle', protect, toggleAdStatus);
 router.patch('/:id/review', protect, reviewAd);
 router.delete('/:id', protect, deleteAd);
-router.post('/:id/view', trackView);
-router.post('/:id/click', trackClick);
+router.post('/:id/view', protect, trackView);
+router.post('/:id/click', protect, trackClick);
 router.get('/:id', protect, getAdAnalytics);
 
 export default router;

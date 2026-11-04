@@ -7,7 +7,7 @@ import {
   markAlertAsRead,
   clearAdminAlerts
 } from '../controllers/notification.controller.js';
-import { protectAdmin } from '../../../middleware/adminAuth.js';
+import { protectAdmin, checkPermission } from '../../../middleware/adminAuth.js';
 import { uploadImage } from '../../../middleware/upload.js';
 
 const router = express.Router();
@@ -16,7 +16,7 @@ const router = express.Router();
 router.use(protectAdmin);
 
 router.get('/', getNotifications);
-router.post('/send', uploadImage, sendNotification);
+router.post('/send', checkPermission('manage_users'), uploadImage, sendNotification);
 
 router.get('/alerts', getAdminAlerts);
 router.put('/alerts/read-all', markAlertsAsRead);

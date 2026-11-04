@@ -14,10 +14,11 @@ export const getNotifications = asyncHandler(async (req, res) => {
 
   // Cleanup: Delete duplicate follow notifications for this user before fetching
   // This removes old duplicate data from the database
-  const followNotifications = await Notification.find({ 
-    recipient: req.user._id, 
-    type: { $in: ['follow', 'follow_request', 'follow_accept', 'follow_back'] } 
-  }).sort({ createdAt: -1 });
+  // createNotification already dedupes new ones; this only cleans legacy data, so run it on page 1 only.
+  const followNotifications = page !== 1 ? [] : await Notification.find({
+    recipient: req.user._id,
+    type: { $in: ['follow', 'follow_request', 'follow_accept', 'follow_back'] }
+  }).select('sender type').sort({ createdAt: -1 }).lean();
 
   const seenSenders = new Set();
   const idsToDelete = [];
