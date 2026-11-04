@@ -213,7 +213,7 @@ async function sendViaAWSSNS(phoneNumber, otp) {
  */
 async function sendViaPRPSMS(phoneNumber, otp) {
   const API_KEY = process.env.PRPSMS_API_KEY;
-  const SENDER_ID = process.env.PRPSMS_SENDER_ID || 'VRUHOI';
+  const SENDER_ID = process.env.PRPSMS_SENDER_ID || 'VRSOPR'; // DLT-approved sender for "JHUMROO OTP"
   const TEMPLATE_NAME = process.env.PRPSMS_OTP_TEMPLATE || 'temp 2';
 
   if (!API_KEY) {
