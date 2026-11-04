@@ -42,6 +42,8 @@ const notificationSchema = new mongoose.Schema(
 );
 
 notificationSchema.index({ recipient: 1, createdAt: -1 });
+// TTL: MongoDB auto-deletes notifications 3 days after createdAt (sweeper runs ~every 60s).
+notificationSchema.index({ createdAt: 1 }, { expireAfterSeconds: 3 * 24 * 60 * 60 });
 
 const Notification = mongoose.model('Notification', notificationSchema);
 

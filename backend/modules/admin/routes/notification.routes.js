@@ -1,11 +1,7 @@
 import express from 'express';
 import { 
   sendNotification, 
-  getNotifications,
-  getAdminAlerts,
-  markAlertsAsRead,
-  markAlertAsRead,
-  clearAdminAlerts
+  getNotifications
 } from '../controllers/notification.controller.js';
 import { protectAdmin, checkPermission } from '../../../middleware/adminAuth.js';
 import { uploadImage } from '../../../middleware/upload.js';
@@ -18,9 +14,5 @@ router.use(protectAdmin);
 router.get('/', getNotifications);
 router.post('/send', checkPermission('manage_users'), uploadImage, sendNotification);
 
-router.get('/alerts', getAdminAlerts);
-router.put('/alerts/read-all', markAlertsAsRead);
-router.put('/alerts/:id/read', markAlertAsRead);
-router.delete('/alerts/clear', clearAdminAlerts);
 
 export default router;

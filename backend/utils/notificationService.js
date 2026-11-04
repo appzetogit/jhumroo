@@ -4,6 +4,52 @@ import Follow from '../models/Follow.model.js';
 import { messaging } from '../config/firebase.js';
 import { sendToUser } from '../config/socket.js';
 
+const INVALID_TOKEN_CODES = ['messaging/invalid-registration-token', 'messaging/registration-token-not-registered'];
+
+/**
+ * Send one FCM message to many tokens: chunks of 500 (FCM multicast limit), per-token fallback
+ * when /batch 404s, and clears dead tokens from users. Returns number of successful deliveries.
+ */
+export const sendPush = async (message, tokens) => {
+  if (!messaging || !tokens.length) return 0;
+  let successCount = 0;
+  const invalidTokens = [];
+
+  for (let i = 0; i < tokens.length; i += 500) {
+    const chunk = tokens.slice(i, i + 500);
+    try {
+      const response = await messaging.sendEachForMulticast({ ...message, tokens: chunk });
+      successCount += response.successCount;
+      response.responses.forEach((resp, idx) => {
+        if (!resp.success && INVALID_TOKEN_CODES.includes(resp.error?.code)) invalidTokens.push(chunk[idx]);
+      });
+    } catch (multicastErr) {
+      const rawMsg = multicastErr?.message || '';
+      if (!(rawMsg.includes('/batch') && (rawMsg.includes('404') || rawMsg.includes('Not Found')))) {
+        console.error('FCM multicast error:', multicastErr);
+        continue;
+      }
+      console.warn('FCM: Multicast 404 (/batch unsupported). Falling back to per-token send().');
+      for (const token of chunk) {
+        try {
+          await messaging.send({ ...message, token });
+          successCount++;
+        } catch (err) {
+          const code = err?.errorInfo?.code || err?.code;
+          if (INVALID_TOKEN_CODES.includes(code)) invalidTokens.push(token);
+        }
+      }
+    }
+  }
+
+  console.log(`FCM: ${successCount}/${tokens.length} delivered, ${invalidTokens.length} dead token(s) cleared.`);
+  if (invalidTokens.length > 0) {
+    await User.updateMany({ fcmToken: { $in: invalidTokens } }, { $set: { fcmToken: '' } });
+    await User.updateMany({ fcmTokenMobile: { $in: invalidTokens } }, { $set: { fcmTokenMobile: '' } });
+  }
+  return successCount;
+};
+
 /**
  * Create an in-app notification and optionally send a push notification via FCM
  * @param {object} options
@@ -173,78 +219,9 @@ export const createNotification = async ({ recipient, sender, type, liveStream, 
               // Data-only pushes default to normal priority: Android (Doze, vivo/oppo battery savers) delays
               // or drops them while the app is killed. High priority wakes the background handler now.
               android: { priority: 'high', ttl: type === 'live' ? 60 * 60 * 1000 : 24 * 60 * 60 * 1000 },
-              tokens: tokens,
             };
 
-            let response = null;
-            const invalidTokens = [];
-
-            try {
-              response = await messaging.sendEachForMulticast(message);
-              console.log(`FCM: Successfully sent ${response.successCount} notifications; ${response.failureCount} failed.`);
-              
-              if (response.failureCount > 0) {
-                response.responses.forEach((resp, idx) => {
-                  if (!resp.success) {
-                    const code = resp.error?.code;
-                    console.error(`FCM: Failure for token ${tokens[idx].substring(0, 20)}...:`, resp.error?.message);
-                    if (
-                      code === 'messaging/invalid-registration-token' ||
-                      code === 'messaging/registration-token-not-registered'
-                    ) {
-                      invalidTokens.push(tokens[idx]);
-                    }
-                  }
-                });
-              }
-            } catch (multicastErr) {
-              const rawMsg = multicastErr?.message || '';
-              const isBatch404 = rawMsg.includes('/batch') && (rawMsg.includes('404') || rawMsg.includes('Not Found'));
-              
-              if (!isBatch404) {
-                throw multicastErr;
-              }
-
-              console.warn('FCM: Multicast failed with 404 (likely /batch unsupported). Falling back to per-token send().');
-              
-              const baseMessage = { ...message };
-              delete baseMessage.tokens;
-
-              let successCount = 0;
-              let failureCount = 0;
-
-              for (const token of tokens) {
-                try {
-                  await messaging.send({ ...baseMessage, token });
-                  successCount++;
-                } catch (err) {
-                  failureCount++;
-                  const code = err?.errorInfo?.code || err?.code;
-                  console.error(`FCM: Token send failed:`, code, err?.message);
-                  if (
-                    code === 'messaging/invalid-registration-token' ||
-                    code === 'messaging/registration-token-not-registered'
-                  ) {
-                    invalidTokens.push(token);
-                  }
-                }
-              }
-
-              console.log(`FCM: Fallback results: ${successCount} success, ${failureCount} failures.`);
-            }
-
-            // Cleanup invalid tokens from User model
-            if (invalidTokens.length > 0) {
-              console.log(`FCM Cleanup: Removing ${invalidTokens.length} invalid token(s) from users.`);
-              await User.updateMany(
-                { fcmToken: { $in: invalidTokens } },
-                { $set: { fcmToken: '' } }
-              );
-              await User.updateMany(
-                { fcmTokenMobile: { $in: invalidTokens } },
-                { $set: { fcmTokenMobile: '' } }
-              );
-            }
+            await sendPush(message, tokens);
           }
         }
       } catch (innerError) {

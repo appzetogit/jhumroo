@@ -5,7 +5,6 @@ import Like from '../../../models/Like.model.js';
 import SavedReel from '../../../models/SavedReel.model.js';
 import Report from '../../../models/Report.model.js';
 import WatchAnalytics from '../../../models/WatchAnalytics.model.js';
-import { createAdminAlert } from '../../../utils/adminAlertService.js';
 import { asyncHandler } from '../../../middleware/errorHandler.js';
 import { uploadImage, deleteFile } from '../../../config/cloudinary.js';
 import { getFileUrl, deleteFromS3 } from '../../../utils/s3.js';
@@ -895,12 +894,6 @@ export const reportUser = asyncHandler(async (req, res) => {
     description
   });
 
-  createAdminAlert({
-    type: 'new_report',
-    title: 'New Account Report',
-    message: `@${req.user.username} reported user account: "${reason || 'no reason'}"`,
-    link: '/admin/reports'
-  }).catch(err => console.error('[reportUser] admin alert failed:', err));
 
   res.status(201).json({
     success: true,

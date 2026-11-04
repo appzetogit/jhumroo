@@ -8,7 +8,6 @@ import User from '../../../models/User.model.js';
 import Follow from '../../../models/Follow.model.js';
 import Report from '../../../models/Report.model.js';
 import { createNotification } from '../../../utils/notificationService.js';
-import { createAdminAlert } from '../../../utils/adminAlertService.js';
 import { asyncHandler } from '../../../middleware/errorHandler.js';
 import { uploadToS3, getPresignedUploadUrl, getFileUrl, getPresignedDownloadUrl, deleteFromS3 } from '../../../utils/s3.js';
 import { enqueueEncode } from '../../../utils/encodeQueue.js';
@@ -313,13 +312,6 @@ export const createReel = asyncHandler(async (req, res) => {
   // Handle mentions
   handleMentionNotifications(reel, req.user._id);
 
-  // Create admin alert for new reel
-  createAdminAlert({
-    type: 'new_reel',
-    title: 'New Reel Uploaded',
-    message: `@${req.user.username} uploaded a new reel: "${reel.caption || '(no caption)'}"`,
-    link: '/admin/reels'
-  }).catch(err => console.error('[createReel] admin alert failed:', err));
 
   // Trigger background processing for uploaded files
   // On final failure the job marks the reel completed with its raw video URL.
@@ -1516,12 +1508,6 @@ export const reportReel = asyncHandler(async (req, res) => {
     description
   });
 
-  createAdminAlert({
-    type: 'new_report',
-    title: 'New Reel Report',
-    message: `@${req.user.username} reported a reel: "${reason || 'no reason'}"`,
-    link: '/admin/reports'
-  }).catch(err => console.error('[reportReel] admin alert failed:', err));
 
   res.status(201).json({
     success: true,

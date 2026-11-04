@@ -55,6 +55,9 @@ const adminNotificationSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+// TTL: MongoDB auto-deletes dispatch logs 3 days after createdAt.
+adminNotificationSchema.index({ createdAt: 1 }, { expireAfterSeconds: 3 * 24 * 60 * 60 });
+
 const AdminNotification = mongoose.model('AdminNotification', adminNotificationSchema);
 
 export default AdminNotification;
