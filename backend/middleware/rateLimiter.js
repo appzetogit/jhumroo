@@ -4,7 +4,7 @@ import { getRedis } from '../config/redis.js';
 // Shared counters across PM2 instances when REDIS_URL is set; otherwise express-rate-limit's
 // default memory store. Without this each of N processes counts separately (limits become N×).
 class RedisStore {
-  constructor(prefix) { this.prefix = `rl:${prefix}:`; }
+  constructor(prefix) { this.prefix = `jhumroo:rl:${prefix}:`; } // shared VPS Redis: own namespace
   init(options) { this.windowMs = options.windowMs; }
   async increment(key) {
     const redis = getRedis(), k = this.prefix + key;

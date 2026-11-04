@@ -9,7 +9,8 @@ import { getRedis } from './redis.js';
 
 // With REDIS_URL, API processes (PM2 cluster) emit through Redis to the single socket process,
 // and online presence lives in a Redis set so any process can read it.
-const ONLINE_KEY = 'online_users';
+// Everything namespaced with jhumroo: the VPS Redis may be shared with other projects.
+const ONLINE_KEY = 'jhumroo:online_users';
 
 let io;
 
@@ -60,7 +61,7 @@ export const initSocket = (server) => {
 
   const redis = getRedis();
   if (redis) {
-    io.adapter(createAdapter(redis, redis.duplicate()));
+    io.adapter(createAdapter(redis, redis.duplicate(), { key: 'jhumroo:socket.io' })); // pub/sub is server-wide, so own channel
     // Only the process that owns the connections resets presence on boot (stale after a restart).
     if (process.env.ROLE !== 'api') redis.del(ONLINE_KEY).catch(() => {});
   }

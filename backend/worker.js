@@ -6,7 +6,7 @@ dotenv.config();
 const { Worker } = await import('bullmq');
 const { default: connectDB } = await import('./config/database.js');
 const { getRedis } = await import('./config/redis.js');
-const { ENCODE_QUEUE, runEncodeJob, isLastAttempt } = await import('./utils/encodeQueue.js');
+const { ENCODE_QUEUE, QUEUE_PREFIX, runEncodeJob, isLastAttempt } = await import('./utils/encodeQueue.js');
 const { expireAds } = await import('./cron/ad_expiry.js');
 
 const redis = getRedis();
@@ -20,6 +20,7 @@ await connectDB();
 // One encode at a time: ffmpeg is the heaviest thing on the box; the API keeps the other cores.
 const worker = new Worker(ENCODE_QUEUE, (job) => runEncodeJob(job.data, isLastAttempt(job)), {
   connection: redis,
+  prefix: QUEUE_PREFIX,
   concurrency: Number(process.env.ENCODE_CONCURRENCY) || 1,
   lockDuration: 10 * 60 * 1000
 });

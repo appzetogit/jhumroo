@@ -5,6 +5,8 @@ import { getFileUrl } from './s3.js';
 import { getRedis } from '../config/redis.js';
 
 export const ENCODE_QUEUE = 'reel-encode';
+// Own key prefix: the VPS Redis may also hold other projects' BullMQ queues. Queue and Worker must match.
+export const QUEUE_PREFIX = 'jhumroo:bull';
 const ATTEMPTS = 2;
 
 /**
@@ -42,7 +44,7 @@ let queue;
 export const enqueueEncode = (data) => {
   const redis = getRedis();
   if (!redis) return runEncodeJob(data).catch(() => {});
-  queue ??= new Queue(ENCODE_QUEUE, { connection: redis });
+  queue ??= new Queue(ENCODE_QUEUE, { connection: redis, prefix: QUEUE_PREFIX });
   return queue.add('encode', { ...data, reelId: String(data.reelId) }, {
     attempts: ATTEMPTS,
     backoff: { type: 'exponential', delay: 30_000 },
