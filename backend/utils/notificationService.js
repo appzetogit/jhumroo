@@ -170,6 +170,9 @@ export const createNotification = async ({ recipient, sender, type, liveStream, 
                 commentId: comment ? comment.toString() : '',
                 click_action: 'FLUTTER_NOTIFICATION_CLICK',
               },
+              // Data-only pushes default to normal priority: Android (Doze, vivo/oppo battery savers) delays
+              // or drops them while the app is killed. High priority wakes the background handler now.
+              android: { priority: 'high', ttl: type === 'live' ? 60 * 60 * 1000 : 24 * 60 * 60 * 1000 },
               tokens: tokens,
             };
 
