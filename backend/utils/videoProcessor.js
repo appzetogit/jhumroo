@@ -24,7 +24,8 @@ export const isTrustedMediaUrl = (raw) => {
  * @param {string} videoId - Reel ID
  * @param {string} rawKey - S3 key for raw video
  * @param {object} music - Music metadata (url, startTime, duration)
- * @param {object} [opts] - { hd: true } for premium creators: keep up to 1080p at higher quality
+ * @param {object} [opts] - { hd: true } for premium creators: keep up to 1080p at higher quality;
+ *                          { thumbnail: false } when the client already sent a cover
  * @returns {Promise<object>} - Processed URLs
  */
 // ponytail: in-process encode queue — per Node process and lost on restart.
@@ -37,6 +38,12 @@ export const withEncodeSlot = async (fn) => {
   runningEncodes++;
   try { return await fn(); } finally { runningEncodes--; waitingEncodes.shift()?.(); }
 };
+
+const probe = (file) => new Promise((resolve) => ffmpeg.ffprobe(file, (err, meta) => resolve(err ? null : meta)));
+
+/** Copy the picture instead of re-encoding: H.264, short side within the cap, sane bitrate (bps, whole file). */
+export const canCopyVideo = (v, bitrate, maxW) =>
+  v?.codec_name === 'h264' && Math.min(v.width, v.height) <= maxW && bitrate > 0 && bitrate <= 8_500_000;
 
 export const processReelWithAudio = (videoId, rawKey, music, opts = {}) =>
   withEncodeSlot(() => encodeReel(videoId, rawKey, music, opts));
@@ -96,69 +103,35 @@ const encodeReel = async (videoId, rawKey, music, opts = {}) => {
       }
     }
 
-    // 2.5. Check if raw video has an audio stream
-    const hasAudio = await new Promise((resolve) => {
-      ffmpeg.ffprobe(rawLocalPath, (err, metadata) => {
-        if (err) {
-          console.warn(`[Processor:${videoId}] ffprobe check for audio failed:`, err.message);
-          resolve(false);
-        } else {
-          const audioStream = metadata.streams && metadata.streams.find(s => s.codec_type === 'audio');
-          resolve(!!audioStream);
-        }
-      });
-    });
-    console.log(`[Processor:${videoId}] Raw video has audio stream: ${hasAudio}`);
+    // 2.5. Probe the upload once: audio stream, and whether the picture can be copied as-is.
+    const meta = await probe(rawLocalPath);
+    if (!meta) console.warn(`[Processor:${videoId}] ffprobe failed, re-encoding`);
+    const videoStream = meta?.streams?.find((s) => s.codec_type === 'video');
+    const audioStream = meta?.streams?.find((s) => s.codec_type === 'audio');
+    const hasAudio = !!audioStream;
+    const copyVideo = canCopyVideo(videoStream, Number(meta?.format?.bit_rate) || 0, maxW);
+    console.log(`[Processor:${videoId}] audio: ${hasAudio}, video: ${copyVideo ? 'copy' : 'x264'}`);
 
-    // 3. Merge Video and Audio using FFmpeg
+    // 3. Mux. App uploads are already H.264 at the right size, so the picture is copied (seconds, no CPU);
+    // only odd uploads (old app builds, HEVC, 4K, huge bitrate) still go through x264.
     console.log(`[Processor:${videoId}] Starting FFmpeg merge...`);
     await new Promise((resolve, reject) => {
-      let command = ffmpeg(rawLocalPath);
-
+      let command = ffmpeg(rawLocalPath).inputOptions([threads]); // caps decode threads too, not just x264
+      const video = copyVideo ? ['-c:v copy'] : ['-c:v libx264', ...quality];
+      let audio;
       if (audioReady) {
-        // Precise seeking for the audio clip
-        command = command
-          .input(audioLocalPath)
-          .inputOptions([
-            `-ss ${music.startTime || 0}`,
-            `-t ${music.duration || 15}`
-          ])
-          .outputOptions([
-            '-map 0:v:0',    // Map video from first input
-            '-map 1:a:0',    // Map audio from second input
-            '-c:v libx264',  // Transcode video to H.264
-            ...quality,
-            '-c:a aac',      // Transcode audio to AAC
-            '-b:a 128k',
-            '-shortest',     // End when the shortest stream ends
-            '-movflags +faststart' // Good for web streaming
-          ]);
+        command = command.input(audioLocalPath).inputOptions([`-ss ${music.startTime || 0}`, `-t ${music.duration || 15}`]);
+        audio = ['-map 0:v:0', '-map 1:a:0', '-c:a aac', '-b:a 128k', '-shortest'];
+      } else if (hasAudio) {
+        audio = audioStream.codec_name === 'aac' ? ['-c:a copy'] : ['-c:a aac', '-b:a 128k'];
       } else {
-        // Just convert to mp4 if no extra music
-        if (hasAudio) {
-          command = command
-            .outputOptions([
-              '-c:v libx264',
-              ...quality,
-              '-c:a aac',
-              '-b:a 128k',
-              '-movflags +faststart'
-            ]);
-        } else {
-          command = command
-            .outputOptions([
-              '-c:v libx264',
-              ...quality,
-              '-an', // Disable audio stream in output since input has no audio stream
-              '-movflags +faststart'
-            ]);
-        }
+        audio = ['-an'];
       }
-
+      command = command.outputOptions([...video, ...audio, '-movflags +faststart']);
+      // Cap width (720 standard / 1080 premium) when re-encoding; filters can't run on a copied stream.
+      if (!copyVideo) command = command.videoFilters(`scale='min(${maxW},iw)':-2`);
 
       command
-        // Cap width (720 standard / 1080 premium): smaller files load faster in the feed (never upscales)
-        .videoFilters(`scale='min(${maxW},iw)':-2`)
         .output(outputLocalPath)
         .on('start', (cmd) => console.log(`[Processor:${videoId}] FFmpeg Command:`, cmd))
         .on('end', () => {
@@ -169,22 +142,21 @@ const encodeReel = async (videoId, rawKey, music, opts = {}) => {
           console.error(`[Processor:${videoId}] FFmpeg Error:`, err);
           reject(err);
         })
+        .renice(10) // below the API and the other project on this shared VPS
         .run();
     });
 
-    // 4. Generate Thumbnail from final video
-    console.log(`[Processor:${videoId}] Generating thumbnail...`);
-    await new Promise((resolve, reject) => {
-      ffmpeg(outputLocalPath)
-        .screenshots({
-          count: 1,
-          folder: tempDir,
-          filename: 'thumbnail.jpg',
-          size: '720x1280'
-        })
-        .on('end', resolve)
-        .on('error', reject);
-    });
+    // 4. Thumbnail only when the client didn't send a cover
+    const makeThumb = opts.thumbnail !== false;
+    if (makeThumb) {
+      console.log(`[Processor:${videoId}] Generating thumbnail...`);
+      await new Promise((resolve, reject) => {
+        ffmpeg(outputLocalPath)
+          .screenshots({ count: 1, folder: tempDir, filename: 'thumbnail.jpg', size: '720x1280' })
+          .on('end', resolve)
+          .on('error', reject);
+      });
+    }
 
     // 5. Get duration using ffprobe
     console.log(`[Processor:${videoId}] Probing for duration...`);
@@ -205,7 +177,7 @@ const encodeReel = async (videoId, rawKey, music, opts = {}) => {
     // We upload to a dedicated processed folder
     const [videoUpload, thumbUpload] = await Promise.all([
       uploadToS3(outputLocalPath, `reels/processed/${videoId}`, 'video/mp4'),
-      uploadToS3(thumbnailPath, `reels/thumbnails/${videoId}`, 'image/jpeg')
+      makeThumb ? uploadToS3(thumbnailPath, `reels/thumbnails/${videoId}`, 'image/jpeg') : null
     ]);
 
     console.log(`[Processor:${videoId}] Upload complete. Video: ${videoUpload.url}`);
@@ -213,8 +185,8 @@ const encodeReel = async (videoId, rawKey, music, opts = {}) => {
     return {
       videoUrl: videoUpload.url,
       videoKey: videoUpload.key,
-      thumbnailUrl: thumbUpload.url,
-      thumbnailKey: thumbUpload.key,
+      thumbnailUrl: thumbUpload?.url,
+      thumbnailKey: thumbUpload?.key,
       duration: duration
     };
 

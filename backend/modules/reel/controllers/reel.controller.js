@@ -9,7 +9,7 @@ import Follow from '../../../models/Follow.model.js';
 import Report from '../../../models/Report.model.js';
 import { createNotification } from '../../../utils/notificationService.js';
 import { asyncHandler } from '../../../middleware/errorHandler.js';
-import { uploadToS3, getPresignedUploadUrl, getFileUrl, getPresignedDownloadUrl, deleteFromS3 } from '../../../utils/s3.js';
+import { uploadToS3, getPresignedUploadUrl, getFileUrl, getPresignedDownloadUrl, deleteFromS3, createMultipart, completeMultipart } from '../../../utils/s3.js';
 import { enqueueEncode } from '../../../utils/encodeQueue.js';
 import { deleteFile } from '../../../config/cloudinary.js';
 import RecommendationEngine from '../../../utils/recommendationEngine.js';
@@ -101,6 +101,16 @@ export const createUploadUrl = asyncHandler(async (req, res) => {
   const videoId = new mongoose.Types.ObjectId();
   const key = `uploads/raw/${req.user._id}/${videoId}-${safeName}`;
 
+  // New app builds send `size` → resumable multipart upload. Old builds (no size) keep the single PUT.
+  if (req.body.size !== undefined) {
+    const size = Number(req.body.size);
+    if (!Number.isFinite(size) || size <= 0 || size > MAX_UPLOAD_BYTES) {
+      return res.status(400).json({ success: false, message: 'Video is too large to upload' });
+    }
+    const multipart = await createMultipart(key, contentType, size);
+    return res.status(200).json({ success: true, key, videoId, ...multipart });
+  }
+
   const uploadUrl = await getPresignedUploadUrl(key, contentType);
 
   res.status(200).json({
@@ -109,6 +119,28 @@ export const createUploadUrl = asyncHandler(async (req, res) => {
     key,
     videoId
   });
+});
+
+const MAX_UPLOAD_BYTES = 2 * 1024 * 1024 * 1024;
+
+/** The key/videoId pair must be the one createUploadUrl issued to THIS user. */
+const ownsUploadKey = (req, key, videoId) =>
+  typeof key === 'string' && mongoose.Types.ObjectId.isValid(videoId) &&
+  key.startsWith(`uploads/raw/${req.user._id}/${videoId}-`) && !key.includes('..');
+
+/**
+ * @desc    Stitch the parts of a multipart upload into one S3 object
+ * @route   POST /api/reels/complete-multipart
+ * @access  Private
+ */
+export const completeMultipartUpload = asyncHandler(async (req, res) => {
+  const { key, videoId, uploadId, parts } = req.body;
+  if (!ownsUploadKey(req, key, videoId) || typeof uploadId !== 'string' || !Array.isArray(parts) || !parts.length ||
+      !parts.every((p) => Number.isInteger(p?.PartNumber) && typeof p?.ETag === 'string')) {
+    return res.status(400).json({ success: false, message: 'Invalid upload' });
+  }
+  await completeMultipart(key, uploadId, parts.map(({ PartNumber, ETag }) => ({ PartNumber, ETag })));
+  res.status(200).json({ success: true });
 });
 
 /**
@@ -136,15 +168,20 @@ export const completeUpload = asyncHandler(async (req, res) => {
     edits,
     thumbnailUrl,  // Optional: client-generated cover thumbnail
     isRemix,
-    originalReel
+    originalReel,
+    tagged
   } = req.body;
 
-  // The key/videoId pair must be the one createUploadUrl issued to THIS user — otherwise a user
-  // could point a reel at someone else's S3 object and later delete it via deleteReel.
-  if (typeof key !== 'string' || !mongoose.Types.ObjectId.isValid(videoId) ||
-      !key.startsWith(`uploads/raw/${req.user._id}/${videoId}-`) || key.includes('..')) {
+  // Otherwise a user could point a reel at someone else's S3 object and later delete it via deleteReel.
+  if (!ownsUploadKey(req, key, videoId)) {
     return res.status(400).json({ success: false, message: 'Invalid upload key' });
   }
+  // Retry after a lost response (weak network): the reel already exists, so report success, don't 500.
+  const existing = await Reel.findById(videoId);
+  if (existing) return res.status(200).json({ success: true, message: 'Reel published successfully', reel: existing });
+
+  // Photos are served as-is: ffmpeg would turn the JPEG into a 1-frame MP4.
+  const isPhoto = /\.(jpe?g|png|webp|gif|heic|heif)$/i.test(key);
 
   if ((isRemix === 'true' || isRemix === true) && originalReel) {
     const sourceReel = await Reel.findById(originalReel).select('allowDuet');
@@ -159,8 +196,9 @@ export const completeUpload = asyncHandler(async (req, res) => {
   // Create reel record — mark as 'completed' immediately so it shows
   // in the feed right away. Background processing will update the
   // video URL and thumbnail once FFmpeg finishes.
-  const reel = await Reel.create({
+  const reel = new Reel({
     _id: videoId,
+    ...(isPhoto && { isPhoto: true, postType: 'photo' }),
     user: req.user._id,
     video: {
       url: rawUrl,
@@ -195,6 +233,11 @@ export const completeUpload = asyncHandler(async (req, res) => {
     edits: edits ? (typeof edits === 'string' ? JSON.parse(edits) : edits) : undefined,
     status: 'completed'  // Immediately visible in feed
   });
+  // Tag people → mentions (same privacy rules + notification as @name in the caption; see extractMentions).
+  if (Array.isArray(tagged)) {
+    reel.$locals.tagged = tagged.filter((u) => typeof u === 'string').slice(0, 20).map((u) => u.toLowerCase());
+  }
+  await reel.save();
 
   // Update user reel count
   await User.findByIdAndUpdate(req.user._id, {
@@ -208,7 +251,7 @@ export const completeUpload = asyncHandler(async (req, res) => {
   // This will update the video URL and thumbnail once done.
   // Reel is already 'completed' with the raw URL; on failure it simply stays that way.
   // Only overwrite thumbnail if client didn't provide one.
-  enqueueEncode({ reelId: reel._id, key, music: reel.music, ...hdFor(req.user), setThumbnail: !thumbnailUrl, fallbackOnFail: false });
+  if (!isPhoto) enqueueEncode({ reelId: reel._id, key, music: reel.music, ...hdFor(req.user), setThumbnail: !thumbnailUrl, fallbackOnFail: false });
 
   res.status(201).json({
     success: true,

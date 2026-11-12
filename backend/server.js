@@ -169,6 +169,10 @@ app.use('*', (req, res) => {
 // Error handler (should be last)
 app.use(errorHandler);
 
+// Outlive nginx's upstream keepalive, else nginx reuses a socket Node just closed → random 502s under load.
+server.keepAliveTimeout = 65_000;
+server.headersTimeout = 66_000;
+
 // Start server
 server.listen(PORT, () => {
   console.log(`Server running in ${process.env.NODE_ENV} mode on port ${PORT}`);

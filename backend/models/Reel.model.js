@@ -362,12 +362,11 @@ reelSchema.methods.extractHashtags = function () {
   }
 };
 
-// Method to extract mentions from caption
+// Method to extract mentions from caption, plus people tagged on the Post screen ($locals.tagged usernames)
 reelSchema.methods.extractMentions = async function () {
-  const mentionRegex = /@(\w+)/g;
-  const matches = this.caption.match(mentionRegex);
-  if (matches) {
-    const usernames = matches.map(mention => mention.slice(1).toLowerCase());
+  const fromCaption = (this.caption.match(/@(\w+)/g) || []).map(mention => mention.slice(1).toLowerCase());
+  const usernames = [...new Set([...fromCaption, ...(this.$locals.tagged || [])])];
+  if (usernames.length) {
     const User = mongoose.model('User');
     const Follow = mongoose.model('Follow');
     
@@ -402,7 +401,7 @@ reelSchema.methods.extractMentions = async function () {
 
 // Pre-save middleware to extract hashtags and mentions
 reelSchema.pre('save', async function (next) {
-  if (this.isModified('caption')) {
+  if (this.isModified('caption') || this.$locals.tagged?.length) {
     this.extractHashtags();
     await this.extractMentions();
     this.categories = getCategoriesFromHashtags(this.hashtags);

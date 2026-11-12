@@ -1,4 +1,7 @@
-import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
+import {
+  S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand,
+  CreateMultipartUploadCommand, UploadPartCommand, CompleteMultipartUploadCommand,
+} from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { Upload } from "@aws-sdk/lib-storage";
 import fs from 'fs';
@@ -33,6 +36,34 @@ export const getPresignedUploadUrl = async (key, contentType) => {
     throw new Error("Failed to generate upload URL");
   }
 };
+
+/**
+ * Resumable upload: the app PUTs each part to its own presigned URL (retrying only the part that failed),
+ * then completeMultipart stitches them. Incomplete uploads are cleaned up by an S3 lifecycle rule.
+ */
+export const PART_SIZE = 5 * 1024 * 1024; // S3 minimum for every part but the last
+
+export const createMultipart = async (key, contentType, size) => {
+  const Bucket = process.env.AWS_BUCKET_NAME;
+  const { UploadId } = await s3Client.send(new CreateMultipartUploadCommand({ Bucket, Key: key, ContentType: contentType }));
+  const count = Math.max(1, Math.ceil(size / PART_SIZE));
+  // 6h: a slow connection must not outlive its URLs mid-upload.
+  const partUrls = await Promise.all(
+    Array.from({ length: count }, (_, i) =>
+      getSignedUrl(s3Client, new UploadPartCommand({ Bucket, Key: key, UploadId, PartNumber: i + 1 }), { expiresIn: 6 * 3600 })
+    )
+  );
+  return { uploadId: UploadId, partSize: PART_SIZE, partUrls };
+};
+
+/** parts: [{ PartNumber, ETag }] from the app */
+export const completeMultipart = (key, uploadId, parts) =>
+  s3Client.send(new CompleteMultipartUploadCommand({
+    Bucket: process.env.AWS_BUCKET_NAME,
+    Key: key,
+    UploadId: uploadId,
+    MultipartUpload: { Parts: [...parts].sort((a, b) => a.PartNumber - b.PartNumber) },
+  }));
 
 // Simple in-memory cache for signed URLs to speed up repeat requests
 const urlCache = new Map();

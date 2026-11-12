@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import { asyncHandler } from '../../../middleware/errorHandler.js';
 import { sendTokenResponse } from '../../../middleware/auth.js';
 import { sendOTPSMS } from '../../../utils/smsService.js';
+import { isAdult } from '../../../utils/age.js';
 
 /**
  * @desc    Send OTP to phone number
@@ -290,6 +291,15 @@ export const completeProfile = asyncHandler(async (req, res) => {
       success: false,
       message: 'State is a mandatory field'
     });
+  }
+
+  // 18+ only. New users must give a birthday; existing ones already have one stored.
+  if (dateOfBirth) {
+    if (!isAdult(dateOfBirth)) {
+      return res.status(400).json({ success: false, message: 'You must be 18 or older to use Jhumroo' });
+    }
+  } else if (!req.user.dateOfBirth) {
+    return res.status(400).json({ success: false, message: 'Please enter your birthday' });
   }
 
   // Update user profile fields

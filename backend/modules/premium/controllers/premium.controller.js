@@ -12,7 +12,8 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 export const PREMIUM_PLANS = {
   weekly: { label: '1 Week', days: 7, priceKey: 'weeklyPrice', defaultPrice: 59 },
   monthly: { label: '1 Month', days: 30, priceKey: 'monthlyPrice', defaultPrice: DEFAULT_PREMIUM_PRICE },
-  halfyearly: { label: '6 Months', days: 180, priceKey: 'halfYearlyPrice', defaultPrice: 999 }
+  halfyearly: { label: '6 Months', days: 180, priceKey: 'halfYearlyPrice', defaultPrice: 999 },
+  yearly: { label: '1 Year', days: 365, priceKey: 'yearlyPrice', defaultPrice: 599 }
 };
 
 /** Premium counts only until premiumExpiresAt; isPremium alone is never enough. */
@@ -269,7 +270,7 @@ export const getPricingAdmin = asyncHandler(async (req, res) => {
 });
 
 /**
- * @desc    Update premium plan prices (Admin). Body: { weeklyPrice, monthlyPrice, halfYearlyPrice };
+ * @desc    Update premium plan prices (Admin). Body: { weeklyPrice, monthlyPrice, halfYearlyPrice, yearlyPrice };
  *          any key left out keeps its current value.
  * @route   PUT /api/premium/admin/pricing
  * @access  Private/Admin
@@ -336,29 +337,11 @@ export const getPremiumUsersAdmin = asyncHandler(async (req, res) => {
     ];
   }
 
-  const totalSubscriptions = await PremiumSubscription.countDocuments(query);
   const subscriptions = await PremiumSubscription.find(query)
     .populate('user', 'username fullName profilePicture phoneNumber email isPremium premiumExpiresAt isVerified')
     .sort({ createdAt: -1 })
     .skip((parseInt(page) - 1) * parseInt(limit))
     .limit(parseInt(limit));
-
-  // Compute aggregate stats
-  const activeSubsCount = await PremiumSubscription.countDocuments({
-    status: 'active',
-    endDate: { $gt: new Date() }
-  });
-
-  const totalUsersWithPremium = await User.countDocuments({
-    isPremium: true,
-    premiumExpiresAt: { $gt: new Date() }
-  });
-
-  const revenueAggregate = await PremiumSubscription.aggregate([
-    { $match: { status: 'active' } },
-    { $group: { _id: null, totalRevenue: { $sum: '$amount' } } }
-  ]);
-  const totalRevenue = revenueAggregate[0]?.totalRevenue || 0;
 
   // Filter search on populated user if provided
   let filtered = subscriptions;
@@ -379,12 +362,6 @@ export const getPremiumUsersAdmin = asyncHandler(async (req, res) => {
 
   res.status(200).json({
     success: true,
-    stats: {
-      activeSubscribers: activeSubsCount,
-      totalActiveUsers: totalUsersWithPremium,
-      totalRevenue,
-      totalRecords: totalSubscriptions
-    },
     users: filtered
   });
 });

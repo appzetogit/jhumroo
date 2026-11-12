@@ -29,7 +29,9 @@ module.exports = {
       script: 'worker.js',
       instances: 1,
       exec_mode: 'fork',
-      env: { ...env, FFMPEG_THREADS: 2, ENCODE_CONCURRENCY: 1 },
+      // App uploads are stream-copied (seconds, ~no CPU), so 2 at a time. Both knobs must match:
+      // the in-process limiter (MAX_CONCURRENT_ENCODES) wraps every BullMQ job.
+      env: { ...env, FFMPEG_THREADS: 2, ENCODE_CONCURRENCY: 2, MAX_CONCURRENT_ENCODES: 2 },
       max_memory_restart: '2G',
       kill_timeout: 30000, // let an in-flight encode finish its current step
     },

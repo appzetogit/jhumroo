@@ -12,7 +12,7 @@ const fmt = (d) => d.toISOString().replace('T', ' ').slice(0, 16);
 
 assert.deepEqual(
   Object.fromEntries(Object.entries(PREMIUM_PLANS).map(([id, p]) => [id, p.days])),
-  { weekly: 7, monthly: 30, halfyearly: 180 },
+  { weekly: 7, monthly: 30, halfyearly: 180, yearly: 365 },
   'plan durations'
 );
 

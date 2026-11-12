@@ -3,6 +3,7 @@ import {
   createReel,
   createUploadUrl,
   completeUpload,
+  completeMultipartUpload,
   getFeedReels,
   getFollowingReels,
   getReel,
@@ -43,7 +44,8 @@ router.post('/:id/analytics', optionalAuth, submitReelAnalytics);
 // Protected routes
 router.post('/', protect, uploadRateLimiter, uploadVideo, handleMulterError, reelCreateValidation, validate, createReel);
 router.post('/create-upload-url', protect, createUploadUrl);
-router.post('/complete-upload', protect, completeUpload);
+router.post('/complete-multipart', protect, completeMultipartUpload);
+router.post('/complete-upload', protect, uploadRateLimiter, completeUpload); // posts/hour per user: one client can't flood the encode queue
 router.get('/following/feed', protect, getFollowingReels);
 router.delete('/:id', protect, deleteReel);
 router.post('/:id/like', protect, toggleLike);

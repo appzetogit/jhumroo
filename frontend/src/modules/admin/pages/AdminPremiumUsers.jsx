@@ -8,7 +8,6 @@ import {
   BiCheckCircle, 
   BiTime, 
   BiMoney, 
-  BiUserCheck,
   BiTrash,
   BiX,
   BiErrorCircle
@@ -19,11 +18,13 @@ import premiumService from '../../../services/premiumService';
 const PLAN_FIELDS = [
   { key: 'weeklyPrice', label: '1 Week', days: 7, unit: '/ week', tone: 'tone-blue' },
   { key: 'monthlyPrice', label: '1 Month', days: 30, unit: '/ month', tone: 'tone-amber', popular: true },
-  { key: 'halfYearlyPrice', label: '6 Months', days: 180, unit: '/ 6 months', tone: 'tone-pink' }
+  { key: 'halfYearlyPrice', label: '6 Months', days: 180, unit: '/ 6 months', tone: 'tone-pink' },
+  { key: 'yearlyPrice', label: '1 Year', days: 365, unit: '/ year', tone: 'tone-green' }
 ];
+const pricesFrom = (pricing = {}) => Object.fromEntries(PLAN_FIELDS.map((f) => [f.key, pricing[f.key] ?? '']));
 
 const AdminPremiumUsers = () => {
-  const [prices, setPrices] = useState({ weeklyPrice: '', monthlyPrice: '', halfYearlyPrice: '' });
+  const [prices, setPrices] = useState(pricesFrom);
   const [savingPrice, setSavingPrice] = useState(false);
   const [priceMessage, setPriceMessage] = useState({ text: '', type: '' });
   const [selectedSubForDelete, setSelectedSubForDelete] = useState(null);
@@ -31,12 +32,6 @@ const AdminPremiumUsers = () => {
   const [actionMessage, setActionMessage] = useState({ text: '', type: '' });
 
   const [subscriptions, setSubscriptions] = useState([]);
-  const [stats, setStats] = useState({
-    activeSubscribers: 0,
-    totalActiveUsers: 0,
-    totalRevenue: 0,
-    totalRecords: 0
-  });
 
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -51,11 +46,7 @@ const AdminPremiumUsers = () => {
     try {
       const res = await premiumService.getPricingAdmin();
       if (res.success && res.pricing) {
-        setPrices({
-          weeklyPrice: res.pricing.weeklyPrice ?? '',
-          monthlyPrice: res.pricing.monthlyPrice ?? '',
-          halfYearlyPrice: res.pricing.halfYearlyPrice ?? ''
-        });
+        setPrices(pricesFrom(res.pricing));
       }
     } catch (err) {
       console.error('Error fetching premium pricing:', err);
@@ -71,9 +62,6 @@ const AdminPremiumUsers = () => {
       });
       if (res.success) {
         setSubscriptions(res.users || []);
-        if (res.stats) {
-          setStats(res.stats);
-        }
       }
     } catch (err) {
       console.error('Error fetching premium users:', err);
@@ -103,11 +91,7 @@ const AdminPremiumUsers = () => {
       if (res.success) {
         setPriceMessage({ text: 'Premium plan prices updated successfully!', type: 'success' });
         if (res.pricing) {
-          setPrices({
-            weeklyPrice: res.pricing.weeklyPrice,
-            monthlyPrice: res.pricing.monthlyPrice,
-            halfYearlyPrice: res.pricing.halfYearlyPrice
-          });
+          setPrices(pricesFrom(res.pricing));
         }
       }
     } catch (err) {
@@ -162,7 +146,7 @@ const AdminPremiumUsers = () => {
               <BiCrown size={18} /> ELITE
             </span>
           </div>
-          <p>Configure pricing for the 1 week, 1 month and 6 month plans and view all premium users.</p>
+          <p>Configure pricing for the 1 week, 1 month, 6 month and 1 year plans and view all premium users.</p>
         </div>
         <button 
           className="admin-secondary-btn" 
@@ -180,7 +164,7 @@ const AdminPremiumUsers = () => {
         </div>
       )}
 
-      {/* Top Grid: Pricing Config Card + Quick Stats */}
+      {/* Pricing Config Card */}
       <div className="premium-top-grid">
         {/* Price Configuration Form */}
         <form onSubmit={handleSavePrice} className="admin-card premium-price-card">
@@ -238,40 +222,6 @@ const AdminPremiumUsers = () => {
           )}
         </form>
 
-        {/* Stats Grid */}
-        <div className="premium-stats-cards">
-          <div className="admin-card p-stat-box">
-            <div className="p-stat-icon-wrap active-users-icon">
-              <BiUserCheck size={18} />
-            </div>
-            <div className="p-stat-info">
-              <span className="p-stat-label">Active Subscribers</span>
-              <strong className="p-stat-val">{stats.activeSubscribers}</strong>
-            </div>
-          </div>
-
-          <div className="admin-card p-stat-box">
-            <div className="p-stat-icon-wrap total-rev-icon">
-              <BiMoney size={18} />
-            </div>
-            <div className="p-stat-info">
-              <span className="p-stat-label">Total Revenue</span>
-              <strong className="p-stat-val">₹{stats.totalRevenue.toLocaleString('en-IN')}</strong>
-            </div>
-          </div>
-
-          <div className="admin-card p-stat-box">
-            <div className="p-stat-icon-wrap plan-price-icon">
-              <BiCrown size={18} />
-            </div>
-            <div className="p-stat-info">
-              <span className="p-stat-label">Current Plans</span>
-              <strong className="p-stat-val">
-                ₹{prices.weeklyPrice || '-'}/wk · ₹{prices.monthlyPrice || '-'}/mo · ₹{prices.halfYearlyPrice || '-'}/6mo
-              </strong>
-            </div>
-          </div>
-        </div>
       </div>
 
       {/* Subscriptions Table Section */}
@@ -631,16 +581,10 @@ const AdminPremiumUsers = () => {
 
         .premium-top-grid {
           display: grid;
-          grid-template-columns: 1.8fr 1fr;
+          grid-template-columns: 1fr;
           gap: 0.85rem;
           margin-bottom: 1.25rem;
           align-items: stretch;
-        }
-
-        @media (max-width: 900px) {
-          .premium-top-grid {
-            grid-template-columns: 1fr;
-          }
         }
 
         .premium-price-card {
@@ -661,11 +605,17 @@ const AdminPremiumUsers = () => {
 
         .plan-price-grid {
           display: grid;
-          grid-template-columns: repeat(3, 1fr);
+          grid-template-columns: repeat(4, 1fr);
           gap: 0.6rem;
         }
 
-        @media (max-width: 640px) {
+        @media (max-width: 900px) {
+          .plan-price-grid {
+            grid-template-columns: repeat(2, 1fr);
+          }
+        }
+
+        @media (max-width: 480px) {
           .plan-price-grid {
             grid-template-columns: 1fr;
           }
@@ -685,6 +635,7 @@ const AdminPremiumUsers = () => {
         .plan-price-tile.tone-blue { border-top: 4px solid #3b82f6; }
         .plan-price-tile.tone-amber { border-top: 4px solid #f59e0b; background: rgba(245, 158, 11, 0.04); }
         .plan-price-tile.tone-pink { border-top: 4px solid #ec4899; }
+        .plan-price-tile.tone-green { border-top: 4px solid #10b981; }
 
         .plan-tile-top {
           display: flex;
@@ -820,67 +771,6 @@ const AdminPremiumUsers = () => {
           font-weight: 700 !important;
           white-space: nowrap;
           cursor: pointer;
-        }
-
-        .premium-stats-cards {
-          display: flex;
-          flex-direction: column;
-          gap: 0.45rem;
-          justify-content: center;
-        }
-
-        .p-stat-box {
-          padding: 0.5rem 0.85rem !important;
-          display: flex;
-          align-items: center;
-          gap: 0.75rem;
-          min-height: auto !important;
-        }
-
-        .p-stat-icon-wrap {
-          width: 32px;
-          height: 32px;
-          border-radius: 8px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          flex-shrink: 0;
-        }
-
-        .active-users-icon {
-          background: rgba(16, 185, 129, 0.12);
-          color: #10b981;
-        }
-
-        .total-rev-icon {
-          background: rgba(59, 130, 246, 0.12);
-          color: #3b82f6;
-        }
-
-        .plan-price-icon {
-          background: rgba(245, 158, 11, 0.12);
-          color: #f59e0b;
-        }
-
-        .p-stat-info {
-          display: flex;
-          flex-direction: column;
-        }
-
-        .p-stat-label {
-          font-size: 10.5px;
-          font-weight: 600;
-          color: var(--admin-muted);
-          text-transform: uppercase;
-          letter-spacing: 0.05em;
-          line-height: 1.2;
-        }
-
-        .p-stat-val {
-          font-size: 15px;
-          font-weight: 800;
-          color: var(--admin-strong);
-          line-height: 1.2;
         }
 
         .table-controls-bar {

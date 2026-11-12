@@ -17,7 +17,7 @@ if (!redis) {
 
 await connectDB();
 
-// One encode at a time: ffmpeg is the heaviest thing on the box; the API keeps the other cores.
+// ENCODE_CONCURRENCY (ecosystem.config.cjs): app uploads are stream-copied, so this is mostly S3 I/O.
 const worker = new Worker(ENCODE_QUEUE, (job) => runEncodeJob(job.data, isLastAttempt(job)), {
   connection: redis,
   prefix: QUEUE_PREFIX,

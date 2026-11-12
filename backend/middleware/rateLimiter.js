@@ -1,5 +1,6 @@
 import rateLimit from 'express-rate-limit';
-import { getRedis } from '../config/redis.js';
+import { getFastRedis } from '../config/redis.js';
+import { verifyAccessToken } from './auth.js';
 
 // Shared counters across PM2 instances when REDIS_URL is set; otherwise express-rate-limit's
 // default memory store. Without this each of N processes counts separately (limits become N×).
@@ -7,16 +8,27 @@ class RedisStore {
   constructor(prefix) { this.prefix = `jhumroo:rl:${prefix}:`; } // shared VPS Redis: own namespace
   init(options) { this.windowMs = options.windowMs; }
   async increment(key) {
-    const redis = getRedis(), k = this.prefix + key;
+    const redis = getFastRedis(), k = this.prefix + key;
     const totalHits = await redis.incr(k);
     if (totalHits === 1) await redis.pexpire(k, this.windowMs);
     const ttl = await redis.pttl(k);
     return { totalHits, resetTime: new Date(Date.now() + (ttl > 0 ? ttl : this.windowMs)) };
   }
-  async decrement(key) { await getRedis().decr(this.prefix + key); }
-  async resetKey(key) { await getRedis().del(this.prefix + key); }
+  async decrement(key) { await getFastRedis().decr(this.prefix + key); }
+  async resetKey(key) { await getFastRedis().del(this.prefix + key); }
 }
-const storeFor = (prefix) => (process.env.REDIS_URL ? { store: new RedisStore(prefix) } : {});
+// passOnStoreError: Redis down → let the request through instead of failing or hanging it.
+const storeFor = (prefix) => (process.env.REDIS_URL ? { store: new RedisStore(prefix), passOnStoreError: true } : {});
+
+// Count per logged-in user, not per IP: Jio/Airtel carrier NAT and office Wi-Fi put many phones
+// behind one IP, which used to 429 everyone ("server down"). Anonymous requests still count per IP.
+const userOrIp = (req) => {
+  const h = req.headers.authorization;
+  if (h?.startsWith('Bearer ')) {
+    try { return `u:${verifyAccessToken(h.slice(7)).id}`; } catch { /* bad/expired token → IP */ }
+  }
+  return req.ip;
+};
 
 const isDev = process.env.NODE_ENV !== 'production';
 const isLocal = (req) => {
@@ -31,9 +43,10 @@ export const rateLimiter = rateLimit({
   ...storeFor('api'),
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: isDev ? 100000 : 2000,
+  keyGenerator: userOrIp,
   message: {
     success: false,
-    message: 'Too many requests from this IP, please try again later'
+    message: 'Too many requests, please try again later'
   },
   standardHeaders: true,
   legacyHeaders: false,
@@ -77,6 +90,7 @@ export const uploadRateLimiter = rateLimit({
   ...storeFor('upload'),
   windowMs: 60 * 60 * 1000, // 1 hour
   max: isDev ? 1000 : 30,
+  keyGenerator: userOrIp,
   message: {
     success: false,
     message: 'Too many uploads, please try again later'

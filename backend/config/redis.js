@@ -10,3 +10,16 @@ export const getRedis = () => {
   }
   return client;
 };
+
+// Rate-limit counters: fail fast when Redis is down or hung (no offline queue, 1s timeout), so requests
+// pass instead of waiting forever. getRedis() can't do this: BullMQ needs maxRetriesPerRequest: null.
+let fastClient;
+export const getFastRedis = () => {
+  if (fastClient === undefined) {
+    fastClient = process.env.REDIS_URL
+      ? new Redis(process.env.REDIS_URL, { maxRetriesPerRequest: 1, enableOfflineQueue: false, commandTimeout: 1000 })
+      : null;
+    fastClient?.on('error', (err) => console.error('[Redis:rl]', err.message));
+  }
+  return fastClient;
+};

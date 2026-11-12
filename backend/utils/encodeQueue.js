@@ -17,7 +17,7 @@ const ATTEMPTS = 2;
 export const runEncodeJob = async (data, isLastAttempt = true) => {
   const { reelId, key, music, hd, setThumbnail, fallbackOnFail } = data;
   try {
-    const processed = await processReelWithAudio(reelId, key, music, { hd });
+    const processed = await processReelWithAudio(reelId, key, music, { hd, thumbnail: !!setThumbnail });
     await Reel.findByIdAndUpdate(reelId, {
       'video.url': processed.videoUrl,
       'video.publicId': processed.videoKey,
