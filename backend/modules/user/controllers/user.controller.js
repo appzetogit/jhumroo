@@ -7,7 +7,7 @@ import Report from '../../../models/Report.model.js';
 import WatchAnalytics from '../../../models/WatchAnalytics.model.js';
 import { asyncHandler } from '../../../middleware/errorHandler.js';
 import { uploadImage, deleteFile } from '../../../config/cloudinary.js';
-import { getFileUrl, deleteFromS3 } from '../../../utils/s3.js';
+import { getFileUrl, deleteFromS3, deleteFromS3ByUrl } from '../../../utils/s3.js';
 import fs from 'fs';
 import { isUserAllowedToViewReels } from '../../../utils/geoHelper.js';
 import { escapeRegex } from '../../../utils/regex.js';
@@ -926,6 +926,7 @@ export const deleteAccount = asyncHandler(async (req, res) => {
         // Reels live on S3 now (publicId = S3 key); only legacy reels are on Cloudinary.
         if (/^(uploads|reels)\//.test(reel.video.publicId)) {
           await deleteFromS3(reel.video.publicId);
+          await deleteFromS3ByUrl(reel.video.thumbnail);
         } else {
           await deleteFile(reel.video.publicId, 'video');
         }

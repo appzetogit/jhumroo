@@ -218,6 +218,15 @@ export const downloadFromS3 = async (key, localPath) => {
   }
 };
 
+/** Delete an object by its S3/CloudFront URL (e.g. a reel thumbnail). Foreign URLs are ignored. */
+export const deleteFromS3ByUrl = (url) => {
+  if (!url || typeof url !== 'string') return;
+  const cdn = process.env.CLOUDFRONT_DOMAIN;
+  const m = url.match(/^https?:\/\/([^\/]+)\/([^?]+)/);
+  if (!m || !(m[1].includes('amazonaws.com') || (cdn && m[1] === cdn))) return;
+  return deleteFromS3(decodeURIComponent(m[2]));
+};
+
 /**
  * Delete a file from S3
  */

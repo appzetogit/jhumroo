@@ -9,9 +9,8 @@ import Follow from '../../../models/Follow.model.js';
 import Report from '../../../models/Report.model.js';
 import { createNotification } from '../../../utils/notificationService.js';
 import { asyncHandler } from '../../../middleware/errorHandler.js';
-import { uploadToS3, getPresignedUploadUrl, getFileUrl, getPresignedDownloadUrl, deleteFromS3, createMultipart, completeMultipart } from '../../../utils/s3.js';
+import { uploadToS3, getPresignedUploadUrl, getFileUrl, getPresignedDownloadUrl, deleteFromS3, deleteFromS3ByUrl, createMultipart, completeMultipart, convertToCdnUrl } from '../../../utils/s3.js';
 import { enqueueEncode } from '../../../utils/encodeQueue.js';
-import { deleteFile } from '../../../config/cloudinary.js';
 import RecommendationEngine from '../../../utils/recommendationEngine.js';
 import WatchAnalytics from '../../../models/WatchAnalytics.model.js';
 import ReelView from '../../../models/ReelView.model.js';
@@ -203,7 +202,7 @@ export const completeUpload = asyncHandler(async (req, res) => {
     video: {
       url: rawUrl,
       publicId: key,
-      thumbnail: thumbnailUrl || '', // Use client-provided thumbnail if available
+      thumbnail: convertToCdnUrl(thumbnailUrl) || '', // client cover arrives as a bare (private) S3 URL
       duration: 0, // Will be updated after processing
     },
     rawVideoUrl: rawUrl,
@@ -1094,6 +1093,7 @@ export const deleteReel = asyncHandler(async (req, res) => {
   if (reel.video.publicId) {
     await deleteFromS3(reel.video.publicId);
   }
+  await deleteFromS3ByUrl(reel.video.thumbnail);
 
   // Get the number of likes to decrement from user stats
   const likesToDecrement = reel.stats?.likesCount || 0;
@@ -1580,6 +1580,7 @@ export const editReel = asyncHandler(async (req, res) => {
     // Upload new thumbnail to AWS S3
     const s3Result = await uploadToS3(req.file.path, 'thumbnails', req.file.mimetype);
     thumbnailUrl = await getFileUrl(s3Result.key);
+    await deleteFromS3ByUrl(reel.video?.thumbnail); // old cover is now orphaned
     // Delete temp file
     fs.unlinkSync(req.file.path);
   }
