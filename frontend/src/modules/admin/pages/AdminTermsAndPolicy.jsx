@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BiSave, BiRefresh, BiFile, BiShield } from 'react-icons/bi';
+import { BiSave, BiRefresh, BiFile, BiShield, BiChild } from 'react-icons/bi';
 import adminStaticPageService from '../../../services/adminStaticPageService';
 
 const AdminTermsAndPolicy = () => {
@@ -29,7 +29,7 @@ const AdminTermsAndPolicy = () => {
       console.error('Error fetching page content:', error);
       // If not found, set defaults
       setPageData({
-        title: activeSlug === 'terms-and-condition' ? 'Terms & Condition' : 'Privacy Policy',
+        title: { 'terms-and-condition': 'Terms & Condition', 'child-policy': 'Child Policy' }[activeSlug] || 'Privacy Policy',
         content: ''
       });
     } finally {
@@ -104,6 +104,17 @@ const AdminTermsAndPolicy = () => {
           >
             <BiShield size={20} />
             Privacy Policy
+          </button>
+          <button
+            onClick={() => setActiveSlug('child-policy')}
+            className={`w-full flex items-center gap-3 p-4 rounded-xl font-bold transition-all ${
+              activeSlug === 'child-policy'
+                ? 'bg-[#FE2C55] text-white shadow-lg shadow-[#FE2C55]/20'
+                : 'bg-white text-gray-900 hover:bg-gray-50 border border-gray-100'
+            }`}
+          >
+            <BiChild size={20} />
+            Child Policy
           </button>
         </div>
 

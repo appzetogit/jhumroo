@@ -17,7 +17,7 @@ export const getStaticPage = asyncHandler(async (req, res) => {
       success: true,
       page: {
         slug,
-        title: slug === 'terms-and-condition' ? 'Terms & Condition' : 'Privacy Policy',
+        title: { 'terms-and-condition': 'Terms & Condition', 'child-policy': 'Child Policy' }[slug] || 'Privacy Policy',
         content: ''
       }
     });

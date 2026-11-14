@@ -5,7 +5,7 @@ const staticPageSchema = new mongoose.Schema({
     type: String,
     required: true,
     unique: true,
-    enum: ['terms-and-condition', 'privacy-policy']
+    enum: ['terms-and-condition', 'privacy-policy', 'child-policy']
   },
   title: {
     type: String,
