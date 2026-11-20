@@ -28,6 +28,7 @@ import {
   markInterested,
   markNotInterested
 } from '../controllers/preference.controller.js';
+import { getDashboard } from '../controllers/dashboard.controller.js';
 import { protect, optionalAuth } from '../../../middleware/auth.js';
 import { uploadImage, handleMulterError } from '../../../middleware/upload.js';
 import { profileUpdateValidation, validate } from '../../../middleware/validation.js';
@@ -46,6 +47,7 @@ router.get('/:username/reels', optionalAuth, getUserReels);
 // Protected routes
 router.put('/profile', protect, profileUpdateValidation, validate, updateProfile);
 router.post('/profile-picture', protect, uploadImage, handleMulterError, uploadProfilePicture);
+router.get('/me/dashboard', protect, getDashboard);
 router.get('/me/liked-reels', protect, getLikedReels);
 router.get('/me/saved-reels', protect, getSavedReels);
 router.get('/me/screen-time', protect, getScreenTimeAnalytics);

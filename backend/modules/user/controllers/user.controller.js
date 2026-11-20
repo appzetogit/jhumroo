@@ -5,6 +5,7 @@ import Like from '../../../models/Like.model.js';
 import SavedReel from '../../../models/SavedReel.model.js';
 import Report from '../../../models/Report.model.js';
 import WatchAnalytics from '../../../models/WatchAnalytics.model.js';
+import ProfileVisit from '../../../models/ProfileVisit.model.js';
 import { asyncHandler } from '../../../middleware/errorHandler.js';
 import { uploadImage, deleteFile } from '../../../config/cloudinary.js';
 import { getFileUrl, deleteFromS3, deleteFromS3ByUrl } from '../../../utils/s3.js';
@@ -61,6 +62,15 @@ export const getUserProfile = asyncHandler(async (req, res) => {
         incomingFollowStatus: null
       }
     });
+  }
+
+  // Count the visit for the owner's dashboard (once per visitor per day; never blocks the response).
+  if (req.user && String(req.user._id) !== String(user._id)) {
+    ProfileVisit.updateOne(
+      { profile: user._id, visitor: req.user._id, day: new Date().toISOString().slice(0, 10) },
+      { $setOnInsert: { createdAt: new Date() } },
+      { upsert: true }
+    ).catch(() => {});
   }
 
   // Sync stats (End-to-end reliability) — only when the owner views their own profile.
