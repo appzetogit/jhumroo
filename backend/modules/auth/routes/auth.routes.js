@@ -10,7 +10,7 @@ import {
   updateInterests
 } from '../controllers/auth.controller.js';
 import { updateFCMToken } from '../../user/controllers/user.controller.js';
-import { protect } from '../../../middleware/auth.js';
+import { protect, protectOrSignup } from '../../../middleware/auth.js';
 import { 
   otpRequestValidation, 
   otpVerifyValidation, 
@@ -28,7 +28,7 @@ router.post('/refresh-token', refreshToken);
 router.get('/check-username/:username', checkUsername);
 
 // Protected routes
-router.post('/complete-profile', protect, registerValidation, validate, completeProfile);
+router.post('/complete-profile', protectOrSignup, registerValidation, validate, completeProfile);
 router.get('/me', protect, getMe);
 router.post('/logout', (req, res, next) => {
   protect(req, res, () => {

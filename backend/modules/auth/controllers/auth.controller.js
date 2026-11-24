@@ -1,4 +1,5 @@
 import User from '../../../models/User.model.js';
+import PendingSignup from '../../../models/PendingSignup.model.js';
 import jwt from 'jsonwebtoken';
 import { asyncHandler } from '../../../middleware/errorHandler.js';
 import { sendTokenResponse } from '../../../middleware/auth.js';
@@ -21,18 +22,12 @@ export const sendOTP = asyncHandler(async (req, res) => {
     });
   }
 
-  // Check if user exists, or create a new user if first-time
+  // Existing account, or a pending signup: a new number gets no User row until complete-profile.
   let user = await User.findOne({ phoneNumber });
-
   if (!user) {
-    // Create new user if doesn't exist
-    const tempUsername = `user_${Math.floor(100000 + Math.random() * 900000)}`;
-    user = new User({ 
-      phoneNumber, 
-      countryCode,
-      username: tempUsername,
-      fullName: ''
-    });
+    user = (await PendingSignup.findOne({ phoneNumber })) || new PendingSignup({ phoneNumber });
+    user.countryCode = countryCode;
+    user.createdAt = new Date(); // restart the 1h TTL on every resend
   }
 
   // Per-number cooldown: one OTP per 30s, whatever IP asks (stops SMS-bombing a victim).
@@ -76,10 +71,10 @@ export const sendOTP = asyncHandler(async (req, res) => {
 export const verifyOTP = asyncHandler(async (req, res) => {
   const { phoneNumber, otp, fcmTokenMobile, fcmToken, token, platform } = req.body;
 
-  // Find user
   const user = await User.findOne({ phoneNumber });
+  const pending = user ? null : await PendingSignup.findOne({ phoneNumber });
 
-  if (!user) {
+  if (!user && !pending) {
     return res.status(404).json({
       success: false,
       message: 'User not found'
@@ -87,15 +82,48 @@ export const verifyOTP = asyncHandler(async (req, res) => {
   }
 
   // Verify OTP
-  if (!user.verifyOTP(otp)) {
-    await user.save({ validateBeforeSave: false }); // persist the failed-attempt count
+  const holder = user || pending;
+  if (!holder.verifyOTP(otp)) {
+    await holder.save({ validateBeforeSave: false }); // persist the failed-attempt count
     return res.status(400).json({
       success: false,
       message: 'Invalid or expired OTP'
     });
   }
 
-  // Store FCM tokens if provided — clear stale tokens in the other field to prevent dual-push
+  // New number: nothing in users yet. Hand back a short-lived signup token; complete-profile creates the user.
+  if (pending) {
+    await pending.deleteOne();
+    const signupToken = jwt.sign(
+      { type: 'signup', phoneNumber, countryCode: pending.countryCode, fcmTokenMobile, fcmToken, token, platform },
+      process.env.JWT_SECRET,
+      { expiresIn: '30m' }
+    );
+    return res.status(200).json({
+      success: true,
+      message: 'OTP verified',
+      isNewUser: true,
+      signupToken,
+      user: { phoneNumber, countryCode: pending.countryCode, isProfileCompleted: false }
+    });
+  }
+
+  applyFcmTokens(user, req.body);
+
+  // Clear OTP and update last login
+  user.clearOTP();
+  user.lastLoginAt = new Date();
+  if (!user.isActive) {
+    user.isActive = true; // Reactivate account if it was deactivated/soft-deleted
+  }
+  await user.save({ validateBeforeSave: false });
+
+  // Send token response
+  await sendTokenResponse(user, 200, res, 'Login successful');
+});
+
+// Store FCM tokens if provided — clear stale tokens in the other field to prevent dual-push
+const applyFcmTokens = (user, { fcmTokenMobile, fcmToken, token, platform }) => {
   if (fcmTokenMobile) {
     if (user.fcmToken && user.fcmToken !== fcmTokenMobile) user.fcmToken = '';
     user.fcmTokenMobile = fcmTokenMobile;
@@ -114,18 +142,7 @@ export const verifyOTP = asyncHandler(async (req, res) => {
       user.fcmToken = token;
     }
   }
-
-  // Clear OTP and update last login
-  user.clearOTP();
-  user.lastLoginAt = new Date();
-  if (!user.isActive) {
-    user.isActive = true; // Reactivate account if it was deactivated/soft-deleted
-  }
-  await user.save({ validateBeforeSave: false });
-
-  // Send token response
-  await sendTokenResponse(user, 200, res, 'Login successful');
-});
+};
 
 /**
  * @desc    Refresh Token
@@ -308,6 +325,17 @@ export const completeProfile = asyncHandler(async (req, res) => {
   if (country) req.user.country = country;
   if (state) req.user.state = state;
   if (dateOfBirth) req.user.dateOfBirth = dateOfBirth;
+
+  // New signup: this is the first time the user is written to the database.
+  if (req.signup) {
+    if (await User.exists({ phoneNumber: req.user.phoneNumber })) {
+      return res.status(409).json({ success: false, message: 'An account with this number already exists. Please log in.' });
+    }
+    applyFcmTokens(req.user, req.signup);
+    req.user.lastLoginAt = new Date();
+    await req.user.validate();
+    return sendTokenResponse(req.user, 201, res, 'Signup successful');
+  }
 
   await req.user.save();
 

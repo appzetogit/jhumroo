@@ -9,10 +9,27 @@ import Admin from '../models/Admin.model.js';
  */
 export const verifyAccessToken = (token) => {
   const decoded = jwt.verify(token, process.env.JWT_SECRET);
-  if (decoded.type === 'refresh' || (decoded.exp - decoded.iat) > 2 * 24 * 60 * 60) {
+  if (decoded.type === 'refresh' || decoded.type === 'signup' || (decoded.exp - decoded.iat) > 2 * 24 * 60 * 60) {
     throw new Error('Refresh token cannot be used as an access token');
   }
   return decoded;
+};
+
+/**
+ * complete-profile only: accepts the signup token from verify-otp (new number, no User row yet)
+ * and hands the controller an unsaved User; any other token goes through protect.
+ */
+export const protectOrSignup = (req, res, next) => {
+  const auth = req.headers.authorization || '';
+  const raw = auth.startsWith('Bearer ') ? auth.slice(7) : '';
+  if (jwt.decode(raw)?.type !== 'signup') return protect(req, res, next);
+  try {
+    req.signup = jwt.verify(raw, process.env.JWT_SECRET);
+  } catch {
+    return res.status(401).json({ success: false, code: 'SIGNUP_EXPIRED', message: 'Signup session expired. Please verify your number again.' });
+  }
+  req.user = new User({ phoneNumber: req.signup.phoneNumber, countryCode: req.signup.countryCode });
+  next();
 };
 
 /**
